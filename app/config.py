@@ -208,3 +208,9 @@ if _env_bots.strip():
 # Streamer sám (broadcaster) NEbere divácké chat odměny ani není v Top Chatterech.
 if KICK_BROADCASTER_CHANNEL:
     BOT_USERNAMES.add(KICK_BROADCASTER_CHANNEL.strip().lower())
+
+
+# Herna (blackjack + 1v1 duely) JEN pro ADMINA – skrytá pro diváky. Přepínač přes env
+# WEBOS_GAMES_ADMIN_ONLY=1 (nastaveno ve fly.toml). Backend vrací divákům 403, frontend
+# schová nav „Hry" i stránku (přes /api/auth/me). Revert: WEBOS_GAMES_ADMIN_ONLY=0 + deploy.
+GAMES_ADMIN_ONLY = os.environ.get("WEBOS_GAMES_ADMIN_ONLY", "0") == "1"

@@ -130,6 +130,7 @@ const ADMIN_SECTIONS = {
   raffles: ["broadcaster"], codes: ["broadcaster"], drops: ["broadcaster"], games: ["mod", "broadcaster"], bot: ["broadcaster"],
   predictions: ["mod", "broadcaster"], economy: ["broadcaster"], news: ["broadcaster"], security: [],
 };
+let GAMES_ADMIN_ONLY = false;   // Herna jen pro admina (z /api/auth/me; env WEBOS_GAMES_ADMIN_ONLY)
 function isStaff(u) { return !!u && ["admin", "broadcaster", "mod"].includes(u.role); }
 function canSection(u, sec) { return !!u && (u.role === "admin" || (ADMIN_SECTIONS[sec] || []).includes(u.role)); }
 
@@ -231,7 +232,8 @@ function renderHeader() {
   const route = currentRoute();
   const u = state.user;
   document.body.classList.toggle("logged-in", !!u);   /* na mobilu uvolní místo v topbaru (skryje wordmark) */
-  const items = [["shop", "Shop"], ["bonusy", "Bonusy"], ["leaderboard", "Leaderboard"], ["exchange", "Exchange"], ["games", "Hry"], ["predikce", "Predikce"]];
+  const items = [["shop", "Shop"], ["bonusy", "Bonusy"], ["leaderboard", "Leaderboard"], ["exchange", "Exchange"], ["games", "Hry"], ["predikce", "Predikce"]]
+    .filter(([k]) => k !== "games" || !GAMES_ADMIN_ONLY || (u && u.role === "admin"));   // „Hry" schovej divákům, když je Herna jen pro admina
   const navDot = (k) => (k === "bonusy" && u && bonusReady) ? `<span class="nav-dot" title="Máš nevyzvednutou odměnu!"></span>` : "";
   const navLinks = items.map(([k, l]) => `<a href="#/${k}" class="nav-link ${route === k ? "active" : ""}">${l}${navDot(k)}</a>`).join("")
     + (isStaff(u) ? `<a href="#/admin" class="nav-link ${route === "admin" ? "active" : ""}">${u.role === "admin" ? "Admin" : "Panel"}</a>` : "");
@@ -3949,7 +3951,7 @@ document.addEventListener("submit", (e) => {
    HRY – piškvorky 1v1 o body
 ============================================================ */
 async function refreshMe() {
-  try { const r = await api("/auth/me"); if (r.user) { state.user = r.user; renderHeader(); } } catch (e) {}
+  try { const r = await api("/auth/me"); GAMES_ADMIN_ONLY = !!r.games_admin_only; if (r.user) { state.user = r.user; renderHeader(); } } catch (e) {}
 }
 
 /* ---------------- 🃏 Karta (sdílí ji multiplayer stůl) ---------------- */
@@ -3966,6 +3968,7 @@ function bjCard(code) {
 let _bjRoom = null, _bjRoomId = null, _bjPoll = null;
 async function pageBjRoom(param) {
   if (!state.user) { navigate("connect"); return; }
+  if (GAMES_ADMIN_ONLY && state.user.role !== "admin") { navigate("shop"); return; }   // Herna jen pro admina
   if (_bjPoll) { clearInterval(_bjPoll); _bjPoll = null; }
   $("#view").innerHTML = `<div class="page-head"><h1>🃏 Soukromý stůl</h1><p class="muted">Blackjack mezi kámošema — jen na pozvánku. 🔒</p></div><div id="bjRoomWrap">${skeletonCards(1)}</div>`;
   _bjRoom = null; _bjRoomId = null;
@@ -4142,6 +4145,7 @@ function bjrCopy(code) {
 
 async function pageGames() {
   if (!state.user) { navigate("connect"); return; }
+  if (GAMES_ADMIN_ONLY && state.user.role !== "admin") { navigate("shop"); return; }   // Herna jen pro admina
   const param = parseRoute().param;
   if (param === "duely") { navigate("games"); return; }   // duely jsou teď inline na Herně
   if (param) { gameView(parseInt(param, 10)); return; }   // číslo = konkrétní piškvorková hra
@@ -4598,7 +4602,7 @@ function nudgeOvertake(raw) {
    INIT
 ============================================================ */
 async function init() {
-  try { const r = await api("/auth/me"); state.user = r.user; } catch (e) { state.user = null; }
+  try { const r = await api("/auth/me"); state.user = r.user; GAMES_ADMIN_ONLY = !!r.games_admin_only; } catch (e) { state.user = null; }
   if (state.user && state.user.pending_rankup) setTimeout(() => celebrateRankup(state.user.pending_rankup), 600);
   if (state.user && state.user.pending_overtake) setTimeout(() => nudgeOvertake(state.user.pending_overtake), 900);
   if (state.user) {
