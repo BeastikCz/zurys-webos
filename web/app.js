@@ -4146,7 +4146,7 @@ async function pageGames() {
   if (param === "duely") { navigate("games"); return; }   // duely jsou teď inline na Herně
   if (param) { gameView(parseInt(param, 10)); return; }   // číslo = konkrétní piškvorková hra
   $("#view").innerHTML = `
-    <div class="page-head"><h1>🎮 Herna</h1><p class="muted">Zahraj si blackjack proti dealerovi, nebo vyzvi ostatní 1v1 o bank. 🏆</p></div>
+    <div class="page-head"><h1>🎮 Herna</h1>${(state.user && state.user.role === "admin") ? `<p class="muted">Zahraj si blackjack proti dealerovi, nebo vyzvi ostatní 1v1 o bank. 🏆</p>` : ""}</div>
     ${(state.user && state.user.role === "admin") ? `<div style="margin-bottom:18px"><button class="btn btn-ghost btn-sm" data-action="nav" data-href="bj">🃏 Soukromý stůl (jen admin) →</button></div>` : ""}
     <div id="duelWrap">${skeletonCards(1)}</div>
     <div class="section-title" style="margin-top:26px">⚔️ Piškvorky 1v1</div>
