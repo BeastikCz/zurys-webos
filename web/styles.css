@@ -71,8 +71,8 @@ input, select, textarea { font-family: inherit; }
 .container { max-width: var(--maxw); margin: 0 auto; padding: 0 22px; }
 main { padding: 0 0 80px; min-height: calc(100vh - var(--header-h)); overflow-x: clip; }
 .muted { color: var(--text-dim); } .faint { color: var(--text-faint); }
-.page-head { margin: 26px 0 22px; }
-.page-head h1 { font-size: 27px; font-weight: 800; }
+.page-head { margin: 28px 0 22px; }
+.page-head h1 { font-size: 32px; font-weight: 900; text-transform: uppercase; font-style: italic; letter-spacing: -.01em; }
 .page-head p { color: var(--text-dim); margin-top: 5px; }
 .section-title { font-size: 15px; font-weight: 800; margin: 6px 0 14px; text-transform: uppercase; letter-spacing: .06em; }
 .section-title::before { content: ""; display: inline-block; width: 4px; height: 14px; margin-right: 9px; border-radius: 3px; vertical-align: -2px; background: var(--accent-grad); box-shadow: 0 0 10px var(--accent-glow); }
@@ -156,9 +156,10 @@ main { padding: 0 0 80px; min-height: calc(100vh - var(--header-h)); overflow-x:
 .chip.toggle.active { background: rgba(255, 157, 46, .16); color: var(--accent); border-color: rgba(255, 157, 46, .55); }
 
 /* ============ Drop Arena ============ */
-.da-head { margin: 26px 0 18px; }
-.da-head h1 { font-size: 34px; font-weight: 900; letter-spacing: -.01em; }
-.da-head h1 .accent { color: var(--accent); }
+.da-head { margin: 30px 0 20px; }
+.da-head h1 { font-size: 46px; font-weight: 900; letter-spacing: -.02em; text-transform: uppercase; font-style: italic; line-height: 1.05; }
+.da-head h1 .accent { background: linear-gradient(90deg, #ffc14d, #ff7a18 35%, #ff4d6d 60%, #ffc14d); background-size: 300% 100%; -webkit-background-clip: text; background-clip: text; color: transparent; animation: heroShine 5s linear infinite; filter: drop-shadow(0 0 20px rgba(255, 138, 30, .5)); }
+@keyframes heroShine { to { background-position: 300% 0; } }
 .da-head p { color: var(--text-dim); margin-top: 6px; }
 .da-filters { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; margin-bottom: 20px; }
 .da-filters .spacer { flex: 1; }
@@ -862,4 +863,85 @@ footer.site-footer { border-top: 1px solid var(--border); padding: 22px 0; color
 @media (max-width: 360px) {
   .logo .brand { display: none; }
   .container { padding: 0 12px; }
+}
+
+/* ============================================================
+   ✨ FX vrstva „WOW" – čistě dekorativní (žádná logika)
+============================================================ */
+/* výběr textu v brand barvě */
+::selection { background: var(--accent); color: var(--accent-ink); }
+
+/* Aurora: pomalu dýchající barevné mlhy za celým webem */
+body::before { content: ""; position: fixed; inset: -22%; z-index: -2; pointer-events: none;
+  background:
+    radial-gradient(38% 32% at 18% 22%, rgba(139, 92, 255, .17), transparent 70%),
+    radial-gradient(42% 36% at 82% 10%, rgba(255, 122, 24, .15), transparent 70%),
+    radial-gradient(36% 30% at 68% 82%, rgba(255, 45, 85, .09), transparent 70%);
+  filter: blur(46px) saturate(1.25);
+  animation: fxAurora 26s ease-in-out infinite alternate; }
+@keyframes fxAurora {
+  0%   { transform: translate3d(-2%, -1%, 0) scale(1); }
+  50%  { transform: translate3d(2%, 2%, 0) scale(1.06); }
+  100% { transform: translate3d(-1%, 1.5%, 0) scale(1.02); } }
+
+/* Žhavé uhlíky stoupající vzhůru (jedna opakující se dlaždice) */
+body::after { content: ""; position: fixed; inset: 0; z-index: -1; pointer-events: none; opacity: .5;
+  background-image:
+    radial-gradient(2px 2px at 10% 95%, rgba(255, 170, 60, .9), transparent 60%),
+    radial-gradient(1.5px 1.5px at 28% 80%, rgba(255, 140, 40, .7), transparent 60%),
+    radial-gradient(2.5px 2.5px at 45% 90%, rgba(255, 190, 90, .8), transparent 60%),
+    radial-gradient(1.5px 1.5px at 62% 75%, rgba(255, 120, 30, .6), transparent 60%),
+    radial-gradient(2px 2px at 78% 92%, rgba(255, 160, 60, .85), transparent 60%),
+    radial-gradient(1.5px 1.5px at 90% 70%, rgba(139, 92, 255, .5), transparent 60%),
+    radial-gradient(2px 2px at 35% 60%, rgba(255, 150, 50, .5), transparent 60%),
+    radial-gradient(1.5px 1.5px at 70% 55%, rgba(255, 170, 80, .45), transparent 60%);
+  background-repeat: repeat; background-size: 100% 1200px;
+  animation: fxEmbers 22s linear infinite; }
+@keyframes fxEmbers { from { background-position: 0 0; } to { background-position: 0 -1200px; } }
+
+/* Topbar: jemná animovaná světelná linka pod sklem */
+.topbar-inner { position: relative; }
+.topbar-inner::after { content: ""; position: absolute; left: 18px; right: 18px; bottom: -1px; height: 1px; pointer-events: none;
+  background: linear-gradient(90deg, transparent, var(--accent-glow), rgba(139, 92, 255, .45), transparent);
+  background-size: 220% 100%; animation: fxHairline 6s linear infinite; }
+@keyframes fxHairline { to { background-position: 220% 0; } }
+
+/* Logo: pulzující záře */
+.logo .mark { animation: fxLogoPulse 3.2s ease-in-out infinite; }
+@keyframes fxLogoPulse {
+  0%, 100% { box-shadow: 0 0 16px var(--accent-glow); }
+  50% { box-shadow: 0 0 30px var(--accent-glow), 0 0 60px -12px var(--accent-glow); } }
+
+/* Lesk přejíždějící přes hlavní CTA tlačítka */
+.btn-primary, .da-btn.buy { position: relative; overflow: hidden; }
+.btn-primary::after, .da-btn.buy::after { content: ""; position: absolute; top: 0; bottom: 0; left: -80%; width: 46%;
+  transform: skewX(-20deg); pointer-events: none;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, .42), transparent);
+  animation: fxSheen 3.4s ease-in-out infinite; }
+@keyframes fxSheen { 0%, 55% { left: -80%; } 100% { left: 165%; } }
+
+/* Rotující neonový okraj karty odměny při hoveru */
+@property --fxang { syntax: '<angle>'; initial-value: 0deg; inherits: false; }
+.da-card::after { content: ""; position: absolute; inset: 0; z-index: 2; border-radius: inherit; padding: 1px; pointer-events: none;
+  background: conic-gradient(from var(--fxang), transparent 0deg 40deg, rgba(255, 157, 46, .95) 80deg, rgba(139, 92, 255, .6) 110deg, transparent 150deg 360deg);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor; mask-composite: exclude;
+  opacity: 0; transition: opacity .25s; animation: fxSpin 2.6s linear infinite paused; }
+.da-card:hover::after { opacity: 1; animation-play-state: running; }
+@keyframes fxSpin { to { --fxang: 360deg; } }
+
+/* Novinky FAB: jemné upozornění */
+.news-fab { animation: fxFabFloat 4s ease-in-out infinite; }
+@keyframes fxFabFloat { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-4px); } }
+
+/* Šetrný režim: všechny FX animace vypnout */
+@media (prefers-reduced-motion: reduce) {
+  body::before, body::after, .topbar-inner::after, .logo .mark,
+  .btn-primary::after, .da-btn.buy::after, .da-card::after, .news-fab,
+  .da-head h1 .accent { animation: none !important; }
+}
+/* Mobil: aurora/uhlíky zjednodušit (výkon) */
+@media (max-width: 720px) {
+  body::before { animation: none; }
+  body::after { display: none; }
 }
