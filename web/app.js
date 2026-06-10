@@ -3583,7 +3583,10 @@ async function banUser(id, ban) {
     const dev = r && r.devices_banned ? ` (+ ${r.devices_banned} zařízení zabanováno)` : "";
     const kickOk = r && r.kick && r.kick.ok ? " · Kick chat ✅" : "";
     toast(ban ? `Účet zabanován a odhlášen${dev}${kickOk}.` : `Ban zrušen${kickOk}.`, ban ? "info" : "success");
-    if (r && r.kick && !r.kick.ok && !r.kick.skipped) toast("⚠️ Kick chat se nepovedl: " + (r.kick.error || ""), "error");
+    if (r && r.kick && !r.kick.ok && !r.kick.skipped) {
+      if (r.kick.mod_block) toast("ℹ️ " + r.kick.error, "info");   // moderátora/broadcastera Kick zabanovat nedovolí – web ban platí
+      else toast("⚠️ Kick chat se nepovedl: " + (r.kick.error || ""), "error");
+    }
     loadAdminStats();
     if (adminState.tab === "security") adminSecurity(); else adminUsers();
   } catch (e) { toast(e.message, "error"); }

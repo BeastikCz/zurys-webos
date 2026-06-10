@@ -3,7 +3,9 @@ kontrolách demo/scope/ID) + ban endpoint vrací stav kick syncu (skipped bez ki
 
     .venv/Scripts/python.exe -m pytest tests/test_kick_moderation.py -v
 """
+import io
 import secrets
+import urllib.error
 from datetime import datetime, timezone, timedelta
 
 from app import kickbot
@@ -93,3 +95,28 @@ def test_ban_endpoint_kick_skipped_without_kick_id(client):
     r2 = client.post(f"/api/admin/users/{uid}/ban", json={"banned": False, "reason": ""},
                      headers={"Cookie": f"{SESSION_COOKIE}={tok}"})
     assert r2.status_code == 200 and r2.json()["kick"]["skipped"] is True
+
+
+def test_moderate_ban_moderator_400_friendly(client, monkeypatch):
+    """Kick vrátí 400 (cíl je moderátor) → srozumitelná hláška + mod_block, ne syrový HTTP dump."""
+    conn = get_conn()
+    try:
+        kickbot.save_real_token(conn, "bot", "tok", "ref", 3600,
+                                "chat:write moderation:ban", "kanal", "99")
+        conn.commit()
+
+        def fake_urlopen(req, timeout=None):
+            raise urllib.error.HTTPError(
+                req.full_url, 400, "Bad Request", {},
+                io.BytesIO(b'{"data":{},"message":"Invalid request"}'))
+        monkeypatch.setattr(kickbot.urllib.request, "urlopen", fake_urlopen)
+
+        r = kickbot.moderate_ban(conn, "12345", reason="test")
+        assert r["ok"] is False
+        assert r.get("mod_block") is True
+        assert "moderátor" in r["error"].lower()
+        assert "Invalid request" not in r["error"]      # žádný syrový HTTP dump
+    finally:
+        kickbot.disconnect(conn)
+        conn.commit()
+        conn.close()

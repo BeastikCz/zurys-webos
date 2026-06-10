@@ -331,6 +331,14 @@ def _moderation(conn: sqlite3.Connection, target_kick_id, method: str, extra: di
         with urllib.request.urlopen(req, timeout=HTTP_TIMEOUT) as r:
             r.read()
         return {"ok": True}
+    except urllib.error.HTTPError as e:
+        # Kick vrací generické 400 „Invalid request", když cíl přes API NEJDE zabanovat –
+        # nejčastěji je to MODERÁTOR nebo BROADCASTER (ty Kick přes API zabanovat nedovolí).
+        if method == "POST" and e.code == 400:
+            return {"ok": False, "mod_block": True,
+                    "error": "Kick přes API nezabanuje moderátora ani broadcastera. Sundej mu "
+                             "nejdřív MOD roli na Kicku (nebo ho zabav ručně v Kick chatu) – web ban i tak platí."}
+        return {"ok": False, "error": _http_err(e)}
     except Exception as e:
         return {"ok": False, "error": _http_err(e)}
 
