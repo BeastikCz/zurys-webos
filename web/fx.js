@@ -11,7 +11,7 @@
     glow.style.cssText =
       "position:fixed;width:540px;height:540px;border-radius:50%;pointer-events:none;z-index:1;" +
       "mix-blend-mode:screen;transform:translate(-50%,-50%);left:-999px;top:-999px;" +
-      "background:radial-gradient(circle,rgba(255,150,40,.07),rgba(139,92,255,.05) 45%,transparent 70%)";
+      "background:radial-gradient(circle,rgba(0,229,255,.07),rgba(255,45,122,.05) 45%,transparent 70%)";
     document.body.appendChild(glow);
     let gx = -999, gy = -999, raf = 0;
     addEventListener("pointermove", (e) => {
