@@ -10,11 +10,11 @@ from ..anticheat import (check_or_block, is_new_account, new_account_redeem_pts,
 from ..config import ORDER_PENDING, UNLIMITED_STOCK, ROLE_ADMIN
 from ..db import now_iso
 from ..deps import db_dep, require_user, add_points, try_debit, record_audit, client_ip, user_rank, tier_for_rank
-from ..models import RedeemIn, TradeUrlIn, GiftIn, QuestClaimIn
+from ..models import RedeemIn, TradeUrlIn, GiftIn, QuestClaimIn, CosmeticIn
 from ..services import product_public, role_allows
 from ..ratelimit import rate_limit
 from ..security import secure_weighted_choice
-from .. import economy, live, partners
+from .. import economy, live, partners, cosmetics
 
 router = APIRouter(tags=["misc"])
 
@@ -40,7 +40,8 @@ def stream_status(conn: sqlite3.Connection = Depends(db_dep)):
 def leaderboard(limit: int = Query(50, ge=1, le=200),
                 conn: sqlite3.Connection = Depends(db_dep)):
     rows = conn.execute(
-        "SELECT id, username, avatar_url, points, role, is_sub, is_vip, is_og FROM users "
+        "SELECT id, username, avatar_url, points, role, is_sub, is_vip, is_og, "
+        "cos_name, cos_frame, cos_banner FROM users "
         "ORDER BY points DESC, username ASC LIMIT ?",
         (limit,),
     ).fetchall()
@@ -54,6 +55,7 @@ def leaderboard(limit: int = Query(50, ge=1, le=200),
             "is_sub": bool(r["is_sub"]),
             "is_vip": bool(r["is_vip"]),
             "is_og": bool(r["is_og"]),
+            "cos": cosmetics.resolve(r),
         }
         for i, r in enumerate(rows)
     ]
@@ -124,7 +126,7 @@ def public_profile(nick: str = Query("", max_length=64),
         "earned_total": earned, "spent_total": spent, "biggest_win": biggest,
         "games_played": played, "games_won": won,
         "win_rate": round(won / played, 3) if played else 0,
-        "raffle_wins": raffle_wins, "badges": badges, "showcase": showcase,
+        "raffle_wins": raffle_wins, "badges": badges, "showcase": showcase, "cos": cosmetics.resolve(u),
         "is_sub": bool(u["is_sub"]), "is_vip": bool(u["is_vip"]), "is_og": bool(u["is_og"]),
         "daily_streak": (u["daily_streak"] if "daily_streak" in u.keys() else 0) or 0,
     }
@@ -181,6 +183,38 @@ def partner_links_claim(link_id: int, user: sqlite3.Row = Depends(require_user),
     """Vyzvedne jednorázovou odměnu za proklik partnerského odkazu (1× za uživatele)."""
     try:
         return partners.claim(conn, user["id"], link_id)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+# ---------------- Kosmetika (barvy nicku / rámečky / bannery) ----------------
+@router.get("/cosmetics")
+def cosmetics_list(user: sqlite3.Row = Depends(require_user),
+                   conn: sqlite3.Connection = Depends(db_dep)):
+    """Katalog kosmetiky + stav uživatele (vlastněno / nasazeno)."""
+    return cosmetics.list_for_user(conn, user)
+
+
+@router.post("/cosmetics/buy")
+def cosmetics_buy(data: CosmeticIn, user: sqlite3.Row = Depends(require_user),
+                  conn: sqlite3.Connection = Depends(db_dep)):
+    """Koupí kosmetiku za sedláky (nevratné, vlastníš navždy)."""
+    rate_limit(f"cosbuy:{user['id']}", 10, 60)
+    try:
+        item = cosmetics.buy(conn, user, data.key)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    bal = conn.execute("SELECT points FROM users WHERE id = ?", (user["id"],)).fetchone()["points"]
+    return {"ok": True, "balance": bal, "key": item["key"],
+            "message": f"🎨 Koupeno: {item['name']}! Nasaď si to v sekci Kosmetika."}
+
+
+@router.post("/cosmetics/equip")
+def cosmetics_equip(data: CosmeticIn, user: sqlite3.Row = Depends(require_user),
+                    conn: sqlite3.Connection = Depends(db_dep)):
+    """Nasadí/sundá kosmetiku (toggle – druhý klik ji sundá). Musíš ji vlastnit."""
+    try:
+        return {"ok": True, **cosmetics.equip(conn, user, data.key)}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 

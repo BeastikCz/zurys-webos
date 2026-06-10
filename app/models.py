@@ -196,6 +196,11 @@ class CommunityGoalIn(BaseModel):
     reward: Optional[int] = Field(default=None, ge=0, le=1_000_000)
 
 
+class CosmeticIn(BaseModel):
+    """Koupě / nasazení kosmetiky – klíč položky z katalogu."""
+    key: str = Field(min_length=1, max_length=40)
+
+
 class DropClaimIn(BaseModel):
     code: str = Field(min_length=1, max_length=64)
     hp: Optional[str] = ""        # honeypot – boti vyplní, lidé ne

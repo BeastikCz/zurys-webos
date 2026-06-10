@@ -95,12 +95,17 @@ const TYPE_LABEL = { instant: "Instantní", short: "Krátká", long: "Delší", 
 const PERIOD_LABEL = { daily: "☀️ Denní", weekly: "📅 Týdenní", monthly: "🌙 Měsíční", yearly: "🎆 Roční", random: "🎲 Random" };
 const PERIOD_OPTIONS = [["", "— žádná —"], ["daily", "☀️ Denní"], ["weekly", "📅 Týdenní"], ["monthly", "🌙 Měsíční"], ["yearly", "🎆 Roční"], ["random", "🎲 Random"]];
 
-function avatarHTML(name, url, cls = "") {
-  if (url) return `<div class="avatar ${cls}"><img src="${esc(url)}" alt=""></div>`;
+function avatarHTML(name, url, cls = "", frameCls = "") {
+  const fc = frameCls ? " " + frameCls : "";
+  if (url) return `<div class="avatar ${cls}${fc}"><img src="${esc(url)}" alt=""></div>`;
   const initials = (name || "?").trim().slice(0, 2).toUpperCase();
   const hue = hashStr(name || "x") % 360;
-  return `<div class="avatar ${cls}" style="background:linear-gradient(135deg,hsl(${hue} 62% 46%),hsl(${(hue + 40) % 360} 62% 34%))">${esc(initials)}</div>`;
+  return `<div class="avatar ${cls}${fc}" style="background:linear-gradient(135deg,hsl(${hue} 62% 46%),hsl(${(hue + 40) % 360} 62% 34%))">${esc(initials)}</div>`;
 }
+/* nasazená kosmetika z payloadu (cos: {name, frame, banner} = CSS třídy) */
+function cosF(o) { return (o && o.cos && o.cos.frame) || ""; }
+function cosN(o) { return (o && o.cos && o.cos.name) || ""; }
+function cosB(o) { return (o && o.cos && o.cos.banner) || ""; }
 function uLink(name) {
   const n = (name == null ? "" : String(name)).trim();
   return n ? `<a class="prof-link" href="#/u/${encodeURIComponent(n)}">${esc(n)}</a>` : esc(name || "?");
@@ -219,7 +224,7 @@ function render() {
     shop: pageShop, leaderboard: pageLeaderboard, exchange: pageExchange, redeem: pageRedeem,
     faq: pageFaq, pravidla: pageRules, cart: pageCart, profile: pageProfile, admin: pageAdmin,
     predikce: pagePredikce, games: pageGames, novinky: pageNews, bonusy: pageBonusy,
-    bj: pageBjRoom,
+    kosmetika: pageCosmetics, bj: pageBjRoom,
     connect: pageConnect, login: pageConnect, register: pageConnect, u: pageUserProfile,
   };
   (pages[r.name] || pageShop)(r.param);
@@ -231,7 +236,7 @@ function renderHeader() {
   const route = currentRoute();
   const u = state.user;
   document.body.classList.toggle("logged-in", !!u);   /* na mobilu uvolní místo v topbaru (skryje wordmark) */
-  const items = [["shop", "Shop"], ["bonusy", "Bonusy"], ["leaderboard", "Leaderboard"], ["exchange", "Exchange"], ["games", "Hry"], ["predikce", "Predikce"]];
+  const items = [["shop", "Shop"], ["bonusy", "Bonusy"], ["kosmetika", "Kosmetika"], ["leaderboard", "Leaderboard"], ["exchange", "Exchange"], ["games", "Hry"], ["predikce", "Predikce"]];
   const navDot = (k) => (k === "bonusy" && u && bonusReady) ? `<span class="nav-dot" title="Máš nevyzvednutou odměnu!"></span>` : "";
   const navLinks = items.map(([k, l]) => `<a href="#/${k}" class="nav-link ${route === k ? "active" : ""}">${l}${navDot(k)}</a>`).join("")
     + (isStaff(u) ? `<a href="#/admin" class="nav-link ${route === "admin" ? "active" : ""}">${u.role === "admin" ? "Admin" : "Panel"}</a>` : "");
@@ -240,7 +245,7 @@ function renderHeader() {
   let right;
   if (u) {
     right = `<div class="pts-pill" title="Tvůj zůstatek"><span class="coin"></span><b>${Number(u.points).toLocaleString("cs-CZ")}</b><span class="lbl">sedláků</span></div>${cartBtn}
-      <a href="#/profile" class="user-chip" title="Můj profil">${avatarHTML(u.username, u.avatar_url)}<div style="display:flex;flex-direction:column;line-height:1.15"><span class="uc-name">${esc(u.username)}</span><span class="uc-tier">${userTier(u.rank) ? "★ " + userTier(u.rank) : ""}</span></div></a>
+      <a href="#/profile" class="user-chip" title="Můj profil">${avatarHTML(u.username, u.avatar_url, "", cosF(u))}<div style="display:flex;flex-direction:column;line-height:1.15"><span class="uc-name ${cosN(u)}">${esc(u.username)}</span><span class="uc-tier">${userTier(u.rank) ? "★ " + userTier(u.rank) : ""}</span></div></a>
       <button class="btn btn-ghost btn-sm logout-top" data-action="logout" title="Odhlásit">Odhlásit</button>`;
   } else {
     right = `${cartBtn}<button class="btn btn-kick btn-sm" data-action="connect">🟢 <span class="kick-long">Připojit přes Kick</span><span class="kick-short">Připojit</span></button>`;
@@ -819,8 +824,8 @@ function podiumCard(r, isMe) {
   return `
     <div class="podium-card podium-${r.rank}${isMe ? " me" : ""}" style="--d:${0.05 + r.rank * 0.08}s">
       ${rays}${sparks}${crown}<span class="pod-medal">${medal}</span>
-      <div class="pod-av-wrap">${avatarHTML(r.username, r.avatar_url, "pod-av")}</div>
-      <a class="pod-name prof-link" href="#/u/${encodeURIComponent(r.username)}">${esc(r.username)}${meTag}</a>
+      <div class="pod-av-wrap">${avatarHTML(r.username, r.avatar_url, "pod-av", cosF(r))}</div>
+      <a class="pod-name prof-link ${cosN(r)}" href="#/u/${encodeURIComponent(r.username)}">${esc(r.username)}${meTag}</a>
       <div class="pod-badges">${lbBadges(r)}</div>
       <div class="pod-pts"><span class="pod-num" data-count="${r.points}">${Number(r.points).toLocaleString("cs-CZ")}</span><span>sedláků</span></div>
       ${tierChip(r.rank)}
@@ -832,8 +837,8 @@ function lbRow(r, isMe) {
   const meTag = isMe ? `<span class="me-tag">TY</span>` : "";
   return `
     <div class="lb-row${isMe ? " me" : ""}" style="--d:${Math.min(r.rank, 24) * 0.025}s">
-      <span class="lb-rank">${r.rank}</span>${avatarHTML(r.username, r.avatar_url)}
-      <div class="lb-id"><a class="uname prof-link" href="#/u/${encodeURIComponent(r.username)}">${esc(r.username)}${meTag}</a><span class="lb-sub">${lbBadges(r)}${tierChip(r.rank)}</span></div>
+      <span class="lb-rank">${r.rank}</span>${avatarHTML(r.username, r.avatar_url, "", cosF(r))}
+      <div class="lb-id"><a class="uname prof-link ${cosN(r)}" href="#/u/${encodeURIComponent(r.username)}">${esc(r.username)}${meTag}</a><span class="lb-sub">${lbBadges(r)}${tierChip(r.rank)}</span></div>
       <span class="pts">${fmtPts(r.points)}</span>
     </div>`;
 }
@@ -900,10 +905,11 @@ async function pageUserProfile(nick) {
     const wr = p.games_played ? Math.round(p.win_rate * 100) : 0;
     const since = p.created_at ? new Date(p.created_at).toLocaleDateString("cs-CZ") : "—";
     $("#up").innerHTML = `
-      <div class="profile-hero">
-        ${avatarHTML(p.username, p.avatar_url, "prof-av")}
+      ${cosB(p) ? `<div class="cos-banner ${cosB(p)}"></div>` : ""}
+      <div class="profile-hero${cosB(p) ? " has-banner" : ""}">
+        ${avatarHTML(p.username, p.avatar_url, "prof-av", cosF(p))}
         <div class="ph-info">
-          <h1>${esc(p.username)} ${roleBadge(p.role)}</h1>
+          <h1><span class="${cosN(p)}">${esc(p.username)}</span> ${roleBadge(p.role)}</h1>
           <div class="faint">${league ? "★ " + esc(league) + " · " : ""}#${p.rank} v leaderboardu · člen od ${since}</div>
           <div class="ph-badges">${subVipBadges(p) || ""}</div>
         </div>
@@ -924,6 +930,64 @@ async function pageUserProfile(nick) {
   } catch (e) { $("#up").innerHTML = `<div class="empty">${esc(e.message)}</div>`; }
 }
 
+async function pageCosmetics() {
+  if (!state.user) { navigate("connect"); return; }
+  $("#view").innerHTML = `<div class="page-head"><h1>🎨 Kosmetika</h1><p class="muted">Vyšperkuj si jméno a avatar — ukáže se to všude, kde tě ostatní vidí (leaderboard, profil, menu). 💎</p></div><div id="cosWrap">${skeletonCards(1)}</div>`;
+  loadCosmetics();
+}
+async function loadCosmetics() {
+  const box = $("#cosWrap"); if (!box) return;
+  try {
+    const data = await api("/cosmetics");
+    const u = state.user;
+    const me = (u && u.username) || "Ty";
+    const rarMap = { milspec: "MIL-SPEC", restricted: "RESTRICTED", classified: "CLASSIFIED", covert: "COVERT", contraband: "CONTRABAND", legendary: "LEGENDARY" };
+    const card = (it) => {
+      let preview;
+      if (it.type === "name") preview = `<div class="cos-prev"><span class="cos-name-sample ${it.cls}">${esc(me)}</span></div>`;
+      else if (it.type === "frame") preview = `<div class="cos-prev">${avatarHTML(me, u && u.avatar_url, "cos-prev-av", it.cls)}</div>`;
+      else preview = `<div class="cos-prev"><div class="cos-banner-prev ${it.cls}"></div></div>`;
+      const sub = it.sub ? ` <span class="badge badge-role badge-sub-role">SUB</span>` : "";
+      const rar = `<span class="cos-rar cos-rar-${it.rarity}">${rarMap[it.rarity] || ""}</span>`;
+      let btn;
+      if (it.equipped) btn = `<button class="btn btn-success btn-sm btn-block" data-action="cos-equip" data-key="${it.key}">✓ Nasazeno · sundat</button>`;
+      else if (it.owned) btn = `<button class="btn btn-primary btn-sm btn-block" data-action="cos-equip" data-key="${it.key}">Nasadit</button>`;
+      else btn = `<button class="btn btn-ghost btn-sm btn-block" data-action="cos-buy" data-key="${it.key}"><span class="coin"></span> ${Number(it.cost).toLocaleString("cs-CZ")}</button>`;
+      return `<div class="cos-card${it.equipped ? " equipped" : ""}">${preview}
+        <div class="cos-meta"><b>${esc(it.name)}</b>${sub}</div>
+        <div class="cos-tags">${rar}${it.owned && !it.equipped ? ` <span class="cos-owned">✓ máš</span>` : ""}</div>
+        ${btn}</div>`;
+    };
+    const groups = [["name", "🎨 Barvy nicku"], ["frame", "🖼️ Rámečky avataru"], ["banner", "🪧 Profil bannery"]];
+    box.innerHTML = `<div class="cos-bal">Tvůj zůstatek: <b><span class="coin"></span> ${Number(data.balance).toLocaleString("cs-CZ")}</b> sedláků · kupuješ za sedláky, vlastníš navždy</div>`
+      + groups.map(([type, label]) => {
+        const items = data.items.filter((i) => i.type === type);
+        if (!items.length) return "";
+        return `<div class="section-title" style="margin-top:22px">${label}</div><div class="cos-grid">${items.map(card).join("")}</div>`;
+      }).join("");
+  } catch (e) { box.innerHTML = `<div class="empty">${esc(e.message)}</div>`; }
+}
+async function buyCosmetic(key) {
+  try {
+    const r = await api("/cosmetics/buy", { method: "POST", body: { key } });
+    if (state.user) state.user.points = r.balance;
+    toast(r.message, "success");
+    renderHeader();
+    loadCosmetics();
+  } catch (e) { toast(e.message, "error"); }
+}
+async function equipCosmetic(key) {
+  try {
+    const r = await api("/cosmetics/equip", { method: "POST", body: { key } });
+    if (state.user) {
+      state.user.cos = state.user.cos || { name: "", frame: "", banner: "" };
+      state.user.cos[r.type] = r.cls || "";
+    }
+    toast(r.equipped_key ? "Nasazeno ✓" : "Sundáno", "info");
+    renderHeader();
+    loadCosmetics();
+  } catch (e) { toast(e.message, "error"); }
+}
 function showcaseSectionHTML(items) {
   if (!items || !items.length) return "";
   const cards = items.map((it) => {
@@ -3747,6 +3811,8 @@ function handleAction(action, el) {
     case "spin-wheel": doSpinWheel(); break;
     case "claim-quest": claimQuest(el.dataset.key); break;
     case "claim-partner": claimPartnerLink(el.dataset.id, el.dataset.url); break;
+    case "cos-buy": buyCosmetic(el.dataset.key); break;
+    case "cos-equip": equipCosmetic(el.dataset.key); break;
     case "maint-on": doMaintOn(el); break;
     case "maint-on-time": doMaintOnTime(); break;
     case "maint-off": doMaintOff(); break;

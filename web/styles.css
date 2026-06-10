@@ -850,3 +850,58 @@ footer.site-footer { border-top: 1px solid var(--border); padding: 22px 0; color
   .logo .brand { display: none; }
   .container { padding: 0 12px; }
 }
+
+/* ============================================================
+   🎨 Kosmetika – barvy nicku / rámečky avataru / bannery
+============================================================ */
+.cn-blue    { color: #5a9bff !important; }
+.cn-purple  { color: #b98cff !important; }
+.cn-pink    { color: #ff7ac8 !important; }
+.cn-emerald { color: #2ee6a0 !important; text-shadow: 0 0 10px rgba(46,230,160,.4); }
+.cn-red     { color: #ff5b6e !important; }
+.cn-gold    { background: linear-gradient(90deg,#ffe27a,#ffb300,#fff0b0,#ffb300); background-size:200% 100%;
+  -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent; color:transparent !important;
+  animation: cos-shine 3s linear infinite; }
+.cn-rainbow { background: linear-gradient(90deg,#ff4d6d,#ff9d2e,#ffe24d,#46e08a,#4db4ff,#b06bff,#ff4d6d); background-size:300% 100%;
+  -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent; color:transparent !important;
+  animation: cos-shine 4s linear infinite; }
+@keyframes cos-shine { to { background-position: -300% 0; } }
+
+.avatar.cf-bronze  { box-shadow: 0 0 0 2px #b5743b; }
+.avatar.cf-silver  { box-shadow: 0 0 0 2px #cfd6e2; }
+.avatar.cf-gold    { box-shadow: 0 0 0 2px #ffce4d, 0 0 10px -2px rgba(255,206,77,.7); }
+.avatar.cf-emerald { box-shadow: 0 0 0 2px #18d68a; animation: cf-pulse-em 1.8s ease-in-out infinite; }
+.avatar.cf-neon    { box-shadow: 0 0 0 2px #00e0ff; animation: cf-pulse-neon 1.6s ease-in-out infinite; }
+.avatar.cf-fire    { box-shadow: 0 0 0 2px #ff7a18, 0 0 12px -1px #ff5a00; animation: cf-fire 1.4s linear infinite; }
+@keyframes cf-pulse-em { 0%,100% { box-shadow:0 0 0 2px #18d68a, 0 0 0 0 rgba(24,214,138,.5);} 50% { box-shadow:0 0 0 2px #18d68a, 0 0 12px 2px rgba(24,214,138,.7);} }
+@keyframes cf-pulse-neon { 0%,100% { box-shadow:0 0 0 2px #00e0ff, 0 0 0 0 rgba(0,224,255,.5);} 50% { box-shadow:0 0 0 2px #b06bff, 0 0 14px 2px rgba(176,107,255,.7);} }
+@keyframes cf-fire { 0% { box-shadow:0 0 0 2px #ff7a18, 0 0 12px -1px #ff5a00;} 50% { box-shadow:0 0 0 2px #ffb300, 0 0 16px 1px #ff7a00;} 100% { box-shadow:0 0 0 2px #ff5a00, 0 0 12px -1px #ff3000;} }
+
+.cb-midnight { background: linear-gradient(120deg,#141a3a,#2a1a4a 60%,#0c1030); }
+.cb-aurora   { background: linear-gradient(120deg,#1b3a5a,#2a6a7a 40%,#5a3a7a 80%,#7a3a5a); }
+.cb-wave     { background: linear-gradient(120deg,#063a2e,#0e7a52 55%,#0a5a44); }
+.cb-gold     { background: linear-gradient(90deg,#3a2a00,#a8780f,#ffd34d,#a8780f,#3a2a00); background-size:200% 100%; animation: cos-shine 5s linear infinite; }
+.cb-inferno  { background: linear-gradient(90deg,#2a0600,#a82200,#ff6a00,#ffb300,#ff6a00,#a82200); background-size:200% 100%; animation: cos-shine 4s linear infinite; }
+
+.cos-banner { height: 116px; border-radius: var(--r) var(--r) 0 0; border: 1px solid var(--border); border-bottom: 0; }
+.profile-hero.has-banner { margin-top: -42px; position: relative; }
+.profile-hero.has-banner .avatar.prof-av { box-shadow: 0 0 0 4px var(--surface), 0 0 0 6px var(--border); }
+
+.cos-bal { margin-bottom: 6px; color: var(--text-dim); font-size: 13.5px; }
+.cos-bal b { color: var(--accent); }
+.cos-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(168px, 1fr)); gap: 14px; }
+.cos-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r); padding: 12px; display: flex; flex-direction: column; gap: 9px; transition: border-color .14s, transform .14s; }
+.cos-card:hover { border-color: var(--accent); transform: translateY(-2px); }
+.cos-card.equipped { border-color: var(--success); box-shadow: inset 0 0 0 1px var(--success); }
+.cos-prev { height: 64px; display: grid; place-items: center; border-radius: 10px; background: var(--bg-2); border: 1px solid var(--border); }
+.cos-name-sample { font-weight: 900; font-size: 18px; }
+.cos-prev .avatar.cos-prev-av { width: 44px; height: 44px; font-size: 16px; }
+.cos-banner-prev { width: 86%; height: 40px; border-radius: 8px; border: 1px solid var(--border); }
+.cos-meta { display: flex; align-items: center; gap: 6px; font-size: 14px; }
+.cos-meta b { font-weight: 800; }
+.cos-tags { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; min-height: 18px; }
+.cos-rar { font-size: 9.5px; font-weight: 900; letter-spacing: .04em; padding: 2px 7px; border-radius: 5px; border: 1px solid currentColor; }
+.cos-rar-milspec { color: var(--r-milspec); } .cos-rar-restricted { color: var(--r-restricted); }
+.cos-rar-classified { color: var(--r-classified); } .cos-rar-covert { color: var(--r-covert); }
+.cos-rar-contraband { color: var(--r-contraband); } .cos-rar-legendary { color: #ff8a3d; }
+.cos-owned { font-size: 11px; font-weight: 800; color: var(--success); }

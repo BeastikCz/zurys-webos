@@ -372,6 +372,15 @@ CREATE TABLE IF NOT EXISTS quest_progress (
     PRIMARY KEY (user_id, quest_key, period_id)
 );
 
+-- Vlastněná kosmetika (barvy nicku / rámečky / bannery). Katalog je v kódu (cosmetics.py),
+-- tady se drží jen co kdo koupil. Nasazené kousky jsou ve sloupcích users.cos_*.
+CREATE TABLE IF NOT EXISTS cosmetic_owns (
+    user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    item_key    TEXT NOT NULL,
+    acquired_at TEXT NOT NULL,
+    PRIMARY KEY (user_id, item_key)
+);
+
 CREATE INDEX IF NOT EXISTS idx_orders_user ON orders(user_id);
 CREATE INDEX IF NOT EXISTS idx_orders_product ON orders(product_id);
 CREATE INDEX IF NOT EXISTS idx_dropclaims_drop ON drop_claims(drop_id);
@@ -517,6 +526,9 @@ _MIGRATIONS = [
     ("users", "last_rank", "INTEGER"),       # poslední známá pozice (pro „přeskočil tě")
     ("users", "pending_overtake", "TEXT"),   # fronta hlášky „přeskočil tě" (JSON {by, rank})
     ("partner_links", "mode", "TEXT NOT NULL DEFAULT 'once'"),  # 'once' (1× navždy) / 'flash' (random obnova)
+    ("users", "cos_name", "TEXT"),       # nasazená barva nicku (klíč z cosmetics.CATALOG)
+    ("users", "cos_frame", "TEXT"),      # nasazený rámeček avataru
+    ("users", "cos_banner", "TEXT"),     # nasazený profil banner
 ]
 
 

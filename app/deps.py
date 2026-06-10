@@ -147,6 +147,11 @@ def to_public(row: sqlite3.Row, include_email: bool = False) -> dict:
         "is_vip": bool(row["is_vip"]) if "is_vip" in row.keys() else False,
         "is_og": bool(row["is_og"]) if "is_og" in row.keys() else False,
     }
+    try:
+        from . import cosmetics
+        data["cos"] = cosmetics.resolve(row)
+    except Exception:
+        data["cos"] = {"name": "", "frame": "", "banner": ""}
     if include_email:
         data["email"] = row["email"]
         data["ban_reason"] = row["ban_reason"]
