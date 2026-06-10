@@ -47,6 +47,7 @@ PRODUCTS = [
 # řádek sem (ideálně nahoru) + deploy → objeví se sama, žádné ruční psaní.
 # (key, titulek, popis, tag: new|improve|fix, created_at ISO UTC)
 CHANGELOG = [
+    ("cosmetics-0611", "🎨 Nová sekce: Kosmetika!", "Vyšperkuj si profil! Za sedláky si teď koupíš barvu nicku, rámeček avataru i profil banner – a ukáže se to všude, kde tě ostatní vidí (leaderboard, profil, menu). Od pár stovek po legendární animované efekty – zlatá, rainbow, oheň 🔥. Některé kousky jsou jen pro suby. 💎 Najdeš to v menu pod „Kosmetika".", "new", "2026-06-11T20:00:00+00:00"),
     ("fair-games-0608", "⚖️ Férovější hry – konec nabalování", "Zatočili jsme s farmením: duely (coinflip/kostky) mají teď malý poplatek a krátkou pauzu mezi sebou a přibyl denní strop zisku z her. Pro běžné hraní se skoro nic nemění – jen už nejde nekonečně grindovat a žebříček je férovější. 🎲", "improve", "2026-06-08T22:00:00+00:00"),
     ("faster-web-0608", "⚡ Web je teď rychlejší a vydrží nápor", "Posílili jsme web, takže běží svižněji a líp to zvládá, když jste tu všichni naráz (hlavně při streamu). Méně sekání, víc pohody. 💨", "improve", "2026-06-08T21:00:00+00:00"),
     ("daily-wheel", "🎡 Kolo štěstí – zatoč si každý den!", "Na hlavní stránce přibylo Kolo štěstí! Jednou denně si zatočíš a vyhraješ sedláky – od pár drobných až po 🎰 JACKPOT 3000! Kolo se nabíjí každých 20 hodin, tak ať ti žádný den neuteče. Hodně štěstí! 🍀", "new", "2026-06-03T18:00:00+00:00"),
