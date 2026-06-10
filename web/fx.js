@@ -10,8 +10,8 @@
     const glow = document.createElement("div");
     glow.style.cssText =
       "position:fixed;width:540px;height:540px;border-radius:50%;pointer-events:none;z-index:1;" +
-      "mix-blend-mode:multiply;transform:translate(-50%,-50%);left:-999px;top:-999px;" +
-      "background:radial-gradient(circle,rgba(79,70,229,.05),rgba(124,58,237,.03) 45%,transparent 70%)";
+      "mix-blend-mode:screen;transform:translate(-50%,-50%);left:-999px;top:-999px;" +
+      "background:radial-gradient(circle,rgba(200,255,0,.045),rgba(255,255,255,.02) 45%,transparent 70%)";
     document.body.appendChild(glow);
     let gx = -999, gy = -999, raf = 0;
     addEventListener("pointermove", (e) => {
