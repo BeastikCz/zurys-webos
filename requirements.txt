@@ -1,0 +1,6 @@
+# WebOS – bodový shop. Závislosti backendu (už nainstalované v .venv).
+# Reinstalace: .\.venv\Scripts\python.exe -m pip install -r requirements.txt
+fastapi==0.136.3
+uvicorn==0.48.0
+rsa==4.9                # ověření RSA-SHA256 podpisu Kick webhooků
+tzdata                  # IANA časové zóny pro zoneinfo (Europe/Prague) – „den" v ČR čase

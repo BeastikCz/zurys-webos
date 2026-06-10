@@ -1,0 +1,560 @@
+"""Připojení k SQLite a inicializace schématu databáze."""
+import sqlite3
+from datetime import datetime, timezone, timedelta
+
+from .config import DB_PATH, DATA_DIR, ANTICHEAT_RULES
+
+try:
+    from zoneinfo import ZoneInfo
+    LOCAL_TZ = ZoneInfo("Europe/Prague")     # „den" se počítá v českém čase (s DST)
+except Exception:                            # bez tzdata (slim image) → fallback na UTC, ať to nespadne
+    LOCAL_TZ = timezone.utc
+
+
+def now_iso() -> str:
+    """Aktuální čas v ISO formátu (UTC). Časy v DB ukládáme VŽDY v UTC."""
+    return datetime.now(timezone.utc).isoformat()
+
+
+def local_now() -> datetime:
+    """Teď v českém čase (Europe/Prague)."""
+    return datetime.now(LOCAL_TZ)
+
+
+def local_date(offset_days: int = 0) -> str:
+    """Datum podle ČESKÉHO času (YYYY-MM-DD) – klíč pro denní reset (chat cíl, aktivita…)."""
+    return (local_now() + timedelta(days=offset_days)).date().isoformat()
+
+
+def local_week_id() -> str:
+    """ISO týden podle českého času (YYYY-Www) – pro týdenní questy."""
+    y, w, _ = local_now().isocalendar()
+    return f"{y}-W{w:02d}"
+
+
+def local_day_start_iso(offset_days: int = 0) -> str:
+    """UTC ISO čas začátku ČESKÉHO dne (00:00 Europe/Prague) – pro porovnání s UTC created_at."""
+    d = (local_now() + timedelta(days=offset_days)).date()
+    return datetime(d.year, d.month, d.day, tzinfo=LOCAL_TZ).astimezone(timezone.utc).isoformat()
+
+
+def get_conn() -> sqlite3.Connection:
+    """Nové připojení k databázi (jedno na request)."""
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    # check_same_thread=False: FastAPI spouští sync endpointy ve více vláknech
+    # (a teardown závislosti může běžet v jiném vlákně než vytvoření spojení).
+    # Každý request má vlastní spojení, nesdílí se souběžně → je to bezpečné.
+    conn = sqlite3.connect(DB_PATH, timeout=15, check_same_thread=False)
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA foreign_keys = ON")
+    conn.execute("PRAGMA journal_mode = WAL")
+    return conn
+
+
+SCHEMA = """
+CREATE TABLE IF NOT EXISTS users (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    kick_username TEXT UNIQUE,
+    kick_id       TEXT,
+    email         TEXT UNIQUE,
+    username      TEXT NOT NULL,
+    password_hash TEXT,
+    points        INTEGER NOT NULL DEFAULT 0,
+    role          TEXT NOT NULL DEFAULT 'user',
+    avatar_url    TEXT,
+    banned        INTEGER NOT NULL DEFAULT 0,
+    ban_reason    TEXT,
+    last_daily    TEXT,
+    daily_streak  INTEGER NOT NULL DEFAULT 0,
+    created_at    TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS products (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    name        TEXT NOT NULL,
+    image_url   TEXT,
+    cost_points INTEGER NOT NULL DEFAULT 0,
+    category    TEXT,
+    type        TEXT NOT NULL DEFAULT 'instant',
+    subs_only   INTEGER NOT NULL DEFAULT 0,
+    vip_only    INTEGER NOT NULL DEFAULT 0,
+    stock       INTEGER NOT NULL DEFAULT -1,
+    description TEXT,
+    rarity      TEXT,
+    ends_at     TEXT,
+    hot         INTEGER NOT NULL DEFAULT 0,
+    active      INTEGER NOT NULL DEFAULT 1,
+    created_at  TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS orders (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id      INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    product_id   INTEGER REFERENCES products(id) ON DELETE SET NULL,
+    points_spent INTEGER NOT NULL DEFAULT 0,
+    status       TEXT NOT NULL DEFAULT 'pending',
+    created_at   TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS redeem_codes (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    code        TEXT NOT NULL UNIQUE,
+    points_value INTEGER NOT NULL DEFAULT 0,
+    product_id  INTEGER REFERENCES products(id) ON DELETE SET NULL,
+    max_uses    INTEGER NOT NULL DEFAULT 1,
+    uses_count  INTEGER NOT NULL DEFAULT 0,
+    expires_at  TEXT,
+    created_at  TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS points_log (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    change     INTEGER NOT NULL,
+    reason     TEXT,
+    created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS raffle_entries (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    product_id INTEGER NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+    user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS raffle_winners (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    product_id INTEGER NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+    user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    created_at TEXT NOT NULL
+);
+
+-- Přihlašovací relace (session cookie)
+CREATE TABLE IF NOT EXISTS sessions (
+    token      TEXT PRIMARY KEY,
+    user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    ip         TEXT,
+    user_agent TEXT,
+    last_seen  TEXT,
+    created_at TEXT NOT NULL,
+    expires_at TEXT NOT NULL
+);
+
+-- Log přihlášení (pro bezpečnost / anticheat) – historie i po odhlášení
+CREATE TABLE IF NOT EXISTS login_events (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    ip         TEXT,
+    user_agent TEXT,
+    method     TEXT,
+    created_at TEXT NOT NULL
+);
+
+-- Kdo už daný kód uplatnil (zabrání opakovanému použití stejným uživatelem)
+CREATE TABLE IF NOT EXISTS redeem_uses (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    code_id    INTEGER NOT NULL REFERENCES redeem_codes(id) ON DELETE CASCADE,
+    user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    created_at TEXT NOT NULL,
+    UNIQUE(code_id, user_id)
+);
+
+-- Dropy: závod o kód z chatu (nejrychlejší berou body)
+CREATE TABLE IF NOT EXISTS drops (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    code        TEXT NOT NULL,
+    points      INTEGER NOT NULL DEFAULT 0,
+    max_winners INTEGER NOT NULL DEFAULT 1,
+    active      INTEGER NOT NULL DEFAULT 1,
+    created_at  TEXT NOT NULL,
+    ended_at    TEXT
+);
+
+CREATE TABLE IF NOT EXISTS drop_claims (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    drop_id    INTEGER NOT NULL REFERENCES drops(id) ON DELETE CASCADE,
+    user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    position   INTEGER NOT NULL,
+    created_at TEXT NOT NULL,
+    UNIQUE(drop_id, user_id)
+);
+
+-- Anticheat pravidla (konfigurace) + klientské signály (fingerprint)
+CREATE TABLE IF NOT EXISTS anticheat_rules (
+    key       TEXT PRIMARY KEY,
+    enabled   INTEGER NOT NULL DEFAULT 1,
+    threshold INTEGER
+);
+
+CREATE TABLE IF NOT EXISTS client_signals (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    webdriver  INTEGER NOT NULL DEFAULT 0,
+    fp_hash    TEXT,
+    ua         TEXT,
+    created_at TEXT NOT NULL
+);
+
+-- Bany podle otisku zařízení (zabanovaný se nevrátí novým účtem ze stejného prohlížeče)
+CREATE TABLE IF NOT EXISTS fingerprint_bans (
+    fp_hash    TEXT PRIMARY KEY,
+    reason     TEXT,
+    created_at TEXT NOT NULL
+);
+
+-- Bany podle IP adresy: zabanovaná IP vůbec neotevře web (full-page blok). Časově omezené.
+CREATE TABLE IF NOT EXISTS ip_bans (
+    ip         TEXT PRIMARY KEY,
+    reason     TEXT,
+    created_at TEXT NOT NULL,
+    expires_at TEXT                -- NULL = trvalý ban
+);
+
+-- Kick bot (SedlakBOT): uložený OAuth token pro psaní do chatu. Vždy max 1 řádek (id=1).
+CREATE TABLE IF NOT EXISTS bot_tokens (
+    id                  INTEGER PRIMARY KEY CHECK (id = 1),
+    bot_username        TEXT,
+    access_token        TEXT,
+    refresh_token       TEXT,
+    expires_at          TEXT,
+    scope               TEXT,
+    broadcaster_channel TEXT,
+    broadcaster_user_id TEXT,
+    is_demo             INTEGER NOT NULL DEFAULT 0,
+    updated_at          TEXT NOT NULL
+);
+
+-- Log zpráv odeslaných botem (i simulovaných v demu) – pro konzoli + simulovaný chat
+CREATE TABLE IF NOT EXISTS bot_messages (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    channel    TEXT,
+    author     TEXT,
+    content    TEXT NOT NULL,
+    kind       TEXT NOT NULL DEFAULT 'manual',   -- manual | drop | system
+    sent_real  INTEGER NOT NULL DEFAULT 0,        -- 1 = reálně odesláno na Kick, 0 = demo/simulace
+    error      TEXT,
+    created_at TEXT NOT NULL
+);
+
+-- Obecné nastavení aplikace (klíč → hodnota). Toggly bota, ekonomika atd.
+CREATE TABLE IF NOT EXISTS app_settings (
+    key        TEXT PRIMARY KEY,
+    value      TEXT,
+    updated_at TEXT
+);
+
+-- Stav pasivního výdělku uživatele (sledování + chat): cooldowny + denní strop
+CREATE TABLE IF NOT EXISTS activity_state (
+    user_id       INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    day           TEXT,                      -- YYYY-MM-DD (UTC), ke kterému patří počítadla
+    earned_today  INTEGER NOT NULL DEFAULT 0,
+    watch_today   INTEGER NOT NULL DEFAULT 0,
+    chat_today    INTEGER NOT NULL DEFAULT 0,
+    games_net_today INTEGER NOT NULL DEFAULT 0,
+    last_watch_at TEXT,
+    last_chat_at  TEXT
+);
+
+-- PvP hry o body: piškvorky (gomoku). 1v1 se sázkou, escrow vkladů, vítěz bere bank.
+CREATE TABLE IF NOT EXISTS games (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    type        TEXT NOT NULL DEFAULT 'gomoku',
+    status      TEXT NOT NULL DEFAULT 'open',   -- open | active | finished | cancelled
+    stake       INTEGER NOT NULL,                -- vklad KAŽDÉHO hráče (bank = 2× stake)
+    board       TEXT NOT NULL,                   -- řetězec BOARD*BOARD znaků: '.', '1', '2'
+    turn        INTEGER NOT NULL DEFAULT 1,      -- kdo je na tahu (1 = p1/X, 2 = p2/O)
+    p1_id       INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    p2_id       INTEGER REFERENCES users(id) ON DELETE CASCADE,
+    winner      INTEGER,                         -- 0 = remíza, 1 = p1, 2 = p2, NULL = běží
+    move_count  INTEGER NOT NULL DEFAULT 0,
+    last_move_at TEXT,
+    created_at  TEXT NOT NULL,
+    updated_at  TEXT NOT NULL
+);
+
+-- Duely (PvP o bank): coinflip/dice = okamžité vyhodnocení při přijetí výzvy, rps = na kola.
+-- Vklady obou hráčů jsou v escrow (odečtou se hned), vítěz bere bank (mínus volitelný rake).
+CREATE TABLE IF NOT EXISTS duels (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    type        TEXT NOT NULL,                   -- 'coinflip' | 'dice' | 'rps'
+    status      TEXT NOT NULL DEFAULT 'open',    -- open | active | finished | cancelled
+    stake       INTEGER NOT NULL,                -- vklad KAŽDÉHO hráče (bank = 2× stake)
+    p1_id       INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    p2_id       INTEGER REFERENCES users(id) ON DELETE CASCADE,
+    winner      INTEGER,                         -- 0=remíza, 1=p1, 2=p2, NULL=běží
+    state       TEXT NOT NULL DEFAULT '',        -- JSON: výsledek (strana/hody/kola RPS)
+    created_at  TEXT NOT NULL,
+    updated_at  TEXT NOT NULL
+);
+
+-- Predikce (sázení bodů na výsledek – CS2 zápasy/eventy). Pari-mutuel: výherci si dělí bank
+-- podle výše sázky. Vklady jsou v escrow (odečtou se hned), výplata po vyhodnocení streamerem.
+CREATE TABLE IF NOT EXISTS predictions (
+    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+    question         TEXT NOT NULL,
+    game             TEXT NOT NULL DEFAULT 'CS2',
+    status           TEXT NOT NULL DEFAULT 'open',   -- open | locked | resolved | cancelled
+    winner_option_id INTEGER,                          -- vyplněno po vyhodnocení
+    created_by       INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    created_at       TEXT NOT NULL,
+    locked_at        TEXT,
+    resolved_at      TEXT
+);
+CREATE TABLE IF NOT EXISTS prediction_options (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    prediction_id INTEGER NOT NULL REFERENCES predictions(id) ON DELETE CASCADE,
+    label         TEXT NOT NULL,
+    position      INTEGER NOT NULL DEFAULT 0
+);
+CREATE TABLE IF NOT EXISTS prediction_bets (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    prediction_id INTEGER NOT NULL REFERENCES predictions(id) ON DELETE CASCADE,
+    option_id     INTEGER NOT NULL REFERENCES prediction_options(id) ON DELETE CASCADE,
+    user_id       INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    amount        INTEGER NOT NULL,
+    payout        INTEGER NOT NULL DEFAULT 0,         -- kolik vyplaceno po vyhodnocení (0 = prohra)
+    created_at    TEXT NOT NULL,
+    UNIQUE(prediction_id, user_id)                    -- 1 sázka na predikci (lze navyšovat na STEJNOU možnost)
+);
+CREATE INDEX IF NOT EXISTS idx_pred_opts_pred ON prediction_options(prediction_id);
+CREATE INDEX IF NOT EXISTS idx_pred_bets_pred ON prediction_bets(prediction_id);
+
+-- Audit log: kdo (admin), kdy a co provedl (kritické admin akce – body, ban, role, kódy, dropy…)
+CREATE TABLE IF NOT EXISTS admin_audit (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    admin_id   INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    admin_name TEXT,
+    action     TEXT NOT NULL,
+    target     TEXT,
+    details    TEXT,
+    ip         TEXT,
+    created_at TEXT NOT NULL
+);
+
+-- Patch notes / novinky (changelog – ať diváci vidí, že se na webu pořád pracuje). Spravuje admin/broadcaster.
+CREATE TABLE IF NOT EXISTS admin_user_meta (
+    user_id         INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    watchlisted     INTEGER NOT NULL DEFAULT 0,
+    note            TEXT NOT NULL DEFAULT '',
+    updated_by      INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    updated_by_name TEXT,
+    updated_at      TEXT
+);
+
+CREATE TABLE IF NOT EXISTS patch_notes (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    title      TEXT NOT NULL,
+    body       TEXT NOT NULL DEFAULT '',
+    tag        TEXT NOT NULL DEFAULT 'new',   -- new | improve | fix
+    published  INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_patchnotes_created ON patch_notes(created_at);
+
+-- Odznaky / achievementy: 1 řádek na (uživatel, odznak); tier = nejvyšší dosažený stupeň
+CREATE TABLE IF NOT EXISTS user_badges (
+    user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    badge_key  TEXT NOT NULL,
+    tier       INTEGER NOT NULL DEFAULT 1,
+    awarded_at TEXT NOT NULL,
+    PRIMARY KEY (user_id, badge_key)
+);
+CREATE INDEX IF NOT EXISTS idx_user_badges_user ON user_badges(user_id);
+
+-- Postup v denních/týdenních úkolech (baseline = stav statu na začátku období; diff = postup)
+CREATE TABLE IF NOT EXISTS quest_progress (
+    user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    quest_key  TEXT NOT NULL,
+    period_id  TEXT NOT NULL,
+    baseline   INTEGER NOT NULL DEFAULT 0,
+    claimed    INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL,
+    PRIMARY KEY (user_id, quest_key, period_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_orders_user ON orders(user_id);
+CREATE INDEX IF NOT EXISTS idx_orders_product ON orders(product_id);
+CREATE INDEX IF NOT EXISTS idx_dropclaims_drop ON drop_claims(drop_id);
+CREATE INDEX IF NOT EXISTS idx_signals_user ON client_signals(user_id);
+CREATE INDEX IF NOT EXISTS idx_orders_created ON orders(created_at);
+CREATE INDEX IF NOT EXISTS idx_points_log_user ON points_log(user_id);
+CREATE INDEX IF NOT EXISTS idx_points_log_created ON points_log(created_at);
+CREATE INDEX IF NOT EXISTS idx_raffle_product ON raffle_entries(product_id);
+CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
+CREATE INDEX IF NOT EXISTS idx_login_user ON login_events(user_id);
+CREATE INDEX IF NOT EXISTS idx_login_ip ON login_events(ip);
+CREATE INDEX IF NOT EXISTS idx_login_created ON login_events(created_at);
+CREATE INDEX IF NOT EXISTS idx_audit_created ON admin_audit(created_at);
+CREATE INDEX IF NOT EXISTS idx_user_meta_watch ON admin_user_meta(watchlisted);
+CREATE INDEX IF NOT EXISTS idx_botmsg_created ON bot_messages(created_at);
+CREATE INDEX IF NOT EXISTS idx_games_status ON games(status);
+CREATE INDEX IF NOT EXISTS idx_games_players ON games(p1_id, p2_id);
+CREATE INDEX IF NOT EXISTS idx_duels_status ON duels(status);
+CREATE INDEX IF NOT EXISTS idx_duels_players ON duels(p1_id, p2_id);
+
+CREATE TABLE IF NOT EXISTS partner_links (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    label TEXT NOT NULL,
+    url TEXT NOT NULL,
+    reward INTEGER NOT NULL DEFAULT 100,
+    icon TEXT DEFAULT '🤝',
+    enabled INTEGER NOT NULL DEFAULT 1,
+    mode TEXT NOT NULL DEFAULT 'once',
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS partner_link_claims (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    link_id INTEGER NOT NULL,
+    created_at TEXT NOT NULL,
+    UNIQUE(user_id, link_id)
+);
+CREATE INDEX IF NOT EXISTS idx_plc_user ON partner_link_claims(user_id);
+CREATE TABLE IF NOT EXISTS partner_rounds (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    opened_at TEXT NOT NULL,
+    expires_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS partner_flash_claims (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    link_id INTEGER NOT NULL,
+    round_id INTEGER NOT NULL,
+    created_at TEXT NOT NULL,
+    UNIQUE(user_id, link_id, round_id)
+);
+CREATE INDEX IF NOT EXISTS idx_pfc_user ON partner_flash_claims(user_id);
+
+CREATE TABLE IF NOT EXISTS blackjack_games (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    bet         INTEGER NOT NULL,
+    deck        TEXT NOT NULL,                    -- JSON: zbývající karty (server-only)
+    player      TEXT NOT NULL,                    -- JSON: hráčovy karty
+    dealer      TEXT NOT NULL,                    -- JSON: dealerovy karty (skrytá do odhalení)
+    status      TEXT NOT NULL DEFAULT 'active',   -- active | done
+    result      TEXT,                              -- blackjack | win | push | lose | bust
+    payout      INTEGER NOT NULL DEFAULT 0,        -- připsáno zpět (vč. vrácené sázky)
+    doubled     INTEGER NOT NULL DEFAULT 0,
+    created_at  TEXT NOT NULL,
+    updated_at  TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_bj_user ON blackjack_games(user_id, status);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_bj_one_active ON blackjack_games(user_id) WHERE status='active';
+
+-- Soukromý sdílený blackjack stůl (multiplayer, vs dealer, jen na kód/link)
+CREATE TABLE IF NOT EXISTS bj_rooms (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    code        TEXT NOT NULL UNIQUE,             -- join kód (do linku)
+    host_id     INTEGER NOT NULL,
+    status      TEXT NOT NULL DEFAULT 'betting',  -- betting | playing | done | closed
+    dealer      TEXT NOT NULL DEFAULT '[]',       -- JSON dealer karty
+    deck        TEXT NOT NULL DEFAULT '[]',       -- JSON shoe (server-only)
+    deck_pos    INTEGER NOT NULL DEFAULT 0,       -- atomické tahání karet (RETURNING)
+    round_no    INTEGER NOT NULL DEFAULT 0,
+    created_at  TEXT NOT NULL,
+    updated_at  TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS bj_seats (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    room_id     INTEGER NOT NULL REFERENCES bj_rooms(id) ON DELETE CASCADE,
+    user_id     INTEGER NOT NULL,
+    bet         INTEGER NOT NULL DEFAULT 0,
+    hand        TEXT NOT NULL DEFAULT '[]',       -- JSON hráčovy karty (sdílený stůl = vidí všichni)
+    state       TEXT NOT NULL DEFAULT 'idle',     -- idle | ready | acting | stood | bust | resolved
+    result      TEXT,
+    payout      INTEGER NOT NULL DEFAULT 0,
+    acted_at    TEXT,                             -- pro AFK auto-stand
+    seen_at     TEXT,
+    joined_at   TEXT NOT NULL,
+    UNIQUE(room_id, user_id)
+);
+CREATE INDEX IF NOT EXISTS idx_bjseat_room ON bj_seats(room_id);
+CREATE TABLE IF NOT EXISTS bj_chat (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    room_id     INTEGER NOT NULL REFERENCES bj_rooms(id) ON DELETE CASCADE,
+    user_id     INTEGER NOT NULL,
+    username    TEXT NOT NULL,
+    msg         TEXT NOT NULL,
+    created_at  TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_bjchat_room ON bj_chat(room_id, id);
+"""
+
+
+# Sloupce doplněné do existujících tabulek (migrace bez resetu DB)
+_MIGRATIONS = [
+    ("activity_state", "games_net_today", "INTEGER NOT NULL DEFAULT 0"),
+    ("users", "banned", "INTEGER NOT NULL DEFAULT 0"),
+    ("users", "ban_reason", "TEXT"),
+    ("users", "kick_username", "TEXT"),
+    ("users", "kick_id", "TEXT"),
+    ("users", "last_daily", "TEXT"),
+    ("users", "daily_streak", "INTEGER NOT NULL DEFAULT 0"),
+    ("users", "last_wheel", "TEXT"),
+    ("users", "steam_trade_url", "TEXT"),
+    ("users", "is_sub", "INTEGER NOT NULL DEFAULT 0"),
+    ("users", "is_vip", "INTEGER NOT NULL DEFAULT 0"),
+    ("users", "is_og", "INTEGER NOT NULL DEFAULT 0"),
+    ("users", "sub_expires_at", "TEXT"),
+    ("sessions", "ip", "TEXT"),
+    ("sessions", "user_agent", "TEXT"),
+    ("sessions", "last_seen", "TEXT"),
+    ("products", "description", "TEXT"),
+    ("products", "rarity", "TEXT"),
+    ("products", "ends_at", "TEXT"),
+    ("products", "hot", "INTEGER NOT NULL DEFAULT 0"),
+    ("products", "period", "TEXT"),
+    ("products", "max_per_person_pct", "INTEGER NOT NULL DEFAULT 0"),
+    ("orders", "product_name", "TEXT"),
+    ("client_signals", "fp_hash", "TEXT"),
+    ("drop_claims", "ip", "TEXT"),
+    ("drop_claims", "fp_hash", "TEXT"),
+    ("games", "active_at", "TEXT"),
+    ("users", "last_league", "TEXT"),        # nejvyšší dosažená liga (pro detekci postupu)
+    ("users", "pending_rankup", "TEXT"),     # fronta konfet: liga k oslavě při dalším načtení
+    ("users", "last_rank", "INTEGER"),       # poslední známá pozice (pro „přeskočil tě")
+    ("users", "pending_overtake", "TEXT"),   # fronta hlášky „přeskočil tě" (JSON {by, rank})
+    ("partner_links", "mode", "TEXT NOT NULL DEFAULT 'once'"),  # 'once' (1× navždy) / 'flash' (random obnova)
+]
+
+
+def get_setting(conn: sqlite3.Connection, key: str, default: str = "") -> str:
+    """Přečte hodnotu z app_settings (string), nebo vrátí default."""
+    r = conn.execute("SELECT value FROM app_settings WHERE key = ?", (key,)).fetchone()
+    return r["value"] if r and r["value"] is not None else default
+
+
+def set_setting(conn: sqlite3.Connection, key: str, value: str) -> None:
+    """Zapíše hodnotu do app_settings (upsert). Necommituje – commit volá caller."""
+    conn.execute(
+        "INSERT INTO app_settings (key, value, updated_at) VALUES (?, ?, ?) "
+        "ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at",
+        (key, value, now_iso()),
+    )
+
+
+def init_db() -> None:
+    """Vytvoří tabulky a doplní chybějící sloupce (bez nutnosti reset DB)."""
+    conn = get_conn()
+    try:
+        conn.executescript(SCHEMA)
+        for table, col, ddl in _MIGRATIONS:
+            cols = [r[1] for r in conn.execute(f"PRAGMA table_info({table})").fetchall()]
+            if col not in cols:
+                conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} {ddl}")
+        # výchozí anticheat pravidla (idempotentně)
+        for r in ANTICHEAT_RULES:
+            conn.execute("INSERT OR IGNORE INTO anticheat_rules (key, enabled, threshold) VALUES (?, ?, ?)",
+                         (r["key"], 0 if r.get("default_off") else 1, r["threshold"]))
+        # Jednorázový reset baseline u „earn" questů: změnila se definice statu 'earned'
+        # (nově se počítají JEN body za sledování + chat na streamu, ne všechny kladné body).
+        # Staré baseline řádky jsou v jiném měřítku → smazat, ať se přepočítají z nové definice
+        # (jinak by postup zůstal zaseknutý na 0). Spustí se právě jednou (flag v app_settings).
+        if get_setting(conn, "_mig_earned_streamonly", "") != "1":
+            conn.execute("DELETE FROM quest_progress WHERE quest_key IN ('d_earn','w_earn')")
+            set_setting(conn, "_mig_earned_streamonly", "1")
+        conn.commit()
+    finally:
+        conn.close()

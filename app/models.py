@@ -1,0 +1,389 @@
+"""Pydantic schémata pro vstupní data (request body)."""
+import re
+from typing import List, Optional
+
+from pydantic import BaseModel, Field, field_validator
+
+_EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+
+
+def _normalize_email(value: str) -> str:
+    value = (value or "").strip().lower()
+    if not _EMAIL_RE.match(value):
+        raise ValueError("Neplatný e-mail.")
+    return value
+
+
+# --- Autentizace ---
+class RegisterIn(BaseModel):
+    email: str
+    username: str = Field(min_length=2, max_length=32)
+    password: str = Field(min_length=6, max_length=128)
+
+    @field_validator("email")
+    @classmethod
+    def _email(cls, v):
+        return _normalize_email(v)
+
+
+class LoginIn(BaseModel):
+    email: str
+    password: str
+
+    @field_validator("email")
+    @classmethod
+    def _email(cls, v):
+        return _normalize_email(v)
+
+
+class KickConnectIn(BaseModel):
+    """Demo režim připojení Kick účtu – jen uživatelské jméno."""
+    username: str = Field(min_length=2, max_length=32)
+
+
+class TradeUrlIn(BaseModel):
+    """Steam trade odkaz diváka (na ruční odeslání vyhraných skinů). Prázdný = smazat."""
+    url: str = Field(default="", max_length=300)
+
+
+class BanIn(BaseModel):
+    banned: bool
+    reason: Optional[str] = ""
+
+
+class FingerprintIn(BaseModel):
+    webdriver: bool = False
+    fp: Optional[str] = ""
+
+
+class RuleIn(BaseModel):
+    enabled: Optional[bool] = None
+    threshold: Optional[int] = None
+
+
+class IpBanIn(BaseModel):
+    ip: str = Field(min_length=3, max_length=64)
+    reason: Optional[str] = ""
+    hours: int = Field(default=1, ge=0, le=8760)   # 0 = trvale, max 1 rok
+
+
+class IpUnbanIn(BaseModel):
+    ip: str = Field(min_length=3, max_length=64)
+
+
+# --- PvP hry (piškvorky) ---
+class GameCreateIn(BaseModel):
+    stake: int = Field(ge=1, le=10_000_000)   # libovolná sázka (kladná)
+
+
+class GameMoveIn(BaseModel):
+    cell: int = Field(ge=0)                    # index políčka 0..(BOARD*BOARD-1)
+
+
+class DuelCreateIn(BaseModel):
+    type: str = Field(pattern="^(coinflip|dice)$")   # rps přidám později (vlna 2)
+    stake: int = Field(ge=1, le=10_000_000)
+
+
+# --- Predikce (sázení bodů na výsledek, CS2) ---
+class PredictionCreateIn(BaseModel):
+    question: str = Field(min_length=3, max_length=200)
+    options: List[str]                          # 2–4 možnosti
+    game: str = Field(default="CS2", max_length=40)
+
+    @field_validator("options")
+    @classmethod
+    def _opts(cls, v):
+        cleaned = [str(o).strip() for o in (v or []) if str(o).strip()]
+        if len(cleaned) < 2:
+            raise ValueError("Zadej aspoň 2 možnosti.")
+        if len(cleaned) > 4:
+            raise ValueError("Max 4 možnosti.")
+        if any(len(o) > 60 for o in cleaned):
+            raise ValueError("Možnost je moc dlouhá (max 60 znaků).")
+        return cleaned
+
+
+class PredictionBetIn(BaseModel):
+    option_id: int
+    amount: int = Field(ge=1, le=10_000_000)
+
+
+class PredictionResolveIn(BaseModel):
+    option_id: int
+
+
+# --- Kick bot (SedlakBOT) ---
+class BotSendIn(BaseModel):
+    content: str = Field(min_length=1, max_length=480)
+
+
+class BotToggleIn(BaseModel):
+    enabled: bool
+
+
+class SimulateChatIn(BaseModel):
+    """Demo/test: simulace zprávy v chatu od daného Kick nicku (→ odměna za aktivitu)."""
+    kick_username: str = Field(min_length=2, max_length=64)
+
+
+# --- Ekonomika (pasivní výdělek) ---
+class EconomyIn(BaseModel):
+    eco_pts_per_min: Optional[int] = Field(default=None, ge=0, le=1000)
+    eco_sub_mult: Optional[int] = Field(default=None, ge=1, le=100)
+    eco_vip_mult: Optional[int] = Field(default=None, ge=1, le=100)
+    eco_chat_pts: Optional[int] = Field(default=None, ge=0, le=1000)
+    eco_chat_cooldown_s: Optional[int] = Field(default=None, ge=1, le=3600)
+    eco_daily_cap: Optional[int] = Field(default=None, ge=0, le=1000000)
+    eco_games_cap: Optional[int] = Field(default=None, ge=0, le=10000000)
+    eco_watch_enabled: Optional[int] = Field(default=None, ge=0, le=1)
+    eco_chat_enabled: Optional[int] = Field(default=None, ge=0, le=1)
+    eco_sub_pts: Optional[int] = Field(default=None, ge=0, le=1000000)
+    eco_resub_pts: Optional[int] = Field(default=None, ge=0, le=1000000)
+    eco_giftsub_pts: Optional[int] = Field(default=None, ge=0, le=1000000)
+    eco_follow_pts: Optional[int] = Field(default=None, ge=0, le=1000000)
+
+
+class LiveModeIn(BaseModel):
+    """Režim detekce živého streamu: auto (Kick API) / on (vždy) / off (nikdy)."""
+    mode: str = Field(pattern="^(auto|on|off)$")
+
+
+# --- Import uživatelů ze staré platformy (zurys.store / Firebase) ---
+class LegacyUserIn(BaseModel):
+    nick: str
+    points: int = 0
+    is_sub: Optional[int] = 0
+    is_vip: Optional[int] = 0
+
+
+class LegacyImportIn(BaseModel):
+    users: List[LegacyUserIn]
+
+
+# --- Dropy (závod o kód) ---
+class DropCreateIn(BaseModel):
+    code: Optional[str] = None            # když None, vygeneruje se
+    points: int = Field(ge=1)
+    max_winners: int = Field(default=1, ge=1, le=1000)
+
+
+class AutoDropIn(BaseModel):
+    """Nastavení auto-drop scheduleru (posílají se jen měněná pole).
+
+    Rozsahy „od–do" (*_max): web losuje náhodnou hodnotu mezi základem a *_max,
+    ať diváci nemůžou drop načasovat. *_max == základ → fixní hodnota.
+    """
+    autodrop_enabled: Optional[int] = Field(default=None, ge=0, le=1)
+    autodrop_interval_min: Optional[int] = Field(default=None, ge=1, le=1440)
+    autodrop_interval_max: Optional[int] = Field(default=None, ge=1, le=1440)
+    autodrop_points: Optional[int] = Field(default=None, ge=1, le=1_000_000)
+    autodrop_points_max: Optional[int] = Field(default=None, ge=1, le=1_000_000)
+    autodrop_winners: Optional[int] = Field(default=None, ge=1, le=1000)
+    autodrop_winners_max: Optional[int] = Field(default=None, ge=1, le=1000)
+    autodrop_only_live: Optional[int] = Field(default=None, ge=0, le=1)
+
+
+class QuestClaimIn(BaseModel):
+    """Vyzvednutí odměny za splněný úkol."""
+    key: str = Field(..., min_length=1, max_length=32)
+
+
+class CommunityGoalIn(BaseModel):
+    """Nastavení komunitního chat cíle (posílají se jen měněná pole)."""
+    enabled: Optional[int] = Field(default=None, ge=0, le=1)
+    target: Optional[int] = Field(default=None, ge=1, le=1_000_000)
+    reward: Optional[int] = Field(default=None, ge=0, le=1_000_000)
+
+
+class DropClaimIn(BaseModel):
+    code: str = Field(min_length=1, max_length=64)
+    hp: Optional[str] = ""        # honeypot – boti vyplní, lidé ne
+    dwell: Optional[int] = 0      # ms od zobrazení banneru (anti-instant-bot)
+    t0: Optional[int] = 0         # epoch ms při zobrazení formy (form timing)
+
+
+# --- Nákup / košík ---
+class PurchaseIn(BaseModel):
+    product_id: int
+    t0: Optional[int] = 0          # epoch ms při zobrazení formy
+
+
+class CartItem(BaseModel):
+    product_id: int
+    qty: int = Field(default=1, ge=1, le=99)
+
+
+class CartCheckoutIn(BaseModel):
+    items: List[CartItem]
+    t0: Optional[int] = 0          # epoch ms při zobrazení košíku
+
+
+# --- Redeem ---
+class RedeemIn(BaseModel):
+    code: str = Field(min_length=1, max_length=64)
+    t0: Optional[int] = 0          # epoch ms při zobrazení formy
+
+
+# --- Exchange: poslání sedláků kamarádovi ---
+class GiftIn(BaseModel):
+    username: str = Field(min_length=2, max_length=64)
+    amount: int = Field(ge=1, le=10_000_000)
+
+
+# --- Admin: produkty ---
+class SkinLookupIn(BaseModel):
+    """Vyhledání obrázku CS2 skinu na Steam marketu podle názvu."""
+    name: str = Field(min_length=2, max_length=120)
+
+
+class SkinSearchIn(BaseModel):
+    """Našeptávač skinů z lokálního katalogu (vrací víc shod s obrázky)."""
+    query: str = Field(min_length=2, max_length=120)
+
+
+class ImageUploadIn(BaseModel):
+    """Nahrání obrázku odměny z PC – data URL (data:image/...;base64,...)."""
+    data: str = Field(min_length=20, max_length=10_000_000)
+
+
+class ProductIn(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    image_url: Optional[str] = ""
+    cost_points: int = Field(ge=0)
+    category: Optional[str] = ""
+    type: str = "instant"
+    period: Optional[str] = ""          # giveaway perioda (daily/weekly/monthly/yearly/random)
+    subs_only: bool = False
+    vip_only: bool = False
+    stock: int = -1
+    description: Optional[str] = ""
+    active: bool = True
+    ends_at: Optional[str] = None      # ISO datum/čas „k dispozici do" (prázdné = bez limitu)
+    max_per_person_pct: int = Field(default=0, ge=0, le=100000)  # tombola: max POČET ticketů na osobu (0 = neomezeno)
+
+
+# --- Admin: uživatelé ---
+class UserRoleIn(BaseModel):
+    role: str
+
+
+class UserFlagsIn(BaseModel):
+    """Odznaky SUB / VIP / OG (nezávislé na roli – můžou být i víc naráz). Posílají se jen měněné."""
+    is_sub: Optional[bool] = None
+    is_vip: Optional[bool] = None
+    is_og: Optional[bool] = None
+
+
+class UserPointsIn(BaseModel):
+    change: int
+    reason: Optional[str] = "Úprava adminem"
+
+
+# --- Admin: objednávky ---
+class UserAdminMetaIn(BaseModel):
+    watchlisted: Optional[bool] = None
+    note: Optional[str] = Field(default=None, max_length=1000)
+
+
+class OrderStatusIn(BaseModel):
+    status: str
+
+
+class ManualOrderIn(BaseModel):
+    """Ruční ticket/objednávka v adminu (např. kompenzace za bug). NEúčtuje žádné body –
+    jen založí záznam k vyřízení. Uživatele hledá podle nicku (kick_username/username)."""
+    username: str = Field(min_length=2, max_length=64)
+    product_name: str = Field(min_length=1, max_length=120)
+    product_id: Optional[int] = None
+    points_spent: Optional[int] = Field(default=0, ge=0, le=100_000_000)
+    count: int = Field(default=1, ge=1, le=50)          # kolik ticketů (objednávek) vytvořit
+    note: Optional[str] = Field(default=None, max_length=200)
+
+
+class ManualOrderLineIn(BaseModel):
+    """Jeden řádek hromadného ticketu – volnější (validace per-řádek až v endpointu,
+    ať jeden špatný řádek neshodí celou dávku)."""
+    username: str = ""
+    product_name: str = ""
+    product_id: Optional[int] = None
+    points_spent: Optional[int] = 0
+    count: Optional[int] = 1
+    note: Optional[str] = None
+
+
+class ManualOrderBulkIn(BaseModel):
+    """Hromadné vytvoření ticketů (víc lidí naráz)."""
+    items: list[ManualOrderLineIn] = []
+
+
+# --- Admin: redeem kódy ---
+class CodeGenIn(BaseModel):
+    code: Optional[str] = None            # když None, vygeneruje se náhodně
+    points_value: int = 0
+    product_id: Optional[int] = None
+    max_uses: int = Field(default=1, ge=1)
+    expires_at: Optional[str] = None      # ISO datum, volitelně
+    count: int = Field(default=1, ge=1, le=100)  # kolik kódů najednou
+
+
+# --- Admin: patch notes / novinky (changelog) ---
+class PatchNoteIn(BaseModel):
+    title: str = Field(min_length=2, max_length=120)
+    body: str = Field(default="", max_length=2000)
+    tag: str = Field(default="new", pattern="^(new|improve|fix)$")   # 🆕 nové / 🛠️ vylepšení / 🐛 oprava
+    published: bool = True
+
+
+# --- Admin: partnerské/sponzorské odkazy (klikni za body) ---
+class PartnerLinkIn(BaseModel):
+    """Sponzorský/partnerský odkaz v Bonusech: klik → jednorázová odměna (1× za uživatele)."""
+    label: str = Field(min_length=1, max_length=80)
+    url: str = Field(min_length=4, max_length=500)
+    reward: int = Field(default=100, ge=0, le=1_000_000)
+    icon: Optional[str] = Field(default="🤝", max_length=8)
+    enabled: bool = True
+    mode: str = Field(default="once", pattern="^(once|flash)$")   # 1× navždy / náhodný flash
+    sort_order: int = Field(default=0, ge=0, le=999)
+
+
+class PartnerFlashConfigIn(BaseModel):
+    """Konfigurace Flash bonusu (náhodná obnova 'flash' odkazů + bot do chatu)."""
+    pflash_enabled: Optional[int] = None
+    pflash_interval_min: Optional[int] = None
+    pflash_interval_max: Optional[int] = None
+    pflash_window_min: Optional[int] = None
+    pflash_only_live: Optional[int] = None
+
+
+class RoomJoinIn(BaseModel):
+    code: str = Field(min_length=2, max_length=20)
+
+
+class RoomBetIn(BaseModel):
+    amount: int = Field(ge=1, le=1_000_000)
+
+
+class RoomChatIn(BaseModel):
+    msg: str = Field(min_length=1, max_length=200)
+
+
+class GamesRakeIn(BaseModel):
+    """Rake (% z banku pro house) na hrách/duelech. 0 = férové bez poplatku."""
+    rake_pct: int = Field(ge=0, le=50)
+
+
+class LiveHappyIn(BaseModel):
+    """Happy Hour při startu streamu (posílají se jen měněná pole)."""
+    livehappy_enabled: Optional[int] = None
+    livehappy_mult: Optional[float] = Field(default=None, ge=1, le=10)
+    livehappy_minutes: Optional[int] = Field(default=None, ge=1, le=720)
+
+
+# --- Admin: úklid testovacích pohybů bodů ---
+class PointsLogPurgeIn(BaseModel):
+    """Smaže KONKRÉTNÍ řádky points_logu podle ID (úklid testovacích/omylem vytvořených pohybů).
+    Pojistka confirm_reason: když je vyplněná, smažou se JEN řádky přesně s tímhle důvodem –
+    aby nešlo omylem smáznout reálný ekonomický pohyb. Vše se loguje do admin auditu (reverze)."""
+    ids: list[int] = Field(min_length=1, max_length=50)
+    confirm_reason: Optional[str] = Field(default=None, max_length=40)

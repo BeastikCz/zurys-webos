@@ -1,0 +1,14 @@
+# Tajné klíče Kick OAuth – NIKDY necommitovat
+kick.json
+
+# Databáze a data
+data/
+*.db
+*.db-wal
+*.db-shm
+
+# Python venv + cache
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/

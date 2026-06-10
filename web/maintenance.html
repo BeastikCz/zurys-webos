@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="cs">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0a0a0c">
+<title>Probíhá údržba — ZURYS</title>
+<meta name="description" content="ZURYS Drop Arena — právě probíhá údržba. Brzy jsme zpátky!" />
+<meta property="og:type" content="website" />
+<meta property="og:site_name" content="ZURYS Drop Arena" />
+<meta property="og:title" content="ZURYS Drop Arena" />
+<meta property="og:description" content="🛠️ Právě probíhá údržba — brzy jsme zpátky!" />
+<meta property="og:url" content="https://zurys.live/" />
+<meta property="og:image" content="https://zurys.live/og-image.png" />
+<meta property="og:image:width" content="1200" />
+<meta property="og:image:height" content="630" />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:image" content="https://zurys.live/og-image.png" />
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='22' fill='%23f2b01e'/><text x='50' y='73' font-size='62' font-weight='900' text-anchor='middle' fill='%231a1200'>Z</text></svg>">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    min-height: 100vh; background: #0a0a0c; overflow: hidden; color: #fff;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+  }
+  /* Obrázek přes CELOU obrazovku, edge-to-edge */
+  .bg {
+    position: fixed; inset: 0; width: 100%; height: 100%;
+    object-fit: cover; object-position: center; display: block;
+    transition: opacity .9s ease; will-change: opacity;
+  }
+  /* Na výšku (mobil/tablet) NEŘEŽ – obrázek má text v sobě, ukaž ho celý na tmavém pozadí */
+  @media (max-aspect-ratio: 7/5) { .bg { object-fit: contain; } }
+
+  /* Odpočet jako overlay dole – ukáže se jen když server vloží čas konce */
+  .cd {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 2; text-align: center;
+    padding: 20px 16px calc(20px + env(safe-area-inset-bottom, 0px));
+    background: linear-gradient(to top, rgba(0,0,0,.78), rgba(0,0,0,.32) 55%, rgba(0,0,0,0));
+  }
+  .cd[hidden] { display: none; }
+  .cd-lbl { color: #f2b01e; font-weight: 800; letter-spacing: .24em; font-size: 12.5px; margin-bottom: 5px; }
+  .cd-time { font-weight: 900; font-size: clamp(34px, 8vw, 64px); line-height: 1; letter-spacing: .02em;
+    font-variant-numeric: tabular-nums; color: #fff; text-shadow: 0 4px 26px rgba(0,0,0,.7); }
+</style>
+</head>
+<body>
+  <img class="bg" id="bgA" src="/maint-1.jpg" alt="Probíhá údržba — brzy jsme zpátky" style="opacity:1">
+  <img class="bg" id="bgB" alt="" style="opacity:0">
+
+  <div class="cd" id="cd" hidden></div>
+
+  <script>
+    // ---- Slideshow maintenance fotek (plynulé prolínání každých 8 s) ----
+    (function () {
+      var IMGS = ["/maint-1.jpg", "/maint-2.jpg", "/maint-3.jpg", "/maint-4.jpg", "/maint-5.jpg", "/maint-6.jpg", "/maint-7.jpg", "/maint-8.png", "/maint-9.png", "/maint-10.png", "/maint-11.png"];
+      var a = document.getElementById("bgA"), b = document.getElementById("bgB");
+      if (!a || !b || IMGS.length < 2) return;
+      IMGS.forEach(function (s) { var im = new Image(); im.src = s; });   // přednačtení (žádné blikání)
+      var idx = Math.floor(Math.random() * IMGS.length);                  // náhodný start
+      a.src = IMGS[idx]; a.style.opacity = "1"; b.style.opacity = "0";
+      var showingA = true;
+      setInterval(function () {
+        idx = (idx + 1) % IMGS.length;
+        var front = showingA ? a : b, back = showingA ? b : a;
+        back.src = IMGS[idx];
+        var go = function () { back.style.opacity = "1"; front.style.opacity = "0"; };
+        if (back.complete) go(); else back.onload = go;
+        showingA = !showingA;
+      }, 8000);
+    })();
+
+    // Čas konce vkládá server (nahradí __MAINT_UNTIL__ skutečným ISO časem, nebo prázdné).
+    window.MAINT_UNTIL = "__MAINT_UNTIL__";
+    (function () {
+      var box = document.getElementById("cd");
+      var u = window.MAINT_UNTIL, until = u ? Date.parse(u) : 0;
+      if (until && !isNaN(until)) {
+        // Je odpočet → ukaž overlay "ZPÁTKY ZA HH:MM:SS"
+        box.hidden = false;
+        box.innerHTML = '<div class="cd-lbl">ZPÁTKY ZA</div><div class="cd-time" id="cdt">--:--:--</div>';
+        var t = document.getElementById("cdt"), lbl = box.querySelector(".cd-lbl");
+        var tick = function () {
+          var d = until - Date.now();
+          if (d <= 0) {
+            t.textContent = "00:00:00"; lbl.textContent = "UŽ TO BUDE…";
+            setTimeout(function () { location.reload(); }, 4000);   // server mezitím sám vypne údržbu → reload načte web
+            return;
+          }
+          var h = Math.floor(d / 3600000), m = Math.floor(d % 3600000 / 60000), s = Math.floor(d % 60000 / 1000);
+          t.textContent = (h < 10 ? "0" : "") + h + ":" + (m < 10 ? "0" : "") + m + ":" + (s < 10 ? "0" : "") + s;
+          setTimeout(tick, 1000);
+        };
+        tick();
+      } else {
+        // Bez odpočtu → obrázek má "WE'LL BE BACK SOON!" v sobě, žádný overlay netřeba.
+        // Tiše kontroluj návrat webu každých 60 s.
+        setTimeout(function () { location.reload(); }, 60000);
+      }
+    })();
+  </script>
+</body>
+</html>

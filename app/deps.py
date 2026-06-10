@@ -1,0 +1,309 @@
+"""Sdílené FastAPI závislosti: připojení k DB, aktuální uživatel, role, pomocníci."""
+import sqlite3
+from datetime import datetime, timezone, timedelta
+from typing import Optional
+
+from fastapi import Depends, HTTPException, Request
+
+from .config import SESSION_COOKIE, ROLE_ADMIN, ROLE_BROADCASTER, STAFF_ROLES, ADMIN_SECTIONS, TRUSTED_IPS, KNOWN_ADMIN_IPS
+from .db import get_conn, now_iso
+from . import alerts
+
+# Jak často (max) přepisovat „naposledy viděn" u session. get_current_user běží na VĚTŠINĚ
+# requestů → zápis+commit při KAŽDÉM by zbytečně serializoval zápisy do SQLite (jeden
+# zapisovatel), hlavně při náporu z pollingu (heartbeaty, živé predikce). Throttle = míň
+# zápisů na hot-path, žádná funkční změna pro diváka.
+SESSION_TOUCH_SEC = 120
+
+
+def db_dep():
+    """Yield připojení k DB a po requestu ho zavři."""
+    conn = get_conn()
+    try:
+        yield conn
+    finally:
+        conn.close()
+
+
+def client_ip(request: Request) -> str:
+    """Reálná IP klienta.
+
+    BEZPEČNOST: za Cloudflare (před Fly) nese reálnou IP `CF-Connecting-IP` (CF ji nastaví
+    a klientskou hodnotu přepíše). Za Fly bez CF je důvěryhodná `Fly-Client-IP`. NAOPAK
+    první záznam `X-Forwarded-For` si pošle sám klient → tím by šly obejít IP bany /
+    anticheat, proto se na něj nespoléháme. Lokálně (bez proxy) bereme přímé spojení.
+    Pozn.: až poběží CF, je vhodné omezit Fly origin jen na Cloudflare IP rozsahy, ať
+    nejde `CF-Connecting-IP` podvrhnout přímým requestem na *.fly.dev.
+    """
+    cf = request.headers.get("cf-connecting-ip")
+    if cf:
+        return cf.strip()
+    fly = request.headers.get("fly-client-ip")
+    if fly:
+        return fly.strip()
+    if request.client and request.client.host:
+        return request.client.host
+    # poslední záchrana mimo Fly: poslední (proxy-přidaný) záznam XFF
+    xff = request.headers.get("x-forwarded-for")
+    if xff:
+        return xff.split(",")[-1].strip()
+    return "?"
+
+
+def record_login(conn: sqlite3.Connection, user_id: int, request: Request, method: str) -> None:
+    """Zapíše událost přihlášení (pro bezpečnostní log / anticheat)."""
+    ip = client_ip(request)
+    ua = (request.headers.get("user-agent") or "")[:300]
+    u = conn.execute("SELECT username, role FROM users WHERE id = ?", (user_id,)).fetchone()
+    if u and u["role"] in STAFF_ROLES:
+        known_ip = conn.execute(
+            "SELECT 1 FROM login_events WHERE user_id = ? AND ip = ? LIMIT 1", (user_id, ip)
+        ).fetchone()
+        known_ua = conn.execute(
+            "SELECT 1 FROM login_events WHERE user_id = ? AND user_agent = ? LIMIT 1", (user_id, ua)
+        ).fetchone()
+        if (not known_ip or not known_ua) and ip not in TRUSTED_IPS:
+            alerts.send(
+                "Admin/staff login z nove IP nebo zarizeni",
+                detail=f"{u['username']} ({u['role']})\nmethod={method}\nip={ip}\nua={ua[:180]}",
+                key=f"staff-login:{user_id}:{ip}:{hash(ua)}",
+                cooldown=3600,
+                ping=True,
+            )
+    conn.execute(
+        "INSERT INTO login_events (user_id, ip, user_agent, method, created_at) VALUES (?, ?, ?, ?, ?)",
+        (user_id, ip, ua, method, now_iso()),
+    )
+
+
+# Discord alert na KAŽDOU citlivou admin akci je VYPNUTÝ (spamoval Discord).
+# Audit se pořád zapisuje do DB (admin_audit → admin tab „Bezpečnost"), jen se
+# neposílá na Discord. Pro zapnutí zpět přepni na True.
+ALERT_ON_ADMIN_ACTIONS = False
+
+# Alert „admin akce z NEznámé IP" – VYPNUTÝ. Spamoval, protože adminovi rotuje
+# IPv6 (každá akce přišla z „nové" IP). Audit do DB jede dál. Zpět = True.
+ALERT_ON_ADMIN_NEW_IP = False
+
+
+def record_audit(conn: sqlite3.Connection, admin: sqlite3.Row, request: Request,
+                 action: str, target: str = "", details: str = "") -> None:
+    """Zapíše záznam do audit logu admin akcí (kdo, kdy, co). Volá se před commitem."""
+    conn.execute(
+        "INSERT INTO admin_audit (admin_id, admin_name, action, target, details, ip, created_at) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?)",
+        (admin["id"], admin["username"], action, target[:200], details[:400],
+         client_ip(request), now_iso()),
+    )
+    important = {"user.role", "raffle.draw", "ip.ban", "rule.update", "ddos.autoban",
+                 "maintenance.on", "maintenance.off", "drop.create", "code.generate",
+                 "code.delete", "product.delete", "user.meta"}
+    should_alert = action in important
+    if action == "user.points":
+        try:
+            amount = int((details or "0").split(" PTS")[0].replace("+", "").strip())
+            should_alert = abs(amount) >= 10000
+        except Exception:
+            should_alert = True
+    if ALERT_ON_ADMIN_ACTIONS and should_alert:
+        alerts.send(
+            "Citliva admin akce",
+            detail=f"{admin['username']} -> {action}\ntarget={target[:180]}\ndetail={details[:300]}\nip={client_ip(request)}",
+            key=f"audit:{action}:{target[:80]}",
+            cooldown=60,
+            ping=action in {"user.role", "ip.ban", "rule.update"},
+        )
+    # Bezpečnostní signál: citlivá admin akce z NEznámé IP (mimo KNOWN_ADMIN_IPS
+    # i historii přihlášení). VYPNUTÝ – spamoval kvůli rotující IPv6 admina.
+    # Pro zapnutí zpět přepni ALERT_ON_ADMIN_NEW_IP na True.
+    if ALERT_ON_ADMIN_NEW_IP and should_alert:
+        ip = client_ip(request)
+        if ip not in KNOWN_ADMIN_IPS and not conn.execute(
+                "SELECT 1 FROM login_events WHERE user_id = ? AND ip = ? LIMIT 1",
+                (admin["id"], ip)).fetchone():
+            alerts.send(
+                "⚠️ Admin akce z NEZNAME IP",
+                detail=f"{admin['username']} -> {action}\ntarget={target[:160]}\nip={ip}\n"
+                       f"(IP neni v historii prihlaseni ani v KNOWN_ADMIN_IPS – mozny unos uctu!)",
+                key=f"admin-newip:{admin['id']}:{ip}",
+                cooldown=600,
+                ping=True,
+            )
+
+
+def to_public(row: sqlite3.Row, include_email: bool = False) -> dict:
+    """Veřejná podoba uživatele (bez hesla)."""
+    data = {
+        "id": row["id"],
+        "username": row["username"],
+        "kick_username": row["kick_username"],
+        "points": row["points"],
+        "role": row["role"],
+        "avatar_url": row["avatar_url"],
+        "banned": bool(row["banned"]),
+        "created_at": row["created_at"],
+        "steam_trade_url": (row["steam_trade_url"] if "steam_trade_url" in row.keys() else None),
+        "is_sub": bool(row["is_sub"]) if "is_sub" in row.keys() else False,
+        "is_vip": bool(row["is_vip"]) if "is_vip" in row.keys() else False,
+        "is_og": bool(row["is_og"]) if "is_og" in row.keys() else False,
+    }
+    if include_email:
+        data["email"] = row["email"]
+        data["ban_reason"] = row["ban_reason"]
+    return data
+
+
+def get_current_user(request: Request,
+                     conn: sqlite3.Connection = Depends(db_dep)) -> Optional[sqlite3.Row]:
+    """Vrátí přihlášeného uživatele podle session cookie, nebo None (host)."""
+    token = request.cookies.get(SESSION_COOKIE)
+    if not token:
+        return None
+    sess = conn.execute(
+        "SELECT * FROM sessions WHERE token = ?", (token,)
+    ).fetchone()
+    if not sess:
+        return None
+    if sess["expires_at"] < now_iso():
+        conn.execute("DELETE FROM sessions WHERE token = ?", (token,))
+        conn.commit()
+        return None
+    # průběžně aktualizuj „naposledy viděn" + IP relace, ale jen občas (ne při KAŽDÉM requestu) –
+    # jinak je to zápis+commit na hot-path a při náporu (polling z mnoha tabů) to zbytečně
+    # serializuje zápisy do SQLite. Stačí ~1× za SESSION_TOUCH_SEC na session.
+    last_seen = sess["last_seen"] if "last_seen" in sess.keys() else None
+    touch_threshold = (datetime.now(timezone.utc) - timedelta(seconds=SESSION_TOUCH_SEC)).isoformat()
+    if not last_seen or last_seen < touch_threshold:
+        conn.execute(
+            "UPDATE sessions SET last_seen = ?, ip = COALESCE(ip, ?), user_agent = COALESCE(user_agent, ?) WHERE token = ?",
+            (now_iso(), client_ip(request), (request.headers.get("user-agent") or "")[:300], token),
+        )
+        conn.commit()
+    return conn.execute(
+        "SELECT * FROM users WHERE id = ?", (sess["user_id"],)
+    ).fetchone()
+
+
+def require_user(user: Optional[sqlite3.Row] = Depends(get_current_user)) -> sqlite3.Row:
+    """Vyžaduje přihlášení (a blokuje zabanované účty)."""
+    if user is None:
+        raise HTTPException(status_code=401, detail="Pro tuto akci se musíš přihlásit.")
+    if user["banned"] and user["role"] != ROLE_ADMIN:
+        raise HTTPException(status_code=403,
+                            detail="Tvůj účet byl zablokován (anticheat). Kontaktuj streamera.")
+    return user
+
+
+def require_admin(user: sqlite3.Row = Depends(require_user)) -> sqlite3.Row:
+    """Vyžaduje roli admin."""
+    if user["role"] != ROLE_ADMIN:
+        raise HTTPException(status_code=403, detail="Nemáš oprávnění správce.")
+    return user
+
+
+def require_staff(user: sqlite3.Row = Depends(require_user)) -> sqlite3.Row:
+    """Vyžaduje staff roli (admin / broadcaster / moderátor)."""
+    if user["role"] not in STAFF_ROLES:
+        raise HTTPException(status_code=403, detail="Nemáš přístup do administrace.")
+    return user
+
+
+def require_broadcaster(user: sqlite3.Row = Depends(require_user)) -> sqlite3.Row:
+    """Broadcaster nebo admin (NE moderátor). Pro citlivější provozní akce: ban, import."""
+    if user["role"] not in (ROLE_BROADCASTER, ROLE_ADMIN):
+        raise HTTPException(status_code=403, detail="Tahle akce je jen pro broadcastera nebo admina.")
+    return user
+
+
+def can_access(role: str, section: str) -> bool:
+    """Smí daná role na danou admin sekci? (admin vždy ano)"""
+    return role == ROLE_ADMIN or role in ADMIN_SECTIONS.get(section, ())
+
+
+# Mapování cesty požadavku → sekce admin panelu (nejspecifičtější prefixy dřív)
+_SECTION_BY_PREFIX = [
+    ("/api/admin/stats", "stats"),
+    ("/api/admin/economy", "economy"),
+    ("/api/admin/products", "products"),
+    ("/api/admin/users", "users"),
+    ("/api/admin/import", "users"),
+    ("/api/admin/export/orders", "orders"),
+    ("/api/admin/export/audit", "security"),
+    ("/api/admin/order", "orders"),          # pokryje /orders i /order-products
+    ("/api/admin/raffle", "raffles"),
+    ("/api/admin/codes", "codes"),
+    ("/api/admin/security", "security"),
+    ("/api/admin/backup", "security"),
+    ("/api/admin/drops", "drops"),
+    ("/api/admin/games", "games"),
+    ("/api/admin/bot", "bot"),
+    ("/api/admin/news", "news"),
+]
+
+
+def admin_guard(request: Request, user: sqlite3.Row = Depends(require_user)) -> sqlite3.Row:
+    """Jediná stráž administrace: musí být staff a mít právo na sekci dle cesty.
+
+    Vynucuje se na úrovni routeru → platí pro KAŽDÝ admin endpoint, nejde obejít přímým API.
+    """
+    if user["role"] not in STAFF_ROLES:
+        raise HTTPException(status_code=403, detail="Nemáš přístup do administrace.")
+    if user["role"] == ROLE_ADMIN:
+        return user
+    section = next((sec for pre, sec in _SECTION_BY_PREFIX if request.url.path.startswith(pre)), None)
+    if section is None or not can_access(user["role"], section):
+        raise HTTPException(status_code=403, detail="Na tuhle sekci nemáš oprávnění (jen admin).")
+    return user
+
+
+def add_points(conn: sqlite3.Connection, user_id: int, change: int, reason: str) -> None:
+    """Změní body uživatele a zapíše záznam do points_log."""
+    conn.execute("UPDATE users SET points = points + ? WHERE id = ?", (change, user_id))
+    conn.execute(
+        "INSERT INTO points_log (user_id, change, reason, created_at) VALUES (?, ?, ?, ?)",
+        (user_id, change, reason, now_iso()),
+    )
+
+
+def user_rank(conn: sqlite3.Connection, points: int, username: str) -> int:
+    """Pozice uživatele v žebříčku (1 = nejvíc sedláků). Stejné řazení jako leaderboard
+    (points DESC, username ASC), takže rank == pozice na leaderboardu."""
+    row = conn.execute(
+        "SELECT COUNT(*) AS c FROM users WHERE points > ? OR (points = ? AND username < ?)",
+        (points or 0, points or 0, username or ""),
+    ).fetchone()
+    return (row["c"] if row else 0) + 1
+
+
+# Tituly (ligy) podle POZICE na leaderboardu → (max_rank, klíč, násobič denního streaku).
+# Mimo TOP 100 = bez titulu a bez bonusu (×1).
+TIER_BY_RANK = ((3, "unreal", 10), (10, "elite", 5), (30, "gold", 3), (50, "silver", 2), (100, "bronze", 2))
+
+
+def tier_for_rank(rank: int):
+    """(klíč_ligy, násobič) podle pozice. rank > 100 → ('', 1)."""
+    for max_rank, key, mult in TIER_BY_RANK:
+        if rank <= max_rank:
+            return key, mult
+    return "", 1
+
+
+def try_debit(conn: sqlite3.Connection, user_id: int, amount: int, reason: str) -> bool:
+    """Atomicky odečte body JEN když jich má uživatel dost. Vrátí True/False.
+
+    Odečet je v jednom UPDATE s podmínkou `points >= amount`, takže ani při souběhu
+    dvou requestů nejde zůstatek do mínusu ani se neodečte dvakrát. Necommituje (volá caller).
+    """
+    if amount <= 0:
+        return True
+    cur = conn.execute(
+        "UPDATE users SET points = points - ? WHERE id = ? AND points >= ?",
+        (amount, user_id, amount),
+    )
+    if cur.rowcount == 0:
+        return False
+    conn.execute(
+        "INSERT INTO points_log (user_id, change, reason, created_at) VALUES (?, ?, ?, ?)",
+        (user_id, -amount, reason, now_iso()),
+    )
+    return True

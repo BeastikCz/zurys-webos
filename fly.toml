@@ -1,0 +1,32 @@
+# Fly.io konfigurace – WebOS / ZURYS Drop Arena.
+# „app" název si zvolíš při `fly launch` (musí být celosvětově unikátní),
+# tady ho `fly launch` doplní/přepíše sám.
+app = "zurys-shop"
+primary_region = "fra"   # Frankfurt = EU, nejblíž ČR i Kicku
+
+[build]
+
+[env]
+  WEBOS_DATA_DIR = "/data"
+  WEBOS_GAMES_OFF = "0"   # hry zapnuté (piškvorky/duely/blackjack); "1" = dočasně vypnout
+  KICK_REDIRECT_URI = "https://zurys.live/api/auth/kick/callback"
+  KICK_CLIENT_ID = "01KSZPP0E6QAVCG1X7JWVWA3YV"
+  KICK_BROADCASTER_CHANNEL = "zurys1337"
+  KICK_BOT_USERNAME = "SedlakBOT"
+  ADMIN_KICK_USERNAMES = "interaty"
+
+# Trvalý disk – tady žije SQLite databáze i denní zálohy (přežije restart i deploy)
+[mounts]
+  source = "webos_data"
+  destination = "/data"
+
+[http_service]
+  internal_port = 8080
+  force_https = true            # vždy přesměruje na HTTPS
+  auto_stop_machines = false    # NIKDY neuspávat – kvůli websocketu na Kick chat + zálohám
+  auto_start_machines = true
+  min_machines_running = 1      # pořád běží aspoň 1 instance
+
+[[vm]]
+  size = "shared-cpu-2x"       # 2 jádra – navýšeno 2026-06-08 (shared-cpu-1x burst CPU se při náporu škrtil)
+  memory = "1024mb"            # revert: size shared-cpu-1x + memory 512mb

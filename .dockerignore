@@ -1,0 +1,14 @@
+# Co se NEbalí do image (menší, bezpečnější build)
+.venv/
+data/
+*.db
+*.db-wal
+*.db-shm
+__pycache__/
+*.pyc
+.git/
+.gitignore
+kick.json
+*.md
+start.bat
+start.ps1
