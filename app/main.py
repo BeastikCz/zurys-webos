@@ -15,9 +15,9 @@ from .live_events import start_live_events_daemon
 from .partners_flash import start_partners_flash_daemon
 from .digest import start_digest_daemon
 from .achievements import start_achievements_daemon
-from .config import WEB_DIR, UPLOAD_DIR, SESSION_COOKIE, STAFF_ROLES, TRUSTED_IPS, ROLE_ADMIN, GAMES_ADMIN_ONLY
+from .config import WEB_DIR, UPLOAD_DIR, SESSION_COOKIE, STAFF_ROLES, TRUSTED_IPS
 from .db import init_db, get_conn, now_iso, get_setting, set_setting
-from .deps import client_ip, get_current_user
+from .deps import client_ip
 from .seed import seed_if_empty, sync_changelog
 from .routers import auth, shop, cart, misc, admin, drops, botconsole, games, predictions, kickhook, blackjack
 
@@ -148,21 +148,6 @@ try:
             print(f"[games] mimo provoz: vraceno {_gn} her + {_dn} duelu")
 finally:
     _go.close()
-
-# Herna přepnuta na JEN-ADMIN → jednorázově vrať otevřené/rozehrané vklady diváků (ať se
-# nikomu nezaseknou sedláci v escrow). Revert (Herna zase pro všechny): WEBOS_GAMES_ADMIN_ONLY=0
-# + smaž flag 'games_adminonly_refund_v1'.
-_gao = get_conn()
-try:
-    if GAMES_ADMIN_ONLY and get_setting(_gao, "games_adminonly_refund_v1", "") != "done":
-        _gn = games.cancel_inprogress_refund(_gao)
-        _dn = games.refund_open_duels(_gao)
-        set_setting(_gao, "games_adminonly_refund_v1", "done")
-        _gao.commit()
-        if _gn or _dn:
-            print(f"[games] jen-admin: vraceno {_gn} her + {_dn} duelu")
-finally:
-    _gao.close()
 
 # Na Fly (produkce) vypneme veřejné API docs/schema – ať se útočníkovi nenabízí mapa API.
 # Lokálně (bez FLY_APP_NAME) zůstávají zapnuté pro vývoj.
@@ -374,13 +359,6 @@ def _games_off_guard():
         raise HTTPException(status_code=503, detail="Hry jsou dočasně mimo provoz. 🔧")
 
 
-def _games_admin_guard(user=Depends(get_current_user)):
-    """Herna (blackjack + 1v1 duely) JEN pro admina, když WEBOS_GAMES_ADMIN_ONLY=1 –
-    diváci dostanou 403 (frontend ji navíc schová). Revert: WEBOS_GAMES_ADMIN_ONLY=0 + deploy."""
-    if GAMES_ADMIN_ONLY and (user is None or user["role"] != ROLE_ADMIN):
-        raise HTTPException(status_code=403, detail="Herna je teď dostupná jen pro admina. 🔒")
-
-
 # API routery (vše pod /api)
 app.include_router(auth.router, prefix="/api")
 app.include_router(shop.router, prefix="/api")
@@ -389,8 +367,8 @@ app.include_router(misc.router, prefix="/api")
 app.include_router(drops.router, prefix="/api")
 app.include_router(admin.router, prefix="/api")
 app.include_router(botconsole.router, prefix="/api")
-app.include_router(games.router, prefix="/api", dependencies=[Depends(_games_off_guard), Depends(_games_admin_guard)])
-app.include_router(blackjack.router, prefix="/api", dependencies=[Depends(_games_off_guard), Depends(_games_admin_guard)])
+app.include_router(games.router, prefix="/api", dependencies=[Depends(_games_off_guard)])
+app.include_router(blackjack.router, prefix="/api", dependencies=[Depends(_games_off_guard)])
 app.include_router(predictions.router, prefix="/api")
 app.include_router(kickhook.router, prefix="/api")
 

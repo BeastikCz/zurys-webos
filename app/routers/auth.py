@@ -13,7 +13,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.responses import RedirectResponse
 
-from ..config import (SESSION_COOKIE, SESSION_DAYS, ROLE_USER, ROLE_ADMIN, GAMES_ADMIN_ONLY,
+from ..config import (SESSION_COOKIE, SESSION_DAYS, ROLE_USER, ROLE_ADMIN,
                       ADMIN_KICK_USERNAMES, KICK_CLIENT_ID, KICK_CLIENT_SECRET,
                       KICK_REDIRECT_URI, KICK_AUTH_URL, KICK_TOKEN_URL,
                       KICK_USER_URL, KICK_SCOPE, KICK_BOT_SCOPE,
@@ -294,12 +294,12 @@ def logout(request: Request, response: Response,
 def me(user: Optional[sqlite3.Row] = Depends(get_current_user),
        conn: sqlite3.Connection = Depends(db_dep)):
     if user is None:
-        return {"user": None, "games_admin_only": GAMES_ADMIN_ONLY}
+        return {"user": None}
     data = to_public(user, include_email=True)
     data["rank"] = user_rank(conn, user["points"], user["username"])   # pozice = liga (titul + daily násobič)
     data["pending_rankup"] = (user["pending_rankup"] if "pending_rankup" in user.keys() else "") or ""
     data["pending_overtake"] = (user["pending_overtake"] if "pending_overtake" in user.keys() else "") or ""
-    return {"user": data, "games_admin_only": GAMES_ADMIN_ONLY}
+    return {"user": data}
 
 
 @router.post("/seen-rankup")

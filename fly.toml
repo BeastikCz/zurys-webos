@@ -9,7 +9,6 @@ primary_region = "fra"   # Frankfurt = EU, nejblíž ČR i Kicku
 [env]
   WEBOS_DATA_DIR = "/data"
   WEBOS_GAMES_OFF = "0"   # hry zapnuté (piškvorky/duely/blackjack); "1" = dočasně vypnout
-  WEBOS_GAMES_ADMIN_ONLY = "1"   # Herna (blackjack+duely) JEN pro admina, skrytá divákům; "0" = pro všechny
   KICK_REDIRECT_URI = "https://zurys.live/api/auth/kick/callback"
   KICK_CLIENT_ID = "01KSZPP0E6QAVCG1X7JWVWA3YV"
   KICK_BROADCASTER_CHANNEL = "zurys1337"
