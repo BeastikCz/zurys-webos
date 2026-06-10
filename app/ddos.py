@@ -20,7 +20,7 @@ from collections import defaultdict, deque
 # ---- Konfigurace (konzervativní defaulty; klidně si uprav) ----
 WINDOW_SEC = 300          # okno pro Top-IP přehled = posledních 5 min
 RATE_WINDOW_SEC = 60      # okno pro výpočet rychlosti (req/min)
-AUTOBAN_PER_MIN = 600     # práh: >600 req/min z JEDNÉ IP = nápor (=10 req/s; legit divák ~desítky/min)
+AUTOBAN_PER_MIN = 1000    # práh: >1000 req/min z JEDNÉ IP = nápor (~17 req/s). Bylo 600 – šikanovalo aktivní suby při streamu (Vojtik58 trefil 601 a dostal 10min ban). Skutečný DDoS = tisíce req/s, rezerva velká.
 AUTOBAN_MINUTES = 10      # délka dočasného auto-banu (krátké → případný omyl se sám zhojí)
 
 _lock = threading.Lock()
