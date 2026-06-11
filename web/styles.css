@@ -905,3 +905,4 @@ footer.site-footer { border-top: 1px solid var(--border); padding: 22px 0; color
 .cos-rar-classified { color: var(--r-classified); } .cos-rar-covert { color: var(--r-covert); }
 .cos-rar-contraband { color: var(--r-contraband); } .cos-rar-legendary { color: #ff8a3d; }
 .cos-owned { font-size: 11px; font-weight: 800; color: var(--success); }
+.prof-look-strip { display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap; margin: 14px 0 16px; padding-top: 16px; border-top: 1px solid var(--border); }

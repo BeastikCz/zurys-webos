@@ -1333,30 +1333,21 @@ function pageProfile() {
     <div class="page-head"><h1>👤 Můj profil</h1></div>
     <div class="panel">
       <div class="profile-head">
-        ${avatarHTML(u.username, u.avatar_url)}
-        <div><div style="font-size:22px;font-weight:800">${esc(u.username)} ${roleBadge(u.role)} ${subVipBadges(u)}</div><div class="muted">${u.kick_username ? "🟢 " + esc(u.kick_username) : esc(u.email || "")}</div></div>
+        ${avatarHTML(u.username, u.avatar_url, "", cosF(u))}
+        <div><div style="font-size:22px;font-weight:800"><span class="${cosN(u)}">${esc(u.username)}</span> ${roleBadge(u.role)} ${subVipBadges(u)}</div><div class="muted">${u.kick_username ? "🟢 " + esc(u.kick_username) : esc(u.email || "")}</div></div>
         <div class="profile-points"><div class="v">${fmtPts(u.points)}</div><div class="faint">aktuální zůstatek</div></div>
       </div>
+      <div class="prof-look-strip">
+        <div class="muted" style="font-size:13px;min-width:0">🎨 <b style="color:var(--text)">Můj vzhled</b> — barvy nicku, rámečky avataru, bannery (vidí to všichni)</div>
+        <a href="#/kosmetika" class="btn btn-primary btn-sm">Upravit vzhled →</a>
+      </div>
+      ${cosB(u) ? `<div class="cos-banner ${cosB(u)}" style="height:48px;border-radius:10px;margin:0 0 16px"></div>` : ""}
       <div id="myBadges" style="margin:6px 0 18px"></div>
       <div class="sub-tabs">
         <button class="active" data-action="prof-tab" data-tab="orders">📦 Moje objednávky</button>
         <button data-action="prof-tab" data-tab="points">📊 Historie bodů</button>
       </div>
       <div id="profContent">${skeletonCards(1)}</div>
-    </div>
-    <div class="panel">
-      <div class="row-between" style="gap:14px;flex-wrap:wrap">
-        <div style="display:flex;align-items:center;gap:14px;min-width:0">
-          ${avatarHTML(u.username, u.avatar_url, "", cosF(u))}
-          <div>
-            <b style="font-size:16px">🎨 Můj vzhled</b>
-            <div style="font-weight:800;margin-top:3px"><span class="${cosN(u)}">${esc(u.username)}</span></div>
-            <div class="muted" style="font-size:12.5px">Barvy nicku · rámečky · bannery — vidí to všichni na webu</div>
-          </div>
-        </div>
-        <a href="#/kosmetika" class="btn btn-primary">Upravit vzhled →</a>
-      </div>
-      ${cosB(u) ? `<div class="cos-banner ${cosB(u)}" style="height:56px;border-radius:10px;margin-top:14px"></div>` : ""}
     </div>
     <div class="panel">
       <div class="section-title" style="margin-top:0">🎁 Steam trade link</div>
