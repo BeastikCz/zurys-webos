@@ -1345,6 +1345,20 @@ function pageProfile() {
       <div id="profContent">${skeletonCards(1)}</div>
     </div>
     <div class="panel">
+      <div class="row-between" style="gap:14px;flex-wrap:wrap">
+        <div style="display:flex;align-items:center;gap:14px;min-width:0">
+          ${avatarHTML(u.username, u.avatar_url, "", cosF(u))}
+          <div>
+            <b style="font-size:16px">🎨 Můj vzhled</b>
+            <div style="font-weight:800;margin-top:3px"><span class="${cosN(u)}">${esc(u.username)}</span></div>
+            <div class="muted" style="font-size:12.5px">Barvy nicku · rámečky · bannery — vidí to všichni na webu</div>
+          </div>
+        </div>
+        <a href="#/kosmetika" class="btn btn-primary">Upravit vzhled →</a>
+      </div>
+      ${cosB(u) ? `<div class="cos-banner ${cosB(u)}" style="height:56px;border-radius:10px;margin-top:14px"></div>` : ""}
+    </div>
+    <div class="panel">
       <div class="section-title" style="margin-top:0">🎁 Steam trade link</div>
       <p class="muted" style="margin:2px 0 12px;font-size:13px;line-height:1.55">
         Vlož svůj <b>Steam trade odkaz</b> — podle něj ti streamer pošle vyhrané skiny.
