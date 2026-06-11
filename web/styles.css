@@ -909,3 +909,10 @@ footer.site-footer { border-top: 1px solid var(--border); padding: 22px 0; color
 
 /* Zodpovědné sázení – self-exclusion tlačítka */
 .se-btns { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+
+/* ===== Sebevyloučení – velký banner na herních stránkách ===== */
+.se-banner { display: flex; gap: 16px; align-items: center; background: linear-gradient(135deg, rgba(225,65,65,.18), rgba(225,65,65,.05)); border: 1px solid rgba(225,65,65,.55); border-radius: var(--r); padding: 18px 22px; margin-bottom: 20px; }
+.se-banner-ico { font-size: 40px; line-height: 1; flex: 0 0 auto; }
+.se-banner-txt { min-width: 0; }
+.se-banner-title { font-size: 21px; font-weight: 900; color: #ff7070; margin-bottom: 4px; letter-spacing: .3px; }
+.se-banner-sub { font-size: 14px; color: var(--text); line-height: 1.55; opacity: .92; }

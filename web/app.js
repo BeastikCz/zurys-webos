@@ -545,10 +545,25 @@ function updateCardTimers() {
   });
 }
 
+function gambleBlockBanner() {
+  const u = state.user;
+  const until = u && u.gamble_block_until;
+  if (!until) return "";
+  const when = until === "permanent" ? "natrvalo" : "do " + new Date(until).toLocaleString("cs-CZ");
+  return `<div class="se-banner">
+      <div class="se-banner-ico">🔒</div>
+      <div class="se-banner-txt">
+        <div class="se-banner-title">Máš zákaz sázení</div>
+        <div class="se-banner-sub">Aktivní sebevyloučení <b>${when}</b>. Duely, piškvorky, blackjack i predikce jsou zamčené — nejde zrušit dřív. Body ti zůstávají. 🌾</div>
+      </div>
+    </div>`;
+}
+
 function pagePredikce() {
   const view = $("#view");
   view.innerHTML = `
     <div class="da-head"><h1>Pred<span class="accent">ikce</span> <span class="live-dot" title="Sázky se aktualizují živě">🔴 LIVE</span></h1><p>Vsaď sedláky na výsledek (CS2 🔫). Výherci si rozdělí celý bank. Sázky tečou živě — nemusíš refreshovat.</p></div>
+    ${gambleBlockBanner()}
     <div id="predList">${skeletonCards(2)}</div>`;
   loadPredictions();
   startPredPoll("public");
@@ -4277,6 +4292,7 @@ async function pageGames() {
   if (param) { gameView(parseInt(param, 10)); return; }   // číslo = konkrétní piškvorková hra
   $("#view").innerHTML = `
     <div class="page-head"><h1>🎮 Herna</h1></div>
+    ${gambleBlockBanner()}
     ${(state.user && state.user.role === "admin") ? `<div style="margin-bottom:18px"><button class="btn btn-ghost btn-sm" data-action="nav" data-href="bj">🃏 Soukromý stůl (jen admin) →</button></div>` : ""}
     <div id="duelWrap">${skeletonCards(1)}</div>
     <div class="section-title" style="margin-top:26px">⚔️ Piškvorky 1v1</div>
@@ -4341,7 +4357,7 @@ async function renderDuelLobby() {
   const myOpen = open.filter((d) => d.is_mine);
   const recent = mine.filter((d) => d.status === "finished").slice(0, 6);
   const typeBtn = (k, l) => `<button class="cf-side ${t === k ? "active" : ""}" data-action="duel-type" data-t="${k}">${l}</button>`;
-  const rowOpen = (d) => `<div class="game-row"><div>${duelIco(d.type)} <b>${uLink(d.p1.username)}</b> · ${esc(d.label)} · bank <b>${fmtPts(d.pot)}</b> <span class="faint">· ${d.wait_s}s</span></div>
+  const rowOpen = (d) => `<div class="game-row"><div>${duelIco(d.type)} <b>${uLink(d.p1.username)}</b> · ${esc(d.label)} · vklad <b>${fmtPts(d.stake)}</b> <span class="faint">· ${d.wait_s}s</span></div>
       <button class="btn btn-sm btn-success" data-action="duel-join" data-id="${d.id}">Přijmout ⚔️</button></div>`;
   const rowMine = (d) => `<div class="game-row"><div>${duelIco(d.type)} ${esc(d.label)} · sázka <b>${fmtPts(d.stake)}</b> · čeká na soupeře…</div>
       <button class="btn btn-sm btn-ghost" data-action="duel-cancel" data-id="${d.id}">Zrušit</button></div>`;
