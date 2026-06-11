@@ -325,6 +325,17 @@ CREATE TABLE IF NOT EXISTS dm_messages (
     seen       INTEGER NOT NULL DEFAULT 0        -- příjemce zprávu viděl
 );
 CREATE INDEX IF NOT EXISTS idx_dm_user ON dm_messages(user_id, id);
+CREATE TABLE IF NOT EXISTS fair_log (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id     INTEGER NOT NULL,
+    game        TEXT NOT NULL,                    -- 'wheel' | 'duel' | ...
+    server_hash TEXT NOT NULL,                    -- commit platný pro tuto hru
+    client_seed TEXT NOT NULL,
+    nonce       INTEGER NOT NULL,
+    result      INTEGER NOT NULL,                 -- výsledný index (u kola segment)
+    created_at  TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_fairlog_user ON fair_log(user_id, id);
 CREATE INDEX IF NOT EXISTS idx_pred_opts_pred ON prediction_options(prediction_id);
 CREATE INDEX IF NOT EXISTS idx_pred_bets_pred ON prediction_bets(prediction_id);
 
@@ -539,6 +550,10 @@ _MIGRATIONS = [
     ("users", "cos_frame", "TEXT"),      # nasazený rámeček avataru
     ("users", "cos_banner", "TEXT"),     # nasazený profil banner
     ("users", "gamble_block_until", "TEXT"),  # sebevyloučení ze sázek: ISO konec / "permanent" / NULL
+    ("users", "fair_server_seed", "TEXT"),    # provably fair: tajný server seed (aktuální)
+    ("users", "fair_server_hash", "TEXT"),    # SHA-256 commit (ukázán předem)
+    ("users", "fair_client_seed", "TEXT"),    # client seed (hráč si mění)
+    ("users", "fair_nonce", "INTEGER NOT NULL DEFAULT 0"),
 ]
 
 

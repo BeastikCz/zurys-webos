@@ -225,7 +225,7 @@ function render() {
     shop: pageShop, leaderboard: pageLeaderboard, exchange: pageExchange, redeem: pageRedeem,
     faq: pageFaq, pravidla: pageRules, cart: pageCart, profile: pageProfile, admin: pageAdmin,
     predikce: pagePredikce, games: pageGames, novinky: pageNews, bonusy: pageBonusy,
-    kosmetika: pageCosmetics, bj: pageBjRoom, zpravy: pageMessages,
+    kosmetika: pageCosmetics, bj: pageBjRoom, zpravy: pageMessages, fair: pageFair,
     connect: pageConnect, login: pageConnect, register: pageConnect, u: pageUserProfile,
   };
   (pages[r.name] || pageShop)(r.param);
@@ -546,6 +546,75 @@ function updateCardTimers() {
     const cd = countdown(el.dataset.ends);
     el.textContent = cd === "KONEC" ? "UKONČENO" : (cd || "");
   });
+}
+
+/* ============================================================
+   PROVABLY FAIR – ověřitelná náhoda (verifikátor v prohlížeči)
+============================================================ */
+async function fairDigest(serverSeed, clientSeed, nonce) {        // 1:1 s app/fairness.py
+  const enc = new TextEncoder();
+  const key = await crypto.subtle.importKey("raw", enc.encode(serverSeed), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  const sig = await crypto.subtle.sign("HMAC", key, enc.encode(`${clientSeed}:${nonce}`));
+  return [...new Uint8Array(sig)].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+function fairWeightedIndex(digestHex, weights) {
+  const roll = parseInt(digestHex.slice(0, 8), 16) / 0x100000000;  // 2^32
+  const total = weights.reduce((a, b) => a + b, 0);
+  let r = roll * total, acc = 0;
+  for (let i = 0; i < weights.length; i++) { acc += weights[i]; if (r < acc) return i; }
+  return weights.length - 1;
+}
+let _fairData = null;
+function pageFair() {
+  if (!state.user) { navigate("connect"); return; }
+  $("#view").innerHTML = `<div class="page-head"><h1>🔐 Provably fair</h1><p class="muted">Ověř si, že hry nejsou rigged. Výsledek = <code>HMAC(server&nbsp;seed, client&nbsp;seed:nonce)</code>. Hash server seedu zveřejníme PŘEDEM — po rotaci ti seed odhalíme a ty si vše přepočítáš sám.</p></div><div id="fairBox">${skeletonCards(1)}</div>`;
+  loadFair();
+}
+async function loadFair(revealed) {
+  try {
+    const d = await api("/fair/me"); _fairData = d;
+    const box = $("#fairBox"); if (!box) return;
+    const wheelRows = d.recent.filter((r) => r.game === "wheel");
+    box.innerHTML = `
+      <div class="panel">
+        <div class="fair-row"><span class="fair-k">Server commit (SHA-256, zveřejněno předem)</span><code class="fair-v">${esc(d.server_hash)}</code></div>
+        <div class="fair-row"><span class="fair-k">Tvůj client seed</span><input class="input" id="fairClient" value="${esc(d.client_seed)}" style="max-width:280px"></div>
+        <div class="fair-row"><span class="fair-k">Nonce (her s tímto seedem)</span><b>${d.nonce}</b></div>
+        <button class="btn btn-primary" data-action="fair-rotate" style="margin-top:6px">🔄 Změnit seed + odhalit starý</button>
+        <div class="muted" style="font-size:12.5px;margin-top:8px">Rotace nasadí nový tajný seed (nový commit) a ODHALÍ starý — s ním ověříš hry, co jsi odehrál.</div>
+      </div>
+      ${revealed ? `<div class="panel" style="border-color:#e1c341"><b>🔓 Odhalený starý server seed:</b><br><code class="fair-v">${esc(revealed)}</code><div class="muted" style="font-size:12.5px;margin-top:6px">SHA-256 z něj = původní commit. Hry dole ověř tlačítkem.</div></div>` : ""}
+      <div class="panel">
+        <div class="section-title" style="margin-top:0">🎡 Posledních ${wheelRows.length} zatočení kola</div>
+        <div class="field"><label>Server seed na ověření (vlož odhalený)</label><input class="input" id="fairVerifySeed" placeholder="odhalený server seed…" value="${esc(revealed || "")}"></div>
+        <button class="btn btn-ghost btn-sm" data-action="fair-verify" style="margin:8px 0 14px">✅ Ověřit všechna</button>
+        <div id="fairRows">${wheelRows.map((r, i) => `<div class="fair-log-row"><span class="faint">nonce #${r.nonce}</span> · client <code>${esc(r.client_seed)}</code> → <b>${Number(d.wheel_amounts[r.result]).toLocaleString("cs-CZ")} sedláků</b> <span class="fair-check" id="fchk${i}"></span></div>`).join("") || `<div class="muted">Zatím jsi netočil kolem. Zatoč na Bonusech a vrať se ověřit. 🎡</div>`}</div>
+      </div>`;
+  } catch (e) { const b = $("#fairBox"); if (b) b.innerHTML = `<div class="empty">${esc(e.message)}</div>`; }
+}
+async function fairRotate() {
+  const cs = ((document.getElementById("fairClient") || {}).value || "").trim();
+  try {
+    const r = await api("/fair/rotate", { method: "POST", body: { client_seed: cs } });
+    toast("Seed změněn — starý odhalen 🔓", "success");
+    loadFair(r.revealed_server_seed);
+  } catch (e) { toast(e.message, "error"); }
+}
+async function fairVerify() {
+  if (!_fairData) return;
+  const seed = ((document.getElementById("fairVerifySeed") || {}).value || "").trim();
+  if (!seed) { toast("Vlož odhalený server seed", "error"); return; }
+  const rows = _fairData.recent.filter((r) => r.game === "wheel");
+  let okAll = 0;
+  for (let i = 0; i < rows.length; i++) {
+    const r = rows[i];
+    const idx = fairWeightedIndex(await fairDigest(seed, r.client_seed, r.nonce), _fairData.wheel_weights);
+    const ok = idx === r.result;
+    if (ok) okAll++;
+    const el = document.getElementById("fchk" + i);
+    if (el) el.innerHTML = ok ? `<span style="color:var(--success);font-weight:700">✓ sedí</span>` : `<span style="color:#ff6b6b;font-weight:700">✗ NESEDÍ</span>`;
+  }
+  toast(`Ověřeno: ${okAll}/${rows.length} sedí ✓`, okAll === rows.length ? "success" : "error");
 }
 
 function gambleBlockBanner() {
@@ -1652,6 +1721,7 @@ async function loadWheel() {
         </div>
       </div>
       ${btn}
+      <a href="#/fair" class="muted" style="display:block;text-align:center;font-size:12px;margin-top:8px;text-decoration:none">🔐 Provably fair — ověř výsledek</a>
     </div>`;
   } catch (e) { box.innerHTML = ""; }
 }
@@ -3979,6 +4049,8 @@ function handleAction(action, el) {
     case "cos-buy": buyCosmetic(el.dataset.key); break;
     case "cos-equip": equipCosmetic(el.dataset.key); break;
     case "dm-send": dmSend(el.dataset.mode, el.dataset.id); break;
+    case "fair-rotate": fairRotate(); break;
+    case "fair-verify": fairVerify(); break;
     case "self-excl": selfExclude(el.dataset.dur); break;
     case "maint-on": doMaintOn(el); break;
     case "maint-on-time": doMaintOnTime(); break;

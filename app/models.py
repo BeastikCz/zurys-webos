@@ -211,6 +211,11 @@ class DmIn(BaseModel):
     body: str = Field(min_length=1, max_length=2000)
 
 
+class FairSeedIn(BaseModel):
+    """Provably fair – nový client seed (prázdný = vygeneruje se náhodný)."""
+    client_seed: str = Field(default="", max_length=64)
+
+
 class DropClaimIn(BaseModel):
     code: str = Field(min_length=1, max_length=64)
     hp: Optional[str] = ""        # honeypot – boti vyplní, lidé ne

@@ -11,11 +11,11 @@ from ..config import ORDER_PENDING, UNLIMITED_STOCK, ROLE_ADMIN
 from ..db import now_iso
 from ..deps import (db_dep, require_user, add_points, try_debit, record_audit, client_ip,
                     user_rank, tier_for_rank, self_excluded_until)
-from ..models import RedeemIn, TradeUrlIn, GiftIn, QuestClaimIn, CosmeticIn, SelfExcludeIn
+from ..models import RedeemIn, TradeUrlIn, GiftIn, QuestClaimIn, CosmeticIn, FairSeedIn, SelfExcludeIn
 from ..services import product_public, role_allows
 from ..ratelimit import rate_limit
 from ..security import secure_weighted_choice
-from .. import economy, live, partners, cosmetics
+from .. import economy, live, partners, cosmetics, fairness
 
 router = APIRouter(tags=["misc"])
 
@@ -614,6 +614,25 @@ def wheel_status(user: sqlite3.Row = Depends(require_user)):
     }
 
 
+def _fair_ensure(conn, uid):
+    """Vrátí (server_seed, server_hash, client_seed, nonce). Líně inicializuje (1× per user)."""
+    row = conn.execute(
+        "SELECT fair_server_seed, fair_server_hash, fair_client_seed, fair_nonce FROM users WHERE id = ?",
+        (uid,)).fetchone()
+    if row["fair_server_seed"]:
+        return row["fair_server_seed"], row["fair_server_hash"], row["fair_client_seed"], row["fair_nonce"] or 0
+    ss = fairness.new_server_seed()
+    conn.execute(
+        "UPDATE users SET fair_server_seed = ?, fair_server_hash = ?, fair_client_seed = ?, fair_nonce = 0 "
+        "WHERE id = ? AND fair_server_seed IS NULL",
+        (ss, fairness.seed_hash(ss), fairness.new_client_seed(), uid))
+    conn.commit()
+    row = conn.execute(
+        "SELECT fair_server_seed, fair_server_hash, fair_client_seed, fair_nonce FROM users WHERE id = ?",
+        (uid,)).fetchone()
+    return row["fair_server_seed"], row["fair_server_hash"], row["fair_client_seed"], row["fair_nonce"] or 0
+
+
 @router.post("/wheel/spin")
 def wheel_spin(user: sqlite3.Row = Depends(require_user),
                conn: sqlite3.Connection = Depends(db_dep)):
@@ -630,8 +649,15 @@ def wheel_spin(user: sqlite3.Row = Depends(require_user),
         _, next_in = _wheel_state(user, now)
         hrs = round((next_in or WHEEL_COOLDOWN_H * 3600) / 3600, 1)
         raise HTTPException(status_code=400, detail=f"Dnes už jsi točil 🎡 Vrať se za {hrs} h. ⏳")
-    # Výsledek vybírá SERVER (klient ho jen dotočí) → z prohlížeče se nedá ošvindlit.
-    idx = secure_weighted_choice(range(len(WHEEL_SEGMENTS)), [w for _, w in WHEEL_SEGMENTS])
+    # Výsledek = PROVABLY FAIR (commit-reveal): server ho nevybírá náhodně za běhu, počítá ho
+    # z předem zveřejněného server seedu + client seedu + nonce → hráč si ověří, že to nebylo
+    # rigged. Stejné šance jako dřív (váhy se nemění). Viz /fair.
+    ss, sh, cs, nonce = _fair_ensure(conn, user["id"])
+    idx = fairness.weighted_index(ss, cs, nonce, [w for _, w in WHEEL_SEGMENTS])
+    conn.execute(
+        "INSERT INTO fair_log (user_id, game, server_hash, client_seed, nonce, result, created_at) "
+        "VALUES (?,?,?,?,?,?,?)", (user["id"], "wheel", sh, cs, nonce, idx, now.isoformat()))
+    conn.execute("UPDATE users SET fair_nonce = fair_nonce + 1 WHERE id = ?", (user["id"],))
     amount = WHEEL_SEGMENTS[idx][0]
     jackpot = amount == _WHEEL_JACKPOT
     add_points(conn, user["id"], amount, "Kolo štěstí 🎡" + (" – JACKPOT! 🎰" if jackpot else ""))
@@ -643,6 +669,35 @@ def wheel_spin(user: sqlite3.Row = Depends(require_user),
         "amount": amount,
         "jackpot": jackpot,
         "balance": fresh["points"],
+        "fair": {"server_hash": sh, "client_seed": cs, "nonce": nonce},
         "message": (f"🎰 JACKPOT! +{amount} sedláků!" if jackpot
                     else f"🎡 Padlo ti +{amount} sedláků!"),
     }
+
+
+@router.get("/fair/me")
+def fair_me(user: sqlite3.Row = Depends(require_user), conn: sqlite3.Connection = Depends(db_dep)):
+    """Provably-fair stav: aktuální commit (hash), client seed, nonce + posledních 20 her k ověření."""
+    _ss, sh, cs, nonce = _fair_ensure(conn, user["id"])
+    recent = [dict(r) for r in conn.execute(
+        "SELECT game, server_hash, client_seed, nonce, result, created_at FROM fair_log "
+        "WHERE user_id = ? ORDER BY id DESC LIMIT 20", (user["id"],))]
+    return {"server_hash": sh, "client_seed": cs, "nonce": nonce,
+            "wheel_weights": [w for _, w in WHEEL_SEGMENTS],
+            "wheel_amounts": [a for a, _ in WHEEL_SEGMENTS], "recent": recent}
+
+
+@router.post("/fair/rotate")
+def fair_rotate(data: FairSeedIn, user: sqlite3.Row = Depends(require_user),
+                conn: sqlite3.Connection = Depends(db_dep)):
+    """Změní seed: ODHALÍ starý server seed (na ověření minulých her) + nasadí nový commit
+    a nový/zadaný client seed, nonce=0. Klasický commit-reveal cyklus."""
+    old_ss, old_sh, _cs, _n = _fair_ensure(conn, user["id"])
+    new_ss = fairness.new_server_seed()
+    new_cs = (data.client_seed or "").strip()[:64] or fairness.new_client_seed()
+    conn.execute(
+        "UPDATE users SET fair_server_seed = ?, fair_server_hash = ?, fair_client_seed = ?, fair_nonce = 0 WHERE id = ?",
+        (new_ss, fairness.seed_hash(new_ss), new_cs, user["id"]))
+    conn.commit()
+    return {"revealed_server_seed": old_ss, "revealed_server_hash": old_sh,
+            "new_server_hash": fairness.seed_hash(new_ss), "client_seed": new_cs, "nonce": 0}
