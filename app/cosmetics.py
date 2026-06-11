@@ -5,10 +5,11 @@ přepínáš (1 aktivní na slot: name/frame/banner). Vizuál = CSS třída (`cl
 takže i animované efekty jdou bez injektování stylů. Katalog v kódu (jako achievementy/
 changelog → přidat kousek = řádek + deploy).
 
-Ceny jsou kalibrované na ekonomiku (oběh ~2,7M, ~1000 uživatelů, top zůstatky ~340k):
-  * 800–3 000  = dostupné skoro každému → vtáhne masu do utrácení
-  * 6 000–18 000 = za týden+ grindu
-  * 25 000–60 000 = pro nejbohatší → pálí ty velké hromady (hlavní sink efekt)
+Ceny kalibrované na REÁLNÁ data (2026-06-11: oběh 2,73M, 966 aktivních, medián zůstatku 118,
+p99 57k, max 346k; rozložení extrémně nerovné – špička drží 100–346k hromady):
+  * 800–2 500   = dostupné nejaktivnějším (~1/3 aktivních) → masová adopce, pálí malé hromádky
+  * 6 000–22 000 = za týden+ grindu (top ~5–10 %)
+  * 50 000–80 000 = jen pro velryby (top ~1 %) → drancuje obří hromady (hlavní sink; velryby je už berou)
 `sub=True` = jen pro suby (motivace subnout). `rarity` jen pro barevné štítky v UI.
 """
 from .db import now_iso
@@ -17,19 +18,19 @@ from .db import now_iso
 CATALOG = [
     # ---- Barvy nicku ----
     {"key": "name_blue",    "type": "name",   "name": "Mil-Spec modrá",     "cost": 1000,  "rarity": "milspec",    "sub": False, "cls": "cn-blue"},
-    {"key": "name_purple",  "type": "name",   "name": "Restricted fialová", "cost": 3000,  "rarity": "restricted", "sub": False, "cls": "cn-purple"},
+    {"key": "name_purple",  "type": "name",   "name": "Restricted fialová", "cost": 2500,  "rarity": "restricted", "sub": False, "cls": "cn-purple"},
     {"key": "name_pink",    "type": "name",   "name": "Classified růžová",  "cost": 6000,  "rarity": "classified", "sub": False, "cls": "cn-pink"},
     {"key": "name_emerald", "type": "name",   "name": "Smaragd",            "cost": 8000,  "rarity": "classified", "sub": True,  "cls": "cn-emerald"},
-    {"key": "name_red",     "type": "name",   "name": "Covert červená",     "cost": 14000, "rarity": "covert",     "sub": False, "cls": "cn-red"},
-    {"key": "name_gold",    "type": "name",   "name": "Contraband zlatá",   "cost": 30000, "rarity": "contraband", "sub": False, "cls": "cn-gold"},
-    {"key": "name_rainbow", "type": "name",   "name": "Rainbow",            "cost": 60000, "rarity": "legendary",  "sub": False, "cls": "cn-rainbow"},
+    {"key": "name_red",     "type": "name",   "name": "Covert červená",     "cost": 16000, "rarity": "covert",     "sub": False, "cls": "cn-red"},
+    {"key": "name_gold",    "type": "name",   "name": "Contraband zlatá",   "cost": 50000, "rarity": "contraband", "sub": False, "cls": "cn-gold"},
+    {"key": "name_rainbow", "type": "name",   "name": "Rainbow",            "cost": 80000, "rarity": "legendary",  "sub": False, "cls": "cn-rainbow"},
     # ---- Rámečky avataru ----
     {"key": "frame_bronze",  "type": "frame", "name": "Bronz",              "cost": 800,   "rarity": "milspec",    "sub": False, "cls": "cf-bronze"},
     {"key": "frame_silver",  "type": "frame", "name": "Stříbro",            "cost": 2500,  "rarity": "restricted", "sub": False, "cls": "cf-silver"},
     {"key": "frame_gold",    "type": "frame", "name": "Zlato",              "cost": 8000,  "rarity": "classified", "sub": False, "cls": "cf-gold"},
     {"key": "frame_emerald", "type": "frame", "name": "Smaragd prsten",     "cost": 10000, "rarity": "classified", "sub": True,  "cls": "cf-emerald"},
-    {"key": "frame_neon",    "type": "frame", "name": "Neon puls",          "cost": 18000, "rarity": "covert",     "sub": False, "cls": "cf-neon"},
-    {"key": "frame_fire",    "type": "frame", "name": "Rotující oheň",      "cost": 45000, "rarity": "legendary",  "sub": False, "cls": "cf-fire"},
+    {"key": "frame_neon",    "type": "frame", "name": "Neon puls",          "cost": 22000, "rarity": "covert",     "sub": False, "cls": "cf-neon"},
+    {"key": "frame_fire",    "type": "frame", "name": "Rotující oheň",      "cost": 60000, "rarity": "legendary",  "sub": False, "cls": "cf-fire"},
 ]
 
 # Zrušené kousky (v1: profil bannery vypadaly špatně) → cena, pro JEDNORÁZOVÝ refund komu je
