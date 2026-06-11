@@ -201,6 +201,11 @@ class CosmeticIn(BaseModel):
     key: str = Field(min_length=1, max_length=40)
 
 
+class SelfExcludeIn(BaseModel):
+    """Sebevyloučení ze sázek (Tipsport-style). duration: 1d | 7d | 30d | perm."""
+    duration: str = Field(min_length=2, max_length=4)
+
+
 class DropClaimIn(BaseModel):
     code: str = Field(min_length=1, max_length=64)
     hp: Optional[str] = ""        # honeypot – boti vyplní, lidé ne

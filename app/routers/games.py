@@ -14,7 +14,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 
 from ..config import ROLE_ADMIN
 from ..db import now_iso, get_setting
-from ..deps import db_dep, require_user, add_points, try_debit, client_ip, to_public
+from ..deps import db_dep, require_user, add_points, try_debit, client_ip, to_public, require_can_gamble
 from ..economy import note_game_net, games_capped
 from ..models import GameCreateIn, GameMoveIn, DuelCreateIn
 from ..ratelimit import rate_limit
@@ -341,6 +341,7 @@ def list_mine(user: sqlite3.Row = Depends(require_user),
 @router.post("/create")
 def create_game(data: GameCreateIn, user: sqlite3.Row = Depends(require_user),
                 conn: sqlite3.Connection = Depends(db_dep)):
+    require_can_gamble(user)                # sebevyloučení ze sázek (Tipsport-style)
     if games_capped(conn, user):
         raise HTTPException(status_code=429, detail="Dnes už máš nahraný denní strop z her 🎲 – zkus to zítra.")
     if GAMES_MAINTENANCE:
@@ -370,6 +371,7 @@ def create_game(data: GameCreateIn, user: sqlite3.Row = Depends(require_user),
 @router.post("/{gid}/join")
 def join_game(gid: int, request: Request, user: sqlite3.Row = Depends(require_user),
               conn: sqlite3.Connection = Depends(db_dep)):
+    require_can_gamble(user)                # sebevyloučení ze sázek (Tipsport-style)
     if games_capped(conn, user):
         raise HTTPException(status_code=429, detail="Dnes už máš nahraný denní strop z her 🎲 – zkus to zítra.")
     if GAMES_MAINTENANCE:
@@ -571,6 +573,7 @@ def duels_mine(user: sqlite3.Row = Depends(require_user),
 @router.post("/duels/create")
 def duel_create(data: DuelCreateIn, user: sqlite3.Row = Depends(require_user),
                 conn: sqlite3.Connection = Depends(db_dep)):
+    require_can_gamble(user)                # sebevyloučení ze sázek (Tipsport-style)
     if games_capped(conn, user):
         raise HTTPException(status_code=429, detail="Dnes už máš nahraný denní strop z her 🎲 – zkus to zítra.")
     rate_limit(f"duel:cd:{user['id']}", 1, 3)      # cooldown: max 1 duel akce za 3 s (anti-spam)
@@ -600,6 +603,7 @@ def duel_create(data: DuelCreateIn, user: sqlite3.Row = Depends(require_user),
 @router.post("/duels/{did}/join")
 def duel_join(did: int, request: Request, user: sqlite3.Row = Depends(require_user),
               conn: sqlite3.Connection = Depends(db_dep)):
+    require_can_gamble(user)                # sebevyloučení ze sázek (Tipsport-style)
     if games_capped(conn, user):
         raise HTTPException(status_code=429, detail="Dnes už máš nahraný denní strop z her 🎲 – zkus to zítra.")
     rate_limit(f"duel:cd:{user['id']}", 1, 3)      # cooldown: max 1 duel akce za 3 s (anti-spam)

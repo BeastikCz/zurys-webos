@@ -9,14 +9,36 @@ from ..anticheat import (check_or_block, is_new_account, new_account_redeem_pts,
                           NEW_ACCOUNT_MAX_REDEEM_PTS, GIFT_MIN_AGE_HOURS)
 from ..config import ORDER_PENDING, UNLIMITED_STOCK, ROLE_ADMIN
 from ..db import now_iso
-from ..deps import db_dep, require_user, add_points, try_debit, record_audit, client_ip, user_rank, tier_for_rank
-from ..models import RedeemIn, TradeUrlIn, GiftIn, QuestClaimIn, CosmeticIn
+from ..deps import (db_dep, require_user, add_points, try_debit, record_audit, client_ip,
+                    user_rank, tier_for_rank, self_excluded_until)
+from ..models import RedeemIn, TradeUrlIn, GiftIn, QuestClaimIn, CosmeticIn, SelfExcludeIn
 from ..services import product_public, role_allows
 from ..ratelimit import rate_limit
 from ..security import secure_weighted_choice
 from .. import economy, live, partners, cosmetics
 
 router = APIRouter(tags=["misc"])
+
+
+@router.post("/me/self-exclude")
+def me_self_exclude(data: SelfExcludeIn, user: sqlite3.Row = Depends(require_user),
+                    conn: sqlite3.Connection = Depends(db_dep)):
+    """Tipsport-style sebevyloučení ze sázek. NEJDE zrušit ani zkrátit – jen prodloužit/zpřísnit."""
+    days = {"1d": 1, "7d": 7, "30d": 30}
+    if data.duration == "perm":
+        newval = "permanent"
+    elif data.duration in days:
+        newval = (datetime.now(timezone.utc) + timedelta(days=days[data.duration])).isoformat()
+    else:
+        raise HTTPException(status_code=400, detail="Neplatná délka vyloučení.")
+    cur = self_excluded_until(user)
+    if cur == "permanent":
+        raise HTTPException(status_code=400, detail="Už máš trvalé sebevyloučení – nelze měnit.")
+    if cur and newval != "permanent" and newval <= cur:
+        raise HTTPException(status_code=400, detail="Vyloučení nejde zkrátit ani zrušit – jen prodloužit. 🔒")
+    conn.execute("UPDATE users SET gamble_block_until = ? WHERE id = ?", (newval, user["id"]))
+    conn.commit()
+    return {"gamble_block_until": newval}
 
 
 @router.get("/news")

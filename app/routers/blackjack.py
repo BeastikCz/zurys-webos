@@ -3,7 +3,7 @@ import sqlite3
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from ..deps import db_dep, require_user, require_admin
+from ..deps import db_dep, require_user, require_admin, require_can_gamble
 from ..models import RoomJoinIn, RoomBetIn, RoomChatIn
 from .. import bj_room
 
@@ -45,6 +45,7 @@ def room_state(room_id: int, user: sqlite3.Row = Depends(require_user),
 @router.post("/room/{room_id}/bet")
 def room_bet(room_id: int, data: RoomBetIn, user: sqlite3.Row = Depends(require_user),
              conn: sqlite3.Connection = Depends(db_dep)):
+    require_can_gamble(user)                # sebevyloučení ze sázek (Tipsport-style)
     return _do(bj_room.place_bet, conn, user["id"], room_id, data.amount)
 
 

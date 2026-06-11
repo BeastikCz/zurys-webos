@@ -529,6 +529,7 @@ _MIGRATIONS = [
     ("users", "cos_name", "TEXT"),       # nasazená barva nicku (klíč z cosmetics.CATALOG)
     ("users", "cos_frame", "TEXT"),      # nasazený rámeček avataru
     ("users", "cos_banner", "TEXT"),     # nasazený profil banner
+    ("users", "gamble_block_until", "TEXT"),  # sebevyloučení ze sázek: ISO konec / "permanent" / NULL
 ]
 
 

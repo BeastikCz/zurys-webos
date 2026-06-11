@@ -1324,6 +1324,39 @@ async function doCheckout() {
 }
 
 /* ---------- PROFILE ---------- */
+function selfExcludeBlock(u) {
+  const until = u.gamble_block_until;
+  if (until === "permanent") {
+    return `<p class="muted" style="font-size:13px;line-height:1.6">🔒 Máš <b style="color:var(--text)">trvalé sebevyloučení</b> ze všech sázek (duely, piškvorky, blackjack, predikce). Zrušit to může jen admin.</p>`;
+  }
+  if (until) {
+    const d = new Date(until).toLocaleString("cs-CZ");
+    return `<p class="muted" style="font-size:13px;line-height:1.6">🔒 Sázení máš uzamčené <b style="color:var(--text)">do ${d}</b>. Nejde to zrušit dřív — můžeš jen prodloužit nebo zpřísnit.</p>
+      <div class="se-btns"><button class="btn btn-ghost btn-sm" data-action="self-excl" data-dur="30d">Prodloužit (30 dní)</button><button class="btn btn-danger btn-sm" data-action="self-excl" data-dur="perm">Napořád</button></div>`;
+  }
+  return `<p class="muted" style="font-size:13px;line-height:1.6">Můžeš se dobrovolně zamknout ze <b style="color:var(--text)">všech sázek</b> (duely, piškvorky, blackjack, predikce) — jako u Tipsportu. <b>Nejde to zrušit dřív</b>, tak si to rozmysli. Body ti zůstanou, jen nebudeš moct sázet.</p>
+    <div class="se-btns">
+      <button class="btn btn-ghost btn-sm" data-action="self-excl" data-dur="1d">1 den</button>
+      <button class="btn btn-ghost btn-sm" data-action="self-excl" data-dur="7d">7 dní</button>
+      <button class="btn btn-ghost btn-sm" data-action="self-excl" data-dur="30d">30 dní</button>
+      <button class="btn btn-danger btn-sm" data-action="self-excl" data-dur="perm">Napořád</button>
+    </div>`;
+}
+
+async function selfExclude(dur) {
+  const labels = { "1d": "1 den", "7d": "7 dní", "30d": "30 dní", "perm": "NATRVALO" };
+  const warn = dur === "perm"
+    ? "Opravdu se NATRVALO vyloučit ze všech sázek? Zrušit to půjde jen přes admina."
+    : `Opravdu se vyloučit ze sázek na ${labels[dur]}? Nepůjde to zrušit dřív.`;
+  if (!confirm(warn)) return;
+  try {
+    const r = await api("/me/self-exclude", { method: "POST", body: { duration: dur } });
+    if (state.user) state.user.gamble_block_until = r.gamble_block_until;
+    toast("Sázení uzamčeno 🔒", "success");
+    pageProfile();
+  } catch (e) { toast(e.message, "error"); }
+}
+
 function pageProfile() {
   if (!state.user) { navigate("connect"); return; }
   const u = state.user;
@@ -1364,6 +1397,10 @@ function pageProfile() {
         <span id="tradeMsg" class="muted" style="font-size:13px">${u.steam_trade_url ? "✓ Uloženo" : "Zatím nevyplněno"}</span>
         <button class="btn btn-primary" data-action="save-trade">💾 Uložit trade link</button>
       </div>
+    </div>
+    <div class="panel">
+      <div class="section-title" style="margin-top:0">🔒 Zodpovědné sázení</div>
+      ${selfExcludeBlock(u)}
     </div>`;
   loadProfTab("orders");
   loadMyBadges();
@@ -2613,6 +2650,14 @@ async function adminUsers() {
             ? `<button class="btn btn-ghost btn-sm" data-action="unban-user" data-id="${u.id}">Odbanovat</button>`
             : `<button class="btn btn-danger btn-sm" data-action="ban-user" data-id="${u.id}">Ban</button>`}
           <button class="btn btn-ghost btn-sm" data-action="user-ticket" data-name="${esc(u.kick_username || u.username)}" title="Vytvořit ticket pro ${esc(u.username)}">🎫</button>
+          <select class="select" style="width:120px;padding:6px 8px" data-action="user-gamble" data-id="${u.id}" data-name="${esc(u.username)}" title="Zablokovat/odemknout sázení (self-exclusion)">
+            <option value="">🔒 Sázky…</option>
+            <option value="1d">Blok 1 den</option>
+            <option value="7d">Blok 7 dní</option>
+            <option value="30d">Blok 30 dní</option>
+            <option value="perm">Blok napořád</option>
+            <option value="off">Odemknout</option>
+          </select>
         </div></td>
       </tr>`).join("")}
       </tbody></table></div>`;
@@ -3816,6 +3861,7 @@ function handleAction(action, el) {
     case "claim-partner": claimPartnerLink(el.dataset.id, el.dataset.url); break;
     case "cos-buy": buyCosmetic(el.dataset.key); break;
     case "cos-equip": equipCosmetic(el.dataset.key); break;
+    case "self-excl": selfExclude(el.dataset.dur); break;
     case "maint-on": doMaintOn(el); break;
     case "maint-on-time": doMaintOnTime(); break;
     case "maint-off": doMaintOff(); break;
@@ -4001,8 +4047,20 @@ document.addEventListener("change", (e) => {
   const sel = e.target.closest('[data-action="user-role"]');
   if (sel) { setUserRole(parseInt(sel.dataset.id, 10), sel.value); return; }
   const flag = e.target.closest('[data-action="user-flag"]');
-  if (flag) setUserFlag(parseInt(flag.dataset.id, 10), flag.dataset.flag, flag.checked);
+  if (flag) { setUserFlag(parseInt(flag.dataset.id, 10), flag.dataset.flag, flag.checked); return; }
+  const gb = e.target.closest('[data-action="user-gamble"]');
+  if (gb) { if (gb.value) adminGambleBlock(parseInt(gb.dataset.id, 10), gb.value, gb.dataset.name); gb.value = ""; }
 });
+
+async function adminGambleBlock(id, dur, name) {
+  const lbl = { "1d": "1 den", "7d": "7 dní", "30d": "30 dní", "perm": "napořád", "off": "ODEMKNOUT" }[dur];
+  const msg = dur === "off" ? `Odemknout sázení uživateli ${name}?` : `Zablokovat sázení (${lbl}) uživateli ${name}?`;
+  if (!confirm(msg)) return;
+  try {
+    await api(`/admin/users/${id}/gamble-block`, { method: "POST", body: { duration: dur } });
+    toast(dur === "off" ? "Sázení odemčeno" : `Sázení zablokováno (${lbl}) 🔒`, "success");
+  } catch (e) { toast(e.message, "error"); }
+}
 
 // Po návratu na záložku hned dotáhni stav hry (jinak by se čekalo na další tik pollingu)
 document.addEventListener("visibilitychange", () => {

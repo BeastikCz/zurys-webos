@@ -20,7 +20,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from ..config import STAFF_ROLES
 from ..db import now_iso
 from ..deps import (db_dep, require_user, get_current_user, add_points, try_debit,
-                    record_audit, can_access)
+                    record_audit, can_access, require_can_gamble)
 from ..models import PredictionCreateIn, PredictionBetIn, PredictionResolveIn
 from ..ratelimit import rate_limit
 
@@ -105,6 +105,7 @@ def place_bet(pid: int, data: PredictionBetIn,
               user: sqlite3.Row = Depends(require_user),
               conn: sqlite3.Connection = Depends(db_dep)):
     """Vsadí (nebo navýší sázku) na možnost. Vklad jde hned do escrow."""
+    require_can_gamble(user)                # sebevyloučení ze sázek (Tipsport-style)
     rate_limit(f"pred:bet:{user['id']}", 30, 60)
     p = _get_pred(conn, pid)
     if p["status"] != "open":

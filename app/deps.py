@@ -131,6 +131,32 @@ def record_audit(conn: sqlite3.Connection, admin: sqlite3.Row, request: Request,
             )
 
 
+def self_excluded_until(row):
+    """ISO konec aktivního sebevyloučení ze sázek, "permanent", nebo None (neaktivní/vypršelo)."""
+    try:
+        v = row["gamble_block_until"]
+    except (KeyError, IndexError, TypeError):
+        return None
+    if not v:
+        return None
+    if v == "permanent":
+        return "permanent"
+    return v if v > now_iso() else None
+
+
+def require_can_gamble(row) -> None:
+    """Tipsport-style sebevyloučení: vyhodí 403, když má user aktivní zámek. Volat na začátku
+    KAŽDÉHO sázkového endpointu (duely, piškvorky, blackjack, predikce)."""
+    until = self_excluded_until(row)
+    if not until:
+        return
+    if until == "permanent":
+        raise HTTPException(status_code=403,
+                            detail="Máš nastavené TRVALÉ sebevyloučení ze sázek 🔒 Pro zrušení napiš adminovi.")
+    raise HTTPException(status_code=403,
+                        detail=f"Máš aktivní sebevyloučení ze sázek do {until[:16].replace('T', ' ')} 🔒 Do té doby nejde sázet.")
+
+
 def to_public(row: sqlite3.Row, include_email: bool = False) -> dict:
     """Veřejná podoba uživatele (bez hesla)."""
     data = {
@@ -152,6 +178,7 @@ def to_public(row: sqlite3.Row, include_email: bool = False) -> dict:
         data["cos"] = cosmetics.resolve(row)
     except Exception:
         data["cos"] = {"name": "", "frame": "", "banner": ""}
+    data["gamble_block_until"] = self_excluded_until(row)   # Tipsport-style sebevyloučení (None = může sázet)
     if include_email:
         data["email"] = row["email"]
         data["ban_reason"] = row["ban_reason"]

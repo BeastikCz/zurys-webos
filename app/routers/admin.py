@@ -22,7 +22,8 @@ from .games import list_games_admin, cancel_game_admin, games_history, refund_ga
 from ..models import (ProductIn, SkinLookupIn, SkinSearchIn, ImageUploadIn, UserRoleIn, UserFlagsIn, UserPointsIn, UserAdminMetaIn, OrderStatusIn, CodeGenIn,
                       BanIn, DropCreateIn, AutoDropIn, RuleIn, EconomyIn, IpBanIn, IpUnbanIn, BotToggleIn,
                       LiveModeIn, LegacyImportIn, PatchNoteIn, CommunityGoalIn, ManualOrderIn, ManualOrderBulkIn,
-                      PointsLogPurgeIn, PartnerLinkIn, PartnerFlashConfigIn, GamesRakeIn, LiveHappyIn)
+                      PointsLogPurgeIn, PartnerLinkIn, PartnerFlashConfigIn, GamesRakeIn, LiveHappyIn,
+                      SelfExcludeIn)
 from ..services import product_public
 from ..security import new_code, secure_choice
 
@@ -1747,6 +1748,29 @@ def security_anticheat(conn: sqlite3.Connection = Depends(db_dep)):
 # Otisk sdílený víc než tolika účty NEbanujeme jako „zařízení" – je slabý (model+prohlížeč+jazyk),
 # takže sdílený otisk = spíš různí lidé na stejném mobilu než alty. Brání „ban 1 → sestřel 7".
 FP_DEVICE_BAN_MAX_SHARED = 2
+
+
+@router.post("/users/{user_id}/gamble-block")
+def admin_gamble_block(user_id: int, data: SelfExcludeIn, request: Request,
+                       conn: sqlite3.Connection = Depends(db_dep),
+                       admin: sqlite3.Row = Depends(require_admin)):
+    """Admin nastaví/zruší sebevyloučení ze sázek libovolnému uživateli (override – i odemknout/zkrátit)."""
+    u = conn.execute("SELECT username FROM users WHERE id = ?", (user_id,)).fetchone()
+    if not u:
+        raise HTTPException(status_code=404, detail="Uživatel nenalezen.")
+    days = {"1d": 1, "7d": 7, "30d": 30}
+    if data.duration == "off":
+        newval = None
+    elif data.duration == "perm":
+        newval = "permanent"
+    elif data.duration in days:
+        newval = (datetime.now(timezone.utc) + timedelta(days=days[data.duration])).isoformat()
+    else:
+        raise HTTPException(status_code=400, detail="Neplatná délka (1d/7d/30d/perm/off).")
+    conn.execute("UPDATE users SET gamble_block_until = ? WHERE id = ?", (newval, user_id))
+    conn.commit()
+    record_audit(conn, admin, request, "user.gamble_block", f"{u['username']} (#{user_id})", data.duration)
+    return {"gamble_block_until": newval}
 
 
 @router.post("/users/{user_id}/ban")
