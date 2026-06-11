@@ -299,6 +299,16 @@ def me(user: Optional[sqlite3.Row] = Depends(get_current_user),
     data["rank"] = user_rank(conn, user["points"], user["username"])   # pozice = liga (titul + daily násobič)
     data["pending_rankup"] = (user["pending_rankup"] if "pending_rankup" in user.keys() else "") or ""
     data["pending_overtake"] = (user["pending_overtake"] if "pending_overtake" in user.keys() else "") or ""
+    try:                                                       # počet nepřečtených PM (badge)
+        if user["role"] in ("admin", "broadcaster", "mod"):    # staff: nepřečtené odpovědi userů
+            data["dm_unread"] = conn.execute(
+                "SELECT COUNT(*) c FROM dm_messages WHERE from_id = user_id AND seen = 0").fetchone()["c"]
+        else:                                                  # user: nepřečtené zprávy od staffa
+            data["dm_unread"] = conn.execute(
+                "SELECT COUNT(*) c FROM dm_messages WHERE user_id = ? AND from_id != user_id AND seen = 0",
+                (user["id"],)).fetchone()["c"]
+    except Exception:
+        data["dm_unread"] = 0
     return {"user": data}
 
 

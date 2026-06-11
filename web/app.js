@@ -224,7 +224,7 @@ function render() {
     shop: pageShop, leaderboard: pageLeaderboard, exchange: pageExchange, redeem: pageRedeem,
     faq: pageFaq, pravidla: pageRules, cart: pageCart, profile: pageProfile, admin: pageAdmin,
     predikce: pagePredikce, games: pageGames, novinky: pageNews, bonusy: pageBonusy,
-    kosmetika: pageCosmetics, bj: pageBjRoom,
+    kosmetika: pageCosmetics, bj: pageBjRoom, zpravy: pageMessages,
     connect: pageConnect, login: pageConnect, register: pageConnect, u: pageUserProfile,
   };
   (pages[r.name] || pageShop)(r.param);
@@ -242,9 +242,10 @@ function renderHeader() {
     + (isStaff(u) ? `<a href="#/admin" class="nav-link ${route === "admin" ? "active" : ""}">${u.role === "admin" ? "Admin" : "Panel"}</a>` : "");
 
   const cartBtn = `<button class="icon-btn" data-action="nav" data-href="cart" title="Košík">🛒${cartCount() ? `<span class="cart-badge">${cartCount()}</span>` : ""}</button>`;
+  const msgBtn = u ? `<button class="icon-btn" data-action="nav" data-href="zpravy" title="Zprávy">✉️${u.dm_unread ? `<span class="cart-badge">${u.dm_unread}</span>` : ""}</button>` : "";
   let right;
   if (u) {
-    right = `<div class="pts-pill" title="Tvůj zůstatek"><span class="coin"></span><b>${Number(u.points).toLocaleString("cs-CZ")}</b><span class="lbl">sedláků</span></div>${cartBtn}
+    right = `<div class="pts-pill" title="Tvůj zůstatek"><span class="coin"></span><b>${Number(u.points).toLocaleString("cs-CZ")}</b><span class="lbl">sedláků</span></div>${cartBtn}${msgBtn}
       <a href="#/profile" class="user-chip" title="Můj profil">${avatarHTML(u.username, u.avatar_url, "", cosF(u))}<div style="display:flex;flex-direction:column;line-height:1.15"><span class="uc-name ${cosN(u)}">${esc(u.username)}</span><span class="uc-tier">${userTier(u.rank) ? "★ " + userTier(u.rank) : ""}</span></div></a>
       <button class="btn btn-ghost btn-sm logout-top" data-action="logout" title="Odhlásit">Odhlásit</button>`;
   } else {
@@ -264,7 +265,7 @@ function renderHeader() {
     items.map(([k, l]) => `<a href="#/${k}" class="${route === k ? "active" : ""}">${l}${navDot(k)}</a>`).join("")
     + `<a href="#/cart" class="${route === "cart" ? "active" : ""}">🛒 Košík${cartCount() ? ` (${cartCount()})` : ""}</a>`
     + (u
-      ? `<a href="#/profile" class="${route === "profile" ? "active" : ""}">👤 Profil</a>${isStaff(u) ? `<a href="#/admin" class="${route === "admin" ? "active" : ""}">🛠️ ${u.role === "admin" ? "Admin" : "Panel"}</a>` : ""}<a href="#" data-action="logout">🚪 Odhlásit</a>`
+      ? `<a href="#/zpravy" class="${route === "zpravy" ? "active" : ""}">✉️ Zprávy${u.dm_unread ? ` (${u.dm_unread})` : ""}</a><a href="#/profile" class="${route === "profile" ? "active" : ""}">👤 Profil</a>${isStaff(u) ? `<a href="#/admin" class="${route === "admin" ? "active" : ""}">🛠️ ${u.role === "admin" ? "Admin" : "Panel"}</a>` : ""}<a href="#" data-action="logout">🚪 Odhlásit</a>`
       : `<a href="#" data-action="connect">🟢 Připojit přes Kick</a>`);
 
   refreshStreamDot();
@@ -909,6 +910,67 @@ async function loadChatLeaders() {
   } catch (e) { box.innerHTML = ""; }
 }
 
+/* ============================================================
+   SOUKROMÉ ZPRÁVY (PM) – staff zakládá, user odpovídá
+============================================================ */
+function dmBubbles(messages, viewerIsStaff) {
+  if (!messages.length) return `<div class="empty">Zatím žádné zprávy.</div>`;
+  return `<div class="dm-thread">${messages.map((m) => {
+    const mine = (m.from_staff === viewerIsStaff);
+    const who = m.from_staff ? `${esc(m.from_name)} ${roleBadge(m.from_role)}` : esc(m.from_name);
+    return `<div class="dm-msg ${mine ? "mine" : "other"}"><div class="dm-who">${who}</div><div class="dm-bubble">${esc(m.body)}</div><div class="dm-time">${timeAgo(m.created_at)}</div></div>`;
+  }).join("")}</div>`;
+}
+function dmComposer(mode, uid) {
+  return `<div class="dm-composer"><textarea class="input" id="dmInput" rows="2" maxlength="2000" placeholder="Napiš zprávu… (max 2000)"></textarea><button class="btn btn-primary" data-action="dm-send" data-mode="${mode}"${uid != null ? ` data-id="${uid}"` : ""}>Odeslat ➤</button></div>`;
+}
+async function dmSend(mode, uid) {
+  const inp = document.getElementById("dmInput"); if (!inp) return;
+  const body = inp.value.trim(); if (!body) { toast("Prázdná zpráva", "error"); return; }
+  try {
+    if (mode === "reply") await api("/dm/reply", { method: "POST", body: { body } });
+    else await api(`/dm/send/${uid}`, { method: "POST", body: { body } });
+    inp.value = "";
+    if (mode === "reply") dmUserThread(); else dmStaffThread(parseInt(uid, 10));
+  } catch (e) { toast(e.message, "error"); }
+}
+function pageMessages(param) {
+  if (!state.user) { navigate("connect"); return; }
+  if (isStaff(state.user)) return param ? dmStaffThread(parseInt(param, 10)) : dmStaffInbox();
+  return dmUserThread();
+}
+async function dmUserThread() {
+  $("#view").innerHTML = `<div class="page-head"><h1>✉️ Zprávy</h1><p class="muted">Soukromé zprávy od týmu ZURYS.</p></div><div id="dmBox">${skeletonCards(1)}</div>`;
+  try {
+    const d = await api("/dm/thread");
+    refreshMe();
+    const box = $("#dmBox"); if (!box) return;
+    if (!d.messages.length) { box.innerHTML = `<div class="empty"><div class="big">📭</div>Zatím ti nikdo nenapsal. Až vyhraješ skin nebo tě tým osloví, objeví se to tady.</div>`; return; }
+    box.innerHTML = `<div class="panel">${dmBubbles(d.messages, false)}${d.can_reply ? dmComposer("reply") : ""}</div>`;
+    const t = document.querySelector(".dm-thread"); if (t) t.scrollTop = t.scrollHeight;
+  } catch (e) { const b = $("#dmBox"); if (b) b.innerHTML = `<div class="empty">${esc(e.message)}</div>`; }
+}
+async function dmStaffInbox() {
+  $("#view").innerHTML = `<div class="page-head"><h1>💬 Zprávy</h1><p class="muted">Vlákna s uživateli. Nové vlákno založíš z profilu uživatele.</p></div><div id="dmBox">${skeletonCards(1)}</div>`;
+  try {
+    const rows = await api("/dm/admin/threads");
+    refreshMe();
+    const box = $("#dmBox"); if (!box) return;
+    if (!rows.length) { box.innerHTML = `<div class="empty"><div class="big">📭</div>Zatím žádná vlákna. Otevři něčí profil → „✉️ Napsat zprávu".</div>`; return; }
+    box.innerHTML = `<div class="dm-inbox">${rows.map((r) => `<a class="dm-trow" href="#/zpravy/${r.user_id}">${avatarHTML(r.username, r.avatar_url)}<div class="dm-trow-body"><div class="dm-trow-top"><b>${esc(r.username)}</b> ${roleBadge(r.role)}${r.unread ? `<span class="dm-badge">${r.unread} nové</span>` : ""}</div><div class="dm-trow-last">${r.last_from_staff ? "Ty: " : ""}${esc((r.last_body || "").slice(0, 90))}</div></div><span class="faint" style="white-space:nowrap">${timeAgo(r.last_at)}</span></a>`).join("")}</div>`;
+  } catch (e) { const b = $("#dmBox"); if (b) b.innerHTML = `<div class="empty">${esc(e.message)}</div>`; }
+}
+async function dmStaffThread(uid) {
+  $("#view").innerHTML = `<div class="page-head"><a href="#/zpravy" class="btn btn-ghost btn-sm">← Zprávy</a></div><div id="dmBox">${skeletonCards(1)}</div>`;
+  try {
+    const d = await api(`/dm/admin/thread/${uid}`);
+    refreshMe();
+    const box = $("#dmBox"); if (!box) return;
+    box.innerHTML = `<div class="panel"><div class="dm-head">${avatarHTML(d.user.username, d.user.avatar_url)} <a class="prof-link" href="#/u/${encodeURIComponent(d.user.username)}"><b>${esc(d.user.username)}</b></a> ${roleBadge(d.user.role)}</div>${dmBubbles(d.messages, true)}${dmComposer("staff", uid)}</div>`;
+    const t = document.querySelector(".dm-thread"); if (t) t.scrollTop = t.scrollHeight;
+  } catch (e) { const b = $("#dmBox"); if (b) b.innerHTML = `<div class="empty">${esc(e.message)}</div>`; }
+}
+
 async function pageUserProfile(nick) {
   const view = $("#view");
   const name = decodeURIComponent(nick || "");
@@ -928,6 +990,7 @@ async function pageUserProfile(nick) {
           <div class="ph-badges">${subVipBadges(p) || ""}</div>
         </div>
       </div>
+      ${isStaff(state.user) && state.user.id !== p.id ? `<a href="#/zpravy/${p.id}" class="btn btn-primary" style="margin:16px 0 2px;display:inline-block">✉️ Napsat zprávu</a>` : ""}
       <div class="stat-grid" style="margin-top:18px">
         ${statBox(fmtPts(p.points), "Sedláků teď", "accent")}
         ${statBox(fmtPts(p.earned_total), "Celkem vyděláno")}
@@ -3876,6 +3939,7 @@ function handleAction(action, el) {
     case "claim-partner": claimPartnerLink(el.dataset.id, el.dataset.url); break;
     case "cos-buy": buyCosmetic(el.dataset.key); break;
     case "cos-equip": equipCosmetic(el.dataset.key); break;
+    case "dm-send": dmSend(el.dataset.mode, el.dataset.id); break;
     case "self-excl": selfExclude(el.dataset.dur); break;
     case "maint-on": doMaintOn(el); break;
     case "maint-on-time": doMaintOnTime(); break;

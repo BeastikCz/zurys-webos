@@ -916,3 +916,24 @@ footer.site-footer { border-top: 1px solid var(--border); padding: 22px 0; color
 .se-banner-txt { min-width: 0; }
 .se-banner-title { font-size: 21px; font-weight: 900; color: #ff7070; margin-bottom: 4px; letter-spacing: .3px; }
 .se-banner-sub { font-size: 14px; color: var(--text); line-height: 1.55; opacity: .92; }
+
+/* ===== Soukromé zprávy (PM) ===== */
+.dm-thread { display: flex; flex-direction: column; gap: 12px; max-height: 56vh; overflow-y: auto; padding: 4px 2px 14px; }
+.dm-msg { display: flex; flex-direction: column; max-width: 78%; }
+.dm-msg.mine { align-self: flex-end; align-items: flex-end; }
+.dm-msg.other { align-self: flex-start; align-items: flex-start; }
+.dm-who { font-size: 11px; color: var(--muted); margin: 0 4px 3px; }
+.dm-bubble { padding: 10px 14px; border-radius: 14px; font-size: 14px; line-height: 1.45; white-space: pre-wrap; word-break: break-word; }
+.dm-msg.mine .dm-bubble { background: var(--accent); color: #04130d; border-bottom-right-radius: 4px; }
+.dm-msg.other .dm-bubble { background: var(--surface); border: 1px solid var(--border); border-bottom-left-radius: 4px; }
+.dm-time { font-size: 10.5px; color: var(--muted); margin: 3px 5px 0; opacity: .8; }
+.dm-composer { display: flex; gap: 10px; align-items: flex-end; margin-top: 14px; border-top: 1px solid var(--border); padding-top: 14px; }
+.dm-composer textarea { flex: 1; resize: vertical; min-height: 42px; }
+.dm-head { display: flex; align-items: center; gap: 10px; font-size: 16px; padding-bottom: 12px; margin-bottom: 6px; border-bottom: 1px solid var(--border); }
+.dm-inbox { display: flex; flex-direction: column; gap: 8px; }
+.dm-trow { display: flex; align-items: center; gap: 12px; padding: 12px 14px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r); text-decoration: none; color: var(--text); transition: .15s; }
+.dm-trow:hover { border-color: var(--accent); }
+.dm-trow-body { flex: 1; min-width: 0; }
+.dm-trow-top { display: flex; align-items: center; gap: 8px; }
+.dm-trow-last { font-size: 13px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
+.dm-badge { font-size: 11px; font-weight: 800; background: #e14141; color: #fff; padding: 1px 8px; border-radius: 999px; }

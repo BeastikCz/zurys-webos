@@ -316,6 +316,15 @@ CREATE TABLE IF NOT EXISTS prediction_bets (
     created_at    TEXT NOT NULL,
     UNIQUE(prediction_id, user_id)                    -- 1 sázka na predikci (lze navyšovat na STEJNOU možnost)
 );
+CREATE TABLE IF NOT EXISTS dm_messages (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id    INTEGER NOT NULL,                 -- vlastník vlákna (ne-staff účastník)
+    from_id    INTEGER NOT NULL,                 -- kdo poslal (staff, nebo sám user = odpověď)
+    body       TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    seen       INTEGER NOT NULL DEFAULT 0        -- příjemce zprávu viděl
+);
+CREATE INDEX IF NOT EXISTS idx_dm_user ON dm_messages(user_id, id);
 CREATE INDEX IF NOT EXISTS idx_pred_opts_pred ON prediction_options(prediction_id);
 CREATE INDEX IF NOT EXISTS idx_pred_bets_pred ON prediction_bets(prediction_id);
 

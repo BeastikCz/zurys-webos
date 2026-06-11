@@ -206,6 +206,11 @@ class SelfExcludeIn(BaseModel):
     duration: str = Field(min_length=2, max_length=4)
 
 
+class DmIn(BaseModel):
+    """Soukromá zpráva (PM) – tělo."""
+    body: str = Field(min_length=1, max_length=2000)
+
+
 class DropClaimIn(BaseModel):
     code: str = Field(min_length=1, max_length=64)
     hp: Optional[str] = ""        # honeypot – boti vyplní, lidé ne

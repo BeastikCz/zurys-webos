@@ -142,6 +142,7 @@ def public_profile(nick: str = Query("", max_length=64),
                          "type": r["type"], "created_at": r["created_at"], "won": False})
     showcase = showcase[:12]
     return {
+        "id": uid,
         "username": u["username"], "avatar_url": u["avatar_url"] or "", "role": u["role"],
         "created_at": u["created_at"], "points": u["points"],
         "rank": rank, "league": league_key, "league_mult": league_mult,
