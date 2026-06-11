@@ -218,6 +218,7 @@ function render() {
   if (gameTimer) { clearInterval(gameTimer); gameTimer = null; currentGameId = null; }
   if (gameClockTimer) { clearInterval(gameClockTimer); gameClockTimer = null; gameClockBase = null; }
   if (duelTimer) { clearInterval(duelTimer); duelTimer = null; }
+  if (dmThreadTimer) { clearInterval(dmThreadTimer); dmThreadTimer = null; }
   stopPredPoll();
   const r = parseRoute();
   const pages = {
@@ -350,6 +351,7 @@ let dropTimer = null;
 let cardTimer = null;
 let gameTimer = null, gameState = null, finishedGameId = null, lastBoardKey = "", currentGameId = null, gameClockTimer = null, gameClockBase = null;
 let duelTimer = null, _seenDuels = null;
+let dmThreadTimer = null, _dmThreadMode = null, _dmThreadUid = null, _dmLastId = 0;
 async function loadDropBanner() {
   const box = $("#dropBanner"); if (!box) return;
   // nepřepisuj, když uživatel zrovna píše kód
@@ -934,6 +936,37 @@ async function dmSend(mode, uid) {
     if (mode === "reply") dmUserThread(); else dmStaffThread(parseInt(uid, 10));
   } catch (e) { toast(e.message, "error"); }
 }
+function startDmThreadPoll() {
+  if (dmThreadTimer) clearInterval(dmThreadTimer);
+  dmThreadTimer = setInterval(() => { if (!document.hidden) pollDmThread(); }, 4000);
+}
+async function pollDmThread() {
+  const thread = document.querySelector(".dm-thread"); if (!thread) return;   // odešel jinam
+  try {
+    const d = _dmThreadMode === "staff" ? await api(`/dm/admin/thread/${_dmThreadUid}`) : await api("/dm/thread");
+    const fresh = d.messages.filter((m) => m.id > _dmLastId);
+    if (!fresh.length) return;
+    const viewerIsStaff = _dmThreadMode === "staff";
+    const nearBottom = thread.scrollHeight - thread.scrollTop - thread.clientHeight < 90;
+    fresh.forEach((m) => {                                  // jen DOPLŇ nové (composer + scroll zůstává)
+      const mine = (m.from_staff === viewerIsStaff);
+      const who = m.from_staff ? `${esc(m.from_name)} ${roleBadge(m.from_role)}` : esc(m.from_name);
+      const div = document.createElement("div");
+      div.className = `dm-msg ${mine ? "mine" : "other"}`;
+      div.innerHTML = `<div class="dm-who">${who}</div><div class="dm-bubble">${esc(m.body)}</div><div class="dm-time">${timeAgo(m.created_at)}</div>`;
+      thread.appendChild(div);
+    });
+    _dmLastId = d.messages[d.messages.length - 1].id;
+    if (nearBottom) thread.scrollTop = thread.scrollHeight;
+  } catch (e) { }
+}
+async function pollDmBadge() {
+  if (!state.user || document.hidden) return;
+  try {
+    const r = await api("/dm/unread");
+    if (r.count !== state.user.dm_unread) { state.user.dm_unread = r.count; renderHeader(); }
+  } catch (e) { }
+}
 function pageMessages(param) {
   if (!state.user) { navigate("connect"); return; }
   if (isStaff(state.user)) return param ? dmStaffThread(parseInt(param, 10)) : dmStaffInbox();
@@ -948,6 +981,9 @@ async function dmUserThread() {
     if (!d.messages.length) { box.innerHTML = `<div class="empty"><div class="big">📭</div>Zatím ti nikdo nenapsal. Až vyhraješ skin nebo tě tým osloví, objeví se to tady.</div>`; return; }
     box.innerHTML = `<div class="panel">${dmBubbles(d.messages, false)}${d.can_reply ? dmComposer("reply") : ""}</div>`;
     const t = document.querySelector(".dm-thread"); if (t) t.scrollTop = t.scrollHeight;
+    _dmThreadMode = "user"; _dmThreadUid = null;
+    _dmLastId = d.messages.length ? d.messages[d.messages.length - 1].id : 0;
+    startDmThreadPoll();
   } catch (e) { const b = $("#dmBox"); if (b) b.innerHTML = `<div class="empty">${esc(e.message)}</div>`; }
 }
 async function dmStaffInbox() {
@@ -968,6 +1004,9 @@ async function dmStaffThread(uid) {
     const box = $("#dmBox"); if (!box) return;
     box.innerHTML = `<div class="panel"><div class="dm-head">${avatarHTML(d.user.username, d.user.avatar_url)} <a class="prof-link" href="#/u/${encodeURIComponent(d.user.username)}"><b>${esc(d.user.username)}</b></a> ${roleBadge(d.user.role)}</div>${dmBubbles(d.messages, true)}${dmComposer("staff", uid)}</div>`;
     const t = document.querySelector(".dm-thread"); if (t) t.scrollTop = t.scrollHeight;
+    _dmThreadMode = "staff"; _dmThreadUid = uid;
+    _dmLastId = d.messages.length ? d.messages[d.messages.length - 1].id : 0;
+    startDmThreadPoll();
   } catch (e) { const b = $("#dmBox"); if (b) b.innerHTML = `<div class="empty">${esc(e.message)}</div>`; }
 }
 
@@ -4822,6 +4861,7 @@ async function init() {
   if (!location.hash) location.hash = "#/shop";
   render();
   refreshBonusDot();   // rozsvítí tečku na „Bonusy", pokud je co vyzvednout
+  if (!window._dmBadgeTimer) window._dmBadgeTimer = setInterval(pollDmBadge, 20000);   // live ✉️ badge (šetrný interval)
 }
 window.addEventListener("hashchange", render);
 

@@ -39,6 +39,17 @@ def my_thread(user: sqlite3.Row = Depends(require_user), conn: sqlite3.Connectio
     return {"messages": _render(conn, rows, user["id"]), "can_reply": len(rows) > 0}
 
 
+@router.get("/unread")
+def unread(user: sqlite3.Row = Depends(require_user), conn: sqlite3.Connection = Depends(db_dep)):
+    """Počet nepřečtených PM (pro badge poll). Levné – jen COUNT."""
+    if user["role"] in ("admin", "broadcaster", "mod"):
+        c = conn.execute("SELECT COUNT(*) c FROM dm_messages WHERE from_id = user_id AND seen = 0").fetchone()["c"]
+    else:
+        c = conn.execute("SELECT COUNT(*) c FROM dm_messages WHERE user_id = ? AND from_id != user_id AND seen = 0",
+                         (user["id"],)).fetchone()["c"]
+    return {"count": c}
+
+
 @router.post("/reply")
 def reply(data: DmIn, user: sqlite3.Row = Depends(require_user), conn: sqlite3.Connection = Depends(db_dep)):
     started = conn.execute("SELECT 1 FROM dm_messages WHERE user_id = ? AND from_id != user_id LIMIT 1",
