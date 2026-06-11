@@ -1084,11 +1084,12 @@ def raffle_products(conn: sqlite3.Connection = Depends(db_dep)):
         d["tickets"] = r["tickets"]
         d["participants"] = r["participants"]
         winner = conn.execute(
-            "SELECT u.username FROM raffle_winners w JOIN users u ON u.id = w.user_id "
+            "SELECT u.id, u.username FROM raffle_winners w JOIN users u ON u.id = w.user_id "
             "WHERE w.product_id = ? ORDER BY w.id DESC LIMIT 1",
             (r["id"],),
         ).fetchone()
         d["winner"] = winner["username"] if winner else None
+        d["winner_id"] = winner["id"] if winner else None
         out.append(d)
     return out
 
