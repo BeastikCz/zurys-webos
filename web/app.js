@@ -1721,7 +1721,6 @@ async function loadWheel() {
         </div>
       </div>
       ${btn}
-      <a href="#/fair" class="muted" style="display:block;text-align:center;font-size:12px;margin-top:8px;text-decoration:none">🔐 Provably fair — ověř výsledek</a>
     </div>`;
   } catch (e) { box.innerHTML = ""; }
 }
