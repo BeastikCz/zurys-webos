@@ -100,3 +100,24 @@ def test_payloads_include_cos(client):
     # leaderboard řádky mají cos
     lb = client.get("/api/leaderboard?limit=5").json()
     assert all("cos" in row for row in lb)
+
+
+def test_refund_removed_banners(client):
+    """Zrušené bannery: refund_removed vrátí cenu, smaže vlastnictví a sundá nasazené."""
+    from app import cosmetics
+    uid, _ = _mk(points=1000)
+    conn = get_conn()
+    try:
+        conn.execute("INSERT INTO cosmetic_owns (user_id, item_key, acquired_at) VALUES (?,?,?)",
+                     (uid, "banner_gold", now_iso()))
+        conn.execute("UPDATE users SET cos_banner='banner_gold' WHERE id=?", (uid,))
+        conn.commit()
+        n = cosmetics.refund_removed(conn)
+        conn.commit()
+        assert n >= 1
+        row = conn.execute("SELECT points, cos_banner FROM users WHERE id=?", (uid,)).fetchone()
+        assert row["points"] == 1000 + 25000          # cena banner_gold vrácena
+        assert row["cos_banner"] is None
+        assert conn.execute("SELECT 1 FROM cosmetic_owns WHERE user_id=? AND item_key='banner_gold'", (uid,)).fetchone() is None
+    finally:
+        conn.close()

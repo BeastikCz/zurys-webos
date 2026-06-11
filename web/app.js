@@ -905,8 +905,7 @@ async function pageUserProfile(nick) {
     const wr = p.games_played ? Math.round(p.win_rate * 100) : 0;
     const since = p.created_at ? new Date(p.created_at).toLocaleDateString("cs-CZ") : "—";
     $("#up").innerHTML = `
-      ${cosB(p) ? `<div class="cos-banner ${cosB(p)}"></div>` : ""}
-      <div class="profile-hero${cosB(p) ? " has-banner" : ""}">
+      <div class="profile-hero">
         ${avatarHTML(p.username, p.avatar_url, "prof-av", cosF(p))}
         <div class="ph-info">
           <h1><span class="${cosN(p)}">${esc(p.username)}</span> ${roleBadge(p.role)}</h1>
@@ -958,7 +957,7 @@ async function loadCosmetics() {
         <div class="cos-tags">${rar}${it.owned && !it.equipped ? ` <span class="cos-owned">✓ máš</span>` : ""}</div>
         ${btn}</div>`;
     };
-    const groups = [["name", "🎨 Barvy nicku"], ["frame", "🖼️ Rámečky avataru"], ["banner", "🪧 Profil bannery"]];
+    const groups = [["name", "🎨 Barvy nicku"], ["frame", "🖼️ Rámečky avataru"]];
     box.innerHTML = `<div class="cos-bal">Tvůj zůstatek: <b><span class="coin"></span> ${Number(data.balance).toLocaleString("cs-CZ")}</b> sedláků · kupuješ za sedláky, vlastníš navždy</div>`
       + groups.map(([type, label]) => {
         const items = data.items.filter((i) => i.type === type);
@@ -1338,10 +1337,9 @@ function pageProfile() {
         <div class="profile-points"><div class="v">${fmtPts(u.points)}</div><div class="faint">aktuální zůstatek</div></div>
       </div>
       <div class="prof-look-strip">
-        <div class="muted" style="font-size:13px;min-width:0">🎨 <b style="color:var(--text)">Můj vzhled</b> — barvy nicku, rámečky avataru, bannery (vidí to všichni)</div>
+        <div class="muted" style="font-size:13px;min-width:0">🎨 <b style="color:var(--text)">Můj vzhled</b> — barvy nicku a rámečky avataru (vidí to všichni)</div>
         <a href="#/kosmetika" class="btn btn-primary btn-sm">Upravit vzhled →</a>
       </div>
-      ${cosB(u) ? `<div class="cos-banner ${cosB(u)}" style="height:48px;border-radius:10px;margin:0 0 16px"></div>` : ""}
       <div id="myBadges" style="margin:6px 0 18px"></div>
       <div class="sub-tabs">
         <button class="active" data-action="prof-tab" data-tab="orders">📦 Moje objednávky</button>

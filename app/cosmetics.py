@@ -30,13 +30,14 @@ CATALOG = [
     {"key": "frame_emerald", "type": "frame", "name": "Smaragd prsten",     "cost": 10000, "rarity": "classified", "sub": True,  "cls": "cf-emerald"},
     {"key": "frame_neon",    "type": "frame", "name": "Neon puls",          "cost": 18000, "rarity": "covert",     "sub": False, "cls": "cf-neon"},
     {"key": "frame_fire",    "type": "frame", "name": "Rotující oheň",      "cost": 45000, "rarity": "legendary",  "sub": False, "cls": "cf-fire"},
-    # ---- Profil bannery ----
-    {"key": "banner_midnight", "type": "banner", "name": "Půlnoc",         "cost": 4000,  "rarity": "restricted", "sub": False, "cls": "cb-midnight"},
-    {"key": "banner_aurora",   "type": "banner", "name": "Aurora",         "cost": 9000,  "rarity": "classified", "sub": False, "cls": "cb-aurora"},
-    {"key": "banner_wave",     "type": "banner", "name": "Smaragdová vlna","cost": 12000, "rarity": "classified", "sub": True,  "cls": "cb-wave"},
-    {"key": "banner_gold",     "type": "banner", "name": "Zlatá záře",     "cost": 25000, "rarity": "contraband", "sub": False, "cls": "cb-gold"},
-    {"key": "banner_inferno",  "type": "banner", "name": "Inferno",        "cost": 38000, "rarity": "legendary",  "sub": False, "cls": "cb-inferno"},
 ]
+
+# Zrušené kousky (v1: profil bannery vypadaly špatně) → cena, pro JEDNORÁZOVÝ refund komu je
+# koupil. Drží se tu mimo CATALOG, aby šlo vrátit sedláky i po odebrání z nabídky.
+REFUND_REMOVED = {
+    "banner_midnight": 4000, "banner_aurora": 9000, "banner_wave": 12000,
+    "banner_gold": 25000, "banner_inferno": 38000,
+}
 _BY_KEY = {c["key"]: c for c in CATALOG}
 _SLOT_COL = {"name": "cos_name", "frame": "cos_frame", "banner": "cos_banner"}
 
@@ -125,3 +126,17 @@ def equip(conn, user_row, key: str) -> dict:
     conn.execute(f"UPDATE users SET {col} = ? WHERE id = ?", (newval, uid))   # col z whitelistu
     conn.commit()
     return {"type": item["type"], "equipped_key": newval, "cls": item["cls"] if newval else ""}
+
+
+def refund_removed(conn) -> int:
+    """Jednorázově: vrátí sedláky za zrušené kousky (bannery), smaže je z vlastnictví a sundá
+    nasazené. Idempotentní – po prvním běhu už řádky nejsou, takže nic nevrátí. Vrací počet refundů."""
+    from .deps import add_points
+    n = 0
+    for key, cost in REFUND_REMOVED.items():
+        for r in conn.execute("SELECT user_id FROM cosmetic_owns WHERE item_key = ?", (key,)).fetchall():
+            add_points(conn, r["user_id"], cost, f"Refund zrušené kosmetiky ({key}) 🔁")
+            n += 1
+        conn.execute("DELETE FROM cosmetic_owns WHERE item_key = ?", (key,))
+    conn.execute("UPDATE users SET cos_banner = NULL WHERE cos_banner IS NOT NULL")
+    return n

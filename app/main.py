@@ -149,6 +149,20 @@ try:
 finally:
     _go.close()
 
+# Jednorázově: refund za zrušené kosmetické kousky (v1 bannery vypadaly špatně) – vrátí sedláky
+# komu je koupil + sundá nasazené. Flag v app_settings, ať to neběží při každém startu.
+_cb = get_conn()
+try:
+    from . import cosmetics
+    if get_setting(_cb, "cosmetics_banner_refund_v1", "") != "done":
+        _rn = cosmetics.refund_removed(_cb)
+        set_setting(_cb, "cosmetics_banner_refund_v1", "done")
+        _cb.commit()
+        if _rn:
+            print(f"[cosmetics] refund zrusenych banneru: {_rn} polozek")
+finally:
+    _cb.close()
+
 # Na Fly (produkce) vypneme veřejné API docs/schema – ať se útočníkovi nenabízí mapa API.
 # Lokálně (bez FLY_APP_NAME) zůstávají zapnuté pro vývoj.
 _PROD = bool(os.environ.get("FLY_APP_NAME"))
