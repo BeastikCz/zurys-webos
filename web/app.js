@@ -236,7 +236,7 @@ function renderHeader() {
   const route = currentRoute();
   const u = state.user;
   document.body.classList.toggle("logged-in", !!u);   /* na mobilu uvolní místo v topbaru (skryje wordmark) */
-  const items = [["shop", "Shop"], ["bonusy", "Bonusy"], ["kosmetika", "Kosmetika"], ["leaderboard", "Leaderboard"], ["exchange", "Exchange"], ["games", "Hry"], ["predikce", "Predikce"]];
+  const items = [["shop", "Shop"], ["bonusy", "Bonusy"], ["leaderboard", "Leaderboard"], ["exchange", "Exchange"], ["games", "Hry"], ["predikce", "Predikce"]];
   const navDot = (k) => (k === "bonusy" && u && bonusReady) ? `<span class="nav-dot" title="Máš nevyzvednutou odměnu!"></span>` : "";
   const navLinks = items.map(([k, l]) => `<a href="#/${k}" class="nav-link ${route === k ? "active" : ""}">${l}${navDot(k)}</a>`).join("")
     + (isStaff(u) ? `<a href="#/admin" class="nav-link ${route === "admin" ? "active" : ""}">${u.role === "admin" ? "Admin" : "Panel"}</a>` : "");
