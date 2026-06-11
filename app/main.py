@@ -163,6 +163,18 @@ try:
 finally:
     _cb.close()
 
+# Levely: jednorázový backfill XP (earned_total = nasbíráno za celou dobu). Pak to drží
+# achievements daemon každých 10 min. Flag, ať se ten těžší přepočet nepouští při každém startu.
+_le = get_conn()
+try:
+    if get_setting(_le, "earned_total_backfill_v1", "") != "done":
+        _le.execute("UPDATE users SET earned_total = COALESCE("
+                    "(SELECT SUM(change) FROM points_log p WHERE p.user_id = users.id AND p.change > 0), 0)")
+        set_setting(_le, "earned_total_backfill_v1", "done")
+        _le.commit()
+finally:
+    _le.close()
+
 # Na Fly (produkce) vypneme veřejné API docs/schema – ať se útočníkovi nenabízí mapa API.
 # Lokálně (bez FLY_APP_NAME) zůstávají zapnuté pro vývoj.
 _PROD = bool(os.environ.get("FLY_APP_NAME"))

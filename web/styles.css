@@ -906,3 +906,17 @@ footer.site-footer { border-top: 1px solid var(--border); padding: 22px 0; color
 .cos-rar-contraband { color: var(--r-contraband); } .cos-rar-legendary { color: #ff8a3d; }
 .cos-owned { font-size: 11px; font-weight: 800; color: var(--success); }
 .prof-look-strip { display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap; margin: 14px 0 16px; padding-top: 16px; border-top: 1px solid var(--border); }
+
+/* ===== Leaderboard: levely, XP lišta a záložky (no-reset redesign) ===== */
+.lb-tabs { display: flex; gap: 8px; margin-bottom: 16px; }
+.lb-tab { padding: 9px 18px; border-radius: 999px; border: 1px solid var(--border); background: var(--surface); color: var(--muted); font-weight: 700; font-size: 14px; cursor: pointer; transition: .15s; }
+.lb-tab:hover { color: var(--text); border-color: var(--accent); }
+.lb-tab.active { background: var(--accent); color: #04130d; border-color: var(--accent); }
+.lvl-chip { display: inline-block; font-size: 11px; font-weight: 800; padding: 1px 7px; border-radius: 6px; background: rgba(31,158,117,.16); color: var(--accent); border: 1px solid rgba(31,158,117,.35); letter-spacing: .3px; vertical-align: middle; }
+.lvl-card { display: flex; align-items: center; gap: 16px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r); padding: 16px 18px; margin-bottom: 16px; }
+.lvl-badge { flex: 0 0 auto; width: 54px; height: 54px; border-radius: 14px; background: linear-gradient(135deg, var(--accent), #0c6e50); color: #04130d; display: flex; align-items: center; justify-content: center; font-size: 22px; font-weight: 900; box-shadow: 0 4px 14px rgba(31,158,117,.4); }
+.lvl-body { flex: 1; min-width: 0; }
+.lvl-top { font-size: 15px; margin-bottom: 7px; }
+.lvl-bar { height: 9px; border-radius: 999px; background: rgba(255,255,255,.08); overflow: hidden; }
+.lvl-fill { height: 100%; border-radius: 999px; background: linear-gradient(90deg, var(--accent), #3fe0a8); transition: width .6s ease; }
+.lvl-foot { font-size: 12px; margin-top: 6px; }

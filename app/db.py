@@ -529,6 +529,7 @@ _MIGRATIONS = [
     ("users", "cos_name", "TEXT"),       # nasazená barva nicku (klíč z cosmetics.CATALOG)
     ("users", "cos_frame", "TEXT"),      # nasazený rámeček avataru
     ("users", "cos_banner", "TEXT"),     # nasazený profil banner
+    ("users", "earned_total", "INTEGER NOT NULL DEFAULT 0"),  # XP = nasbíráno za celou dobu (levely; drží daemon)
 ]
 
 
@@ -556,6 +557,8 @@ def init_db() -> None:
             cols = [r[1] for r in conn.execute(f"PRAGMA table_info({table})").fetchall()]
             if col not in cols:
                 conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} {ddl}")
+        # index závislý na migrovaném sloupci (až PO ALTER, ne v SCHEMA – jinak chybí sloupec)
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_users_earned ON users(earned_total)")
         # výchozí anticheat pravidla (idempotentně)
         for r in ANTICHEAT_RULES:
             conn.execute("INSERT OR IGNORE INTO anticheat_rules (key, enabled, threshold) VALUES (?, ?, ?)",

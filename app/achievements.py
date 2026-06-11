@@ -96,6 +96,10 @@ def _collect_stats(conn) -> dict:
 def scan_and_award(conn) -> int:
     """Projde staty a udělí nové/vyšší odznaky. Vrátí počet nově udělených/povýšených."""
     stats = _collect_stats(conn)
+    # XP pro levely: ulož earned_total (= 'earned', už spočítané). Levelovací křivka je čistá funkce.
+    conn.executemany("UPDATE users SET earned_total = ? WHERE id = ?",
+                     [(int(s["earned"]), uid) for uid, s in stats.items()])
+    conn.commit()
     existing = {(r["user_id"], r["badge_key"]): r["tier"]
                 for r in conn.execute("SELECT user_id, badge_key, tier FROM user_badges")}
     ts = now_iso()

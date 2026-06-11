@@ -38,11 +38,15 @@ def stream_status(conn: sqlite3.Connection = Depends(db_dep)):
 
 @router.get("/leaderboard")
 def leaderboard(limit: int = Query(50, ge=1, le=200),
+                by: str = Query("earned"),     # "earned" = podle XP (nasbíráno), "balance" = podle zůstatku
                 conn: sqlite3.Connection = Depends(db_dep)):
+    from ..levels import level_info
+    # whitelist řazení (žádný user string do SQL): earned = levely, balance = bohatství
+    order = "earned_total DESC, points DESC" if by != "balance" else "points DESC, earned_total DESC"
     rows = conn.execute(
-        "SELECT id, username, avatar_url, points, role, is_sub, is_vip, is_og, "
+        "SELECT id, username, avatar_url, points, earned_total, role, is_sub, is_vip, is_og, "
         "cos_name, cos_frame, cos_banner FROM users "
-        "ORDER BY points DESC, username ASC LIMIT ?",
+        f"ORDER BY {order}, username ASC LIMIT ?",
         (limit,),
     ).fetchall()
     return [
@@ -51,6 +55,8 @@ def leaderboard(limit: int = Query(50, ge=1, le=200),
             "username": r["username"],
             "avatar_url": r["avatar_url"],
             "points": r["points"],
+            "earned": r["earned_total"] or 0,
+            "level": level_info(r["earned_total"])["level"],
             "role": r["role"],
             "is_sub": bool(r["is_sub"]),
             "is_vip": bool(r["is_vip"]),

@@ -152,6 +152,12 @@ def to_public(row: sqlite3.Row, include_email: bool = False) -> dict:
         data["cos"] = cosmetics.resolve(row)
     except Exception:
         data["cos"] = {"name": "", "frame": "", "banner": ""}
+    try:
+        from . import levels
+        et = row["earned_total"] if "earned_total" in row.keys() else 0
+        data["level"] = levels.level_info(et)
+    except Exception:
+        data["level"] = {"level": 0, "xp": 0, "into": 0, "span": 0, "to_next": 0, "pct": 0}
     if include_email:
         data["email"] = row["email"]
         data["ban_reason"] = row["ban_reason"]

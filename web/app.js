@@ -27,6 +27,21 @@ function esc(s) {
     .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 }
 function fmtPts(n) { return Number(n).toLocaleString("cs-CZ") + " sedláků"; }
+function fmtXP(n) { return Number(n || 0).toLocaleString("cs-CZ") + " XP"; }
+function levelOf(xp) { return Math.floor(Math.sqrt(Math.max(0, xp || 0) / 250)); }   // zrcadlí app/levels.py (C=250)
+function lvlChip(level) { return `<span class="lvl-chip">Lv ${level || 0}</span>`; }
+function myLevelCard() {
+  const lv = state.user && state.user.level;
+  if (!lv) return "";
+  return `<div class="lvl-card">
+      <div class="lvl-badge">${lv.level}</div>
+      <div class="lvl-body">
+        <div class="lvl-top">Level <b>${lv.level}</b> <span class="muted">· ${fmtXP(lv.xp)} celkem</span></div>
+        <div class="lvl-bar"><div class="lvl-fill" style="width:${Math.max(3, lv.pct)}%"></div></div>
+        <div class="lvl-foot muted">${lv.pct}% · ještě ${Number(lv.to_next).toLocaleString("cs-CZ")} XP do Level ${lv.level + 1} 🌾</div>
+      </div>
+    </div>`;
+}
 function userTier(rank) {   // titul podle POZICE na leaderboardu (rank); mimo TOP 100 = bez titulu
   if (!rank || rank < 1) return "";
   if (rank <= 3) return "UNREAL";
@@ -245,7 +260,7 @@ function renderHeader() {
   let right;
   if (u) {
     right = `<div class="pts-pill" title="Tvůj zůstatek"><span class="coin"></span><b>${Number(u.points).toLocaleString("cs-CZ")}</b><span class="lbl">sedláků</span></div>${cartBtn}
-      <a href="#/profile" class="user-chip" title="Můj profil">${avatarHTML(u.username, u.avatar_url, "", cosF(u))}<div style="display:flex;flex-direction:column;line-height:1.15"><span class="uc-name ${cosN(u)}">${esc(u.username)}</span><span class="uc-tier">${userTier(u.rank) ? "★ " + userTier(u.rank) : ""}</span></div></a>
+      <a href="#/profile" class="user-chip" title="Můj profil">${avatarHTML(u.username, u.avatar_url, "", cosF(u))}<div style="display:flex;flex-direction:column;line-height:1.15"><span class="uc-name ${cosN(u)}">${esc(u.username)}</span><span class="uc-tier">${u.level ? "Lv " + u.level.level : ""}${userTier(u.rank) ? (u.level ? " · " : "") + "★ " + userTier(u.rank) : ""}</span></div></a>
       <button class="btn btn-ghost btn-sm logout-top" data-action="logout" title="Odhlásit">Odhlásit</button>`;
   } else {
     right = `${cartBtn}<button class="btn btn-kick btn-sm" data-action="connect">🟢 <span class="kick-long">Připojit přes Kick</span><span class="kick-short">Připojit</span></button>`;
@@ -815,31 +830,34 @@ function tierChip(rank) {
   return `<span class="tier-chip tier-${cls}">${icon}${label}</span>`;
 }
 
-function podiumCard(r, isMe) {
+function podiumCard(r, isMe, mode = "earned") {
   const medal = r.rank === 1 ? "🥇" : r.rank === 2 ? "🥈" : "🥉";
   const crown = r.rank === 1 ? `<div class="pod-crown">👑</div>` : "";
   const rays = r.rank === 1 ? `<div class="pod-rays"></div>` : "";
   const sparks = r.rank === 1 ? `<i class="pod-spark s1">✨</i><i class="pod-spark s2">⭐</i><i class="pod-spark s3">✨</i><i class="pod-spark s4">⭐</i>` : "";
   const meTag = isMe ? `<span class="me-tag">TY</span>` : "";
+  const val = mode === "balance" ? r.points : (r.earned || 0);
+  const unit = mode === "balance" ? "sedláků" : "XP";
   return `
     <div class="podium-card podium-${r.rank}${isMe ? " me" : ""}" style="--d:${0.05 + r.rank * 0.08}s">
       ${rays}${sparks}${crown}<span class="pod-medal">${medal}</span>
       <div class="pod-av-wrap">${avatarHTML(r.username, r.avatar_url, "pod-av", cosF(r))}</div>
       <a class="pod-name prof-link ${cosN(r)}" href="#/u/${encodeURIComponent(r.username)}">${esc(r.username)}${meTag}</a>
-      <div class="pod-badges">${lbBadges(r)}</div>
-      <div class="pod-pts"><span class="pod-num" data-count="${r.points}">${Number(r.points).toLocaleString("cs-CZ")}</span><span>sedláků</span></div>
+      <div class="pod-badges">${lvlChip(r.level)}${lbBadges(r)}</div>
+      <div class="pod-pts"><span class="pod-num" data-count="${val}">${Number(val).toLocaleString("cs-CZ")}</span><span>${unit}</span></div>
       ${tierChip(r.rank)}
       <div class="pod-base"><span class="pod-baseshine"></span><span class="pod-basenum">${r.rank}</span></div>
     </div>`;
 }
 
-function lbRow(r, isMe) {
+function lbRow(r, isMe, mode = "earned") {
   const meTag = isMe ? `<span class="me-tag">TY</span>` : "";
+  const val = mode === "balance" ? fmtPts(r.points) : fmtXP(r.earned);
   return `
     <div class="lb-row${isMe ? " me" : ""}" style="--d:${Math.min(r.rank, 24) * 0.025}s">
       <span class="lb-rank">${r.rank}</span>${avatarHTML(r.username, r.avatar_url, "", cosF(r))}
-      <div class="lb-id"><a class="uname prof-link ${cosN(r)}" href="#/u/${encodeURIComponent(r.username)}">${esc(r.username)}${meTag}</a><span class="lb-sub">${lbBadges(r)}${tierChip(r.rank)}</span></div>
-      <span class="pts">${fmtPts(r.points)}</span>
+      <div class="lb-id"><a class="uname prof-link ${cosN(r)}" href="#/u/${encodeURIComponent(r.username)}">${esc(r.username)}${meTag}</a><span class="lb-sub">${lvlChip(r.level)}${lbBadges(r)}${tierChip(r.rank)}</span></div>
+      <span class="pts">${val}</span>
     </div>`;
 }
 
@@ -860,24 +878,44 @@ function animateCounts(root) {
 }
 async function pageLeaderboard() {
   const view = $("#view");
-  view.innerHTML = `<div class="page-head"><h1>🏆 Leaderboard</h1><p class="muted">Síň slávy – nejlepší sběrači sedláků.</p></div><div id="lb">${skeletonCards(1)}</div>`;
+  view.innerHTML = `<div class="page-head"><h1>🏆 Leaderboard</h1><p class="muted">Síň slávy – nejlepší sběrači sedláků.</p></div>
+    <div class="lb-tabs">
+      <button class="lb-tab active" data-action="lb-tab" data-by="earned">🏆 Levely</button>
+      <button class="lb-tab" data-action="lb-tab" data-by="balance">💰 Bohatství</button>
+    </div>
+    <div id="lb">${skeletonCards(1)}</div>`;
+  loadLeaderboard("earned");
+}
+
+let _lbSeq = 0;
+async function loadLeaderboard(by) {
+  by = by === "balance" ? "balance" : "earned";
+  const seq = ++_lbSeq;                       // jen poslední request smí renderovat (anti-race)
+  document.querySelectorAll(".lb-tab").forEach((t) => t.classList.toggle("active", t.dataset.by === by));
+  const box = $("#lb"); if (!box) return;
+  box.innerHTML = skeletonCards(1);
   try {
-    const rows = await api("/leaderboard?limit=100");
+    const rows = await api(`/leaderboard?by=${by}&limit=100`);
+    if (seq !== _lbSeq) return;               // mezitím přišel novější → tenhle render zahoď
     const myName = state.user && state.user.username;
     const isMe = (r) => !!myName && r.username === myName;
     const myRow = rows.find(isMe);
     const top = rows.slice(0, 3);
     const rest = rows.slice(3);
     const order = top.length === 3 ? [1, 0, 2] : [0, 1, 2]; // zlato doprostřed jen při plném pódiu
-    const podium = top.length ? `<div class="podium">${order.map((i) => { const r = top[i]; return r ? podiumCard(r, isMe(r)) : ""; }).join("")}</div>` : "";
+    const podium = top.length ? `<div class="podium">${order.map((i) => { const r = top[i]; return r ? podiumCard(r, isMe(r), by) : ""; }).join("")}</div>` : "";
+    const meMetric = by === "balance" ? fmtPts(myRow ? myRow.points : 0) : `Level ${myRow ? myRow.level : 0} · ${fmtXP(myRow ? myRow.earned : 0)}`;
     const myBar = myRow
-      ? `<div class="lb-mybar">📍 Tvoje pozice: <b>#${myRow.rank}</b> · <b>${fmtPts(myRow.points)}</b></div>`
+      ? `<div class="lb-mybar">📍 Tvoje pozice: <b>#${myRow.rank}</b> · <b>${meMetric}</b></div>`
       : (myName ? `<div class="lb-mybar">Zatím nejsi v TOP ${rows.length} – sbírej sedláky! 🌾</div>` : "");
-    const list = rest.length ? `<div class="lb-list">${rest.map((r) => lbRow(r, isMe(r))).join("")}</div>` : "";
-    $("#lb").innerHTML = (rows.length ? `<div class="lb-meta">🌾 TOP ${rows.length} diváků</div>` : "") + podium + myBar + list + (rows.length ? "" : `<div class="empty">Zatím žádní uživatelé.</div>`) + `<div id="chatLeaders"></div>`;
-    animateCounts($("#lb"));
+    const list = rest.length ? `<div class="lb-list">${rest.map((r) => lbRow(r, isMe(r), by)).join("")}</div>` : "";
+    const head = by === "earned"
+      ? `<div class="lb-meta">♾️ Podle nasbíraných sedláků za celou dobu (XP) — nikdy se neresetuje</div>${myLevelCard()}`
+      : `<div class="lb-meta">💰 Podle aktuálního zůstatku na účtu</div>`;
+    box.innerHTML = head + podium + myBar + list + (rows.length ? "" : `<div class="empty">Zatím žádní uživatelé.</div>`) + `<div id="chatLeaders"></div>`;
+    animateCounts(box);
     loadChatLeaders();
-  } catch (e) { $("#lb").innerHTML = `<div class="empty">${esc(e.message)}</div>`; }
+  } catch (e) { box.innerHTML = `<div class="empty">${esc(e.message)}</div>`; }
 }
 
 async function loadChatLeaders() {
@@ -908,7 +946,7 @@ async function pageUserProfile(nick) {
       <div class="profile-hero">
         ${avatarHTML(p.username, p.avatar_url, "prof-av", cosF(p))}
         <div class="ph-info">
-          <h1><span class="${cosN(p)}">${esc(p.username)}</span> ${roleBadge(p.role)}</h1>
+          <h1><span class="${cosN(p)}">${esc(p.username)}</span> ${lvlChip(levelOf(p.earned_total))} ${roleBadge(p.role)}</h1>
           <div class="faint">${league ? "★ " + esc(league) + " · " : ""}#${p.rank} v leaderboardu · člen od ${since}</div>
           <div class="ph-badges">${subVipBadges(p) || ""}</div>
         </div>
@@ -3816,6 +3854,7 @@ function handleAction(action, el) {
     case "claim-partner": claimPartnerLink(el.dataset.id, el.dataset.url); break;
     case "cos-buy": buyCosmetic(el.dataset.key); break;
     case "cos-equip": equipCosmetic(el.dataset.key); break;
+    case "lb-tab": loadLeaderboard(el.dataset.by); break;
     case "maint-on": doMaintOn(el); break;
     case "maint-on-time": doMaintOnTime(); break;
     case "maint-off": doMaintOff(); break;
