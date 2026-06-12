@@ -222,6 +222,12 @@ class ShopDiscountIn(BaseModel):
     live_only: int = Field(default=0, ge=0, le=1)
 
 
+class BanClusterIn(BaseModel):
+    """Hromadný ban clusteru účtů (alt farma). Staff/admin se přeskočí."""
+    user_ids: list[int] = Field(default_factory=list)
+    reason: str = Field(default="", max_length=200)
+
+
 class DropClaimIn(BaseModel):
     code: str = Field(min_length=1, max_length=64)
     hp: Optional[str] = ""        # honeypot – boti vyplní, lidé ne

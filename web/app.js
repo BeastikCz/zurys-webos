@@ -2126,7 +2126,8 @@ function economyDashboardHTML(e) {
     </div>
     <div class="dash-columns">
       <div><b>Top zisk 24h</b>${(e.top_earners || []).length ? e.top_earners.map((u) => row(u, u.gained, "zisk")).join("") : `<div class="empty">Zadny zisk.</div>`}</div>
-      <div><b>Top zustatky</b>${(e.top_holders || []).map((u) => row(u, u.points, "pts")).join("")}</div>
+      <div><b>Top zustatky 🐋</b>${(e.top_holders || []).map((u) => row(u, u.points, "pts")).join("")}</div>
+      <div><b>Top utraceci 💸</b>${(e.top_spenders || []).length ? e.top_spenders.map((u) => row(u, u.spent, "utr")).join("") : `<div class="empty">Zatim nikdo.</div>`}</div>
     </div>
   </div>`;
 }
@@ -2925,6 +2926,18 @@ function userAdminTools(u, isAdmin) {
     <button class="mini-btn ${u.admin_note ? "on" : ""}" data-action="user-note" data-id="${u.id}" data-name="${esc(u.username)}" data-note="${esc(u.admin_note || "")}" title="Admin poznamka">✎</button>
   </div>${u.admin_note ? `<div class="admin-note-preview">${esc(u.admin_note)}</div>` : ""}`;
 }
+async function banCluster(idsCsv, label) {
+  const ids = (idsCsv || "").split(",").map(Number).filter(Boolean);
+  if (!ids.length) return;
+  if (!confirm(`Zbanovat celý cluster (${ids.length} účtů) — ${label}?\nStaff/admin se přeskočí. Hromadnou akci nelze snadno vrátit.`)) return;
+  const reason = prompt("Důvod banu:", "alt farma (" + label + ")");
+  if (reason === null) return;
+  try {
+    const r = await api("/admin/security/ban-cluster", { method: "POST", body: { user_ids: ids, reason } });
+    toast(`Zbanováno ${r.banned} účtů${r.skipped ? ` · ${r.skipped} staff přeskočeno` : ""} 🔨`, "success");
+    adminSecurity();
+  } catch (e) { toast(e.message, "error"); }
+}
 async function adminUsers() {
   const box = $("#adminContent");
   try {
@@ -2934,6 +2947,7 @@ async function adminUsers() {
       <form class="toolbar" data-submit="user-search">
         <input class="input grow" id="userSearch" placeholder="🔍 Hledat podle jména…" value="${esc(adminState.userQuery)}">
         <button class="btn btn-ghost" type="submit">Hledat</button>
+        <a class="btn btn-ghost" href="/api/admin/export/users.csv" title="Export všech uživatelů: zůstatek, utraceno, nasbíráno, registrace">📥 CSV</a>
       </form>
       <div class="table-wrap"><table class="tbl"><thead><tr><th>Uživatel</th><th>${isAdmin ? "Kick / IP" : "Kick"}</th><th>Role</th><th>Body</th><th>Upravit body</th><th>Stav</th></tr></thead><tbody>
       ${list.map((u) => `<tr>
@@ -3743,7 +3757,7 @@ async function adminSecurity() {
     const pfQS = `q=${encodeURIComponent(adminState.pfQuery)}&flow=${adminState.pfFlow}`
       + `&min_amount=${adminState.pfMin}&reason=${encodeURIComponent(adminState.pfReason)}`
       + `&limit=${adminState.pfLimit}&offset=${adminState.pfOffset}`;
-    const [ac, sessions, logins, rules, audit, ipbans, traffic, gifts, pf] = await Promise.all([
+    const [ac, sessions, logins, rules, audit, ipbans, traffic, gifts, pf, funnel] = await Promise.all([
       api("/admin/security/anticheat"),
       api("/admin/security/sessions"),
       api("/admin/security/logins?" + loginsQS),
@@ -3753,6 +3767,7 @@ async function adminSecurity() {
       api("/admin/security/traffic"),
       api("/admin/security/gifts?limit=100"),
       api("/admin/security/points-feed?" + pfQS),
+      api("/admin/security/funnel"),
     ]);
 
     const rf = ac.rapid_farming || [], ra = ac.redeem_abuse || [];
@@ -3765,6 +3780,7 @@ async function adminSecurity() {
           <div class="row-between"><b>🚩 Sdílená IP <span class="code-pill">${esc(s.ip)}</span></b><span class="badge badge-admin">${s.user_count} účtů</span></div>
           <div class="muted" style="font-size:13px;margin:7px 0 10px">Z této IP se přihlásilo více účtů – může jít o farmu alt účtů na body.</div>
           <div class="stack-12">${s.users.map(acUserRow).join("")}</div>
+          <button class="btn btn-danger btn-sm" data-action="ban-cluster" data-ids="${s.users.map((u) => u.id).join(",")}" data-label="IP ${esc(s.ip)}" style="margin-top:10px">🔨 Zbanovat celý cluster (${s.user_count})</button>
         </div>`).join("");
       alerts += ra.map((r) => `
         <div class="panel bad" style="margin-bottom:12px">
@@ -3803,13 +3819,44 @@ async function adminSecurity() {
         <div class="panel gold" style="margin-bottom:12px">
           <div class="row-between"><b>🖥️ Stejný otisk prohlížeče, víc účtů <span class="code-pill">fp:${esc(d.fp)}</span></b><span class="badge badge-admin">${d.user_count} účtů</span></div>
           <div class="muted" style="font-size:13px;margin:7px 0 10px">⚠️ Otisk je <b>hrubý</b> (model zařízení + prohlížeč + jazyk), takže ho můžou sdílet i <b>různí lidé se stejným mobilem</b> — sám o sobě to <b>není důkaz</b> alt-farmy. Ověř tvrdými signály: <b>sdílená IP</b> a <b>převody/gifty mezi účty</b>. (Ban jednoho už NEzablokuje sdílený otisk — jen unikátní pro pár účtů.)</div>
-          <div class="stack-12">${d.users.map(acUserRow).join("")}</div></div>`).join("");
+          <div class="stack-12">${d.users.map(acUserRow).join("")}</div><button class="btn btn-danger btn-sm" data-action="ban-cluster" data-ids="${d.users.map((u) => u.id).join(",")}" data-label="otisk fp:${esc(d.fp)}" style="margin-top:10px">🔨 Zbanovat celý cluster (${d.user_count})</button></div>`).join("");
       alerts += (ac.vpn_ips || []).map((v) => `
         <div class="panel gold" style="margin-bottom:12px">
           <div class="row-between"><b>🛡️ VPN / datacenter IP <span class="code-pill">${esc(v.ip)}</span></b><span class="badge badge-vip">${v.users.length} účtů</span></div>
           <div class="muted" style="font-size:13px;margin:7px 0 8px">IP spadá do známého datacenter/VPN rozsahu — možný pokus o obejití (multiúčet / evasion banu).</div>
           <div class="stack-12">${v.users.map(acUserRow).join("")}</div></div>`).join("");
     }
+    // --- Funnel / chip-dumping: přelévání bodů mezi dvojicemi účtů ---
+    const fPairs = (funnel && funnel.pairs) || [], housePl = (funnel && funnel.house_pl) || [];
+    let funnelHtml = `<div class="section-title" style="margin-top:26px">💸 Přelévání bodů mezi účty <span class="faint" style="font-size:12px;font-weight:400">— chip-dumping: kdo komu sype body přes duely / piškvorky / dary</span></div>`;
+    if (!fPairs.length) {
+      funnelHtml += `<div class="panel ok">✅ Žádné podezřelé jednostranné převody mezi dvojicemi.</div>`;
+    } else {
+      funnelHtml += fPairs.map((p) => {
+        const link = p.shared_ip || p.shared_device;
+        const tags = `${p.shared_ip ? `<span class="badge badge-admin">⚠️ sdílená IP</span> ` : ""}${p.shared_device ? `<span class="badge badge-admin">⚠️ stejné zařízení</span>` : ""}`;
+        const via = [];
+        if (p.via.duels) via.push(`${p.via.duels}× duel`);
+        if (p.via.games) via.push(`${p.via.games}× piškvorky`);
+        if (p.via.gifts) via.push(`${p.via.gifts}× dar`);
+        const ids = [p.source && p.source.id, p.receiver && p.receiver.id].filter(Boolean);
+        const sN = esc((p.source && p.source.username) || "?"), rN = esc((p.receiver && p.receiver.username) || "?");
+        return `
+        <div class="panel ${link ? "bad" : "gold"}" style="margin-bottom:12px">
+          <div class="row-between"><b>${link ? "🚩" : "💸"} ${sN} → ${rN}</b><span class="badge ${link ? "badge-admin" : "badge-vip"}">netto +${fmtPts(p.net)}</span></div>
+          <div class="muted" style="font-size:13px;margin:7px 0 8px"><b>${sN}</b> přelil/poslal účtu <b>${rN}</b> netto <b>${fmtPts(p.net)}</b> přes ${via.join(" + ") || "—"}${p.matches ? ` · výhra příjemce <b>${p.recv_wins}/${p.matches}</b>` : ""}. ${tags || ""}</div>
+          <div class="stack-12">${acUserRow(p.receiver)}${acUserRow(p.source)}</div>
+          ${ids.length === 2 ? `<button class="btn btn-danger btn-sm" data-action="ban-cluster" data-ids="${ids.join(",")}" data-label="funnel ${sN}→${rN}" style="margin-top:10px">🔨 Zbanovat oba</button>` : ""}
+        </div>`;
+      }).join("");
+    }
+    if (housePl.length) {
+      funnelHtml += `<div class="section-title" style="margin-top:22px">🏦 Nejvíc v plusu vůči house <span class="faint" style="font-size:12px;font-weight:400">— čistý zisk z PvP + predikcí; velký objem = spíš variance, malý objem + velký zisk = prověř</span></div>
+      <div class="table-wrap"><table class="tbl"><thead><tr><th>Uživatel</th><th>Čistý zisk</th><th>Objem vsazeno</th></tr></thead><tbody>
+      ${housePl.map((h) => `<tr><td>${uLink(h.user.username)} ${roleBadge(h.user.role)}</td><td><b style="color:#46d369">+${fmtPts(h.net)}</b></td><td class="faint">${fmtPts(h.volume)}</td></tr>`).join("")}
+      </tbody></table></div>`;
+    }
+
     const rulesHtml = rules.map(ruleRowHTML).join("");
 
     // --- Provoz / anti-DDoS ---
@@ -3879,6 +3926,7 @@ async function adminSecurity() {
       <div class="sec-pane${adminState.secTab === "anticheat" ? " active" : ""}" data-pane="anticheat">
       <div class="section-title">🚨 Anticheat detekce <span class="faint" style="font-size:12px;font-weight:400">— VPN detekce proxycheck: <b style="color:${ac.iprep_enabled ? "#46d369" : "#999"}">${ac.iprep_enabled ? "ZAP ✓" : "VYP"}</b></span></div>
       ${alerts}
+      ${funnelHtml}
 
       <div class="section-title" style="margin-top:26px">⚙️ Anticheat pravidla</div>
       <div class="ac-rules">${rulesHtml}</div>
@@ -4169,6 +4217,7 @@ function handleAction(action, el) {
     case "cos-equip": equipCosmetic(el.dataset.key); break;
     case "dm-send": dmSend(el.dataset.mode, el.dataset.id); break;
     case "shop-disc-save": saveShopDiscount(); break;
+    case "ban-cluster": banCluster(el.dataset.ids, el.dataset.label); break;
     case "fair-rotate": fairRotate(); break;
     case "fair-verify": fairVerify(); break;
     case "self-excl": selfExclude(el.dataset.dur); break;

@@ -23,7 +23,7 @@ from ..models import (ProductIn, SkinLookupIn, SkinSearchIn, ImageUploadIn, User
                       BanIn, DropCreateIn, AutoDropIn, RuleIn, EconomyIn, IpBanIn, IpUnbanIn, BotToggleIn,
                       LiveModeIn, LegacyImportIn, PatchNoteIn, CommunityGoalIn, ManualOrderIn, ManualOrderBulkIn,
                       PointsLogPurgeIn, PartnerLinkIn, PartnerFlashConfigIn, GamesRakeIn, LiveHappyIn,
-                      SelfExcludeIn, ShopDiscountIn)
+                      SelfExcludeIn, ShopDiscountIn, BanClusterIn)
 from ..services import product_public, shop_discount_pct
 from ..security import new_code, secure_choice
 
@@ -187,6 +187,9 @@ def _economy_dashboard(conn: sqlite3.Connection, c24: str, c7: str) -> dict:
             "WHERE l.change > 0 AND l.created_at >= ? GROUP BY l.user_id ORDER BY gained DESC LIMIT 8", (c24,))],
         "top_holders": [dict(r) for r in conn.execute(
             "SELECT id, username, points FROM users ORDER BY points DESC, username ASC LIMIT 8")],
+        "top_spenders": [dict(r) for r in conn.execute(
+            "SELECT u.id, u.username, SUM(o.points_spent) AS spent FROM orders o JOIN users u ON u.id = o.user_id "
+            "GROUP BY o.user_id ORDER BY spent DESC LIMIT 8")],
     }
 
 
@@ -1448,6 +1451,21 @@ def export_audit_csv(action: str = Query("", max_length=64),
         f"webos-audit-{datetime.now(timezone.utc).date()}.csv")
 
 
+@router.get("/export/users.csv")
+def export_users_csv(conn: sqlite3.Connection = Depends(db_dep)):
+    """Export uživatelů do CSV: zůstatek, utraceno (shop), nasbíráno, registrace, ban."""
+    rows = conn.execute(
+        "SELECT u.id, u.username, u.kick_username, u.role, u.points, u.banned, u.created_at, "
+        "  (SELECT COALESCE(SUM(points_spent),0) FROM orders o WHERE o.user_id = u.id) AS spent, "
+        "  (SELECT COALESCE(SUM(change),0) FROM points_log l WHERE l.user_id = u.id AND l.change > 0) AS earned "
+        "FROM users u ORDER BY u.points DESC").fetchall()
+    out = [(r["id"], r["username"], r["kick_username"] or "", r["role"], r["points"],
+            r["spent"], r["earned"], 1 if r["banned"] else 0, r["created_at"]) for r in rows]
+    return _csv_response(out,
+        ["id", "uzivatel", "kick_nick", "role", "zustatek", "utraceno", "nasbirano", "ban", "registrace"],
+        f"webos-uzivatele-{datetime.now(timezone.utc).date()}.csv")
+
+
 _DC_NETS = []
 for _c in DATACENTER_CIDRS:
     try:
@@ -1614,6 +1632,107 @@ def security_negatives(conn: sqlite3.Connection = Depends(db_dep)):
     return {"count": len(rows), "users": [
         {"id": r["id"], "username": r["username"], "kick_username": r["kick_username"],
          "points": r["points"], "banned": bool(r["banned"])} for r in rows]}
+
+
+@router.get("/security/funnel")
+def security_funnel(conn: sqlite3.Connection = Depends(db_dep)):
+    """Přelévání bodů mezi DVOJICEMI účtů (chip-dumping). Sleduje jednostranný tok přes
+    duely + piškvorky + dary. Vysoký net + sdílená IP/zařízení = skoro jistý alt-farm.
+    Plus 'house_pl': kdo je nejvíc v plusu vůči house (exploit / příjemce collusion)."""
+    NET_MIN, MATCH_MIN, TOP = 1000, 4, 30
+    pairs: dict = {}
+
+    def acc(src, dst, amount, kind):
+        """amount teče SRC -> DST (dst dostal). kind: 'duels'|'games'|'gifts'."""
+        if not src or not dst or src == dst or amount <= 0:
+            return
+        lo, hi = (src, dst) if src < dst else (dst, src)
+        p = pairs.get((lo, hi))
+        if p is None:
+            p = {"matches": 0, "net_lo": 0, "duels": 0, "games": 0, "gifts": 0, "lo_wins": 0, "hi_wins": 0}
+            pairs[(lo, hi)] = p
+        p["net_lo"] += amount if dst == lo else -amount   # kladné = tok směrem k LO
+        p[kind] += 1
+        if kind != "gifts":
+            p["matches"] += 1
+            p["lo_wins" if dst == lo else "hi_wins"] += 1
+
+    # duely + piškvorky: vítěz bere stake od poraženého
+    for table, kind in (("duels", "duels"), ("games", "games")):
+        for r in conn.execute(
+                f"SELECT p1_id, p2_id, stake, winner FROM {table} "
+                f"WHERE status='finished' AND winner IN (1,2) AND p2_id IS NOT NULL"):
+            win = r["p1_id"] if r["winner"] == 1 else r["p2_id"]
+            lose = r["p2_id"] if r["winner"] == 1 else r["p1_id"]
+            acc(lose, win, r["stake"], kind)
+
+    # dary: odesílatel má řádek 'Dar pro X' (záporný change), příjemce = username X
+    for r in conn.execute(
+            "SELECT user_id, change, reason FROM points_log WHERE reason LIKE 'Dar pro %' AND change < 0"):
+        name = (r["reason"] or "").removeprefix("Dar pro ").removesuffix(" 🎁").strip()
+        rcp = conn.execute("SELECT id FROM users WHERE username = ?", (name,)).fetchone()
+        if rcp:
+            acc(r["user_id"], rcp["id"], -r["change"], "gifts")
+
+    flagged = []
+    for (lo, hi), p in pairs.items():
+        net = abs(p["net_lo"])
+        if net < NET_MIN and p["matches"] < MATCH_MIN:
+            continue
+        receiver = lo if p["net_lo"] >= 0 else hi
+        source = hi if p["net_lo"] >= 0 else lo
+        flagged.append((lo, hi, receiver, source, net, p))
+    flagged.sort(key=lambda x: -x[4])
+    flagged = flagged[:TOP]
+
+    out = []
+    for lo, hi, receiver, source, net, p in flagged:
+        umap = {u["id"]: u for u in _users_by_ids(conn, [lo, hi])}
+        shared_ip = conn.execute(
+            "SELECT 1 FROM login_events a JOIN login_events b ON a.ip = b.ip "
+            "WHERE a.user_id=? AND b.user_id=? AND a.ip IS NOT NULL AND a.ip!='' LIMIT 1",
+            (lo, hi)).fetchone() is not None
+        shared_dev = conn.execute(
+            "SELECT 1 FROM client_signals a JOIN client_signals b ON a.fp_hash = b.fp_hash "
+            "WHERE a.user_id=? AND b.user_id=? AND a.fp_hash IS NOT NULL LIMIT 1",
+            (lo, hi)).fetchone() is not None
+        recv_wins = p["lo_wins"] if receiver == lo else p["hi_wins"]
+        out.append({
+            "receiver": umap.get(receiver), "source": umap.get(source),
+            "net": net, "matches": p["matches"], "recv_wins": recv_wins,
+            "via": {"duels": p["duels"], "games": p["games"], "gifts": p["gifts"]},
+            "shared_ip": shared_ip, "shared_device": shared_dev,
+        })
+    out.sort(key=lambda x: (not (x["shared_ip"] or x["shared_device"]), -x["net"]))
+
+    # house P/L: čistý zisk vůči house z PvP + predikcí (bez rake; volume = objem na posouzení variance)
+    pl: dict = {}
+
+    def pli(uid):
+        q = pl.get(uid)
+        if q is None:
+            q = {"net": 0, "vol": 0}
+            pl[uid] = q
+        return q
+
+    for table in ("duels", "games"):
+        for r in conn.execute(
+                f"SELECT p1_id, p2_id, stake, winner FROM {table} "
+                f"WHERE status='finished' AND winner IN (1,2) AND p2_id IS NOT NULL"):
+            win = r["p1_id"] if r["winner"] == 1 else r["p2_id"]
+            lose = r["p2_id"] if r["winner"] == 1 else r["p1_id"]
+            qw = pli(win); qw["net"] += r["stake"]; qw["vol"] += r["stake"]
+            ql = pli(lose); ql["net"] -= r["stake"]; ql["vol"] += r["stake"]
+    for r in conn.execute("SELECT user_id, amount, payout FROM prediction_bets"):
+        q = pli(r["user_id"]); q["net"] += r["payout"] - r["amount"]; q["vol"] += r["amount"]
+    winners = sorted(((uid, q) for uid, q in pl.items() if q["net"] > 0),
+                     key=lambda x: -x[1]["net"])[:12]
+    umap2 = {u["id"]: u for u in _users_by_ids(conn, [uid for uid, _ in winners])}
+    house_pl = [{"user": umap2.get(uid), "net": q["net"], "volume": q["vol"]}
+                for uid, q in winners if umap2.get(uid)]
+
+    return {"pairs": out, "house_pl": house_pl,
+            "thresholds": {"net_min": NET_MIN, "match_min": MATCH_MIN}}
 
 
 @router.get("/security/anticheat")
@@ -1793,6 +1912,29 @@ def admin_gamble_block(user_id: int, data: SelfExcludeIn, request: Request,
     conn.commit()
     record_audit(conn, admin, request, "user.gamble_block", f"{u['username']} (#{user_id})", data.duration)
     return {"gamble_block_until": newval}
+
+
+@router.post("/security/ban-cluster")
+def ban_cluster(data: BanClusterIn, request: Request,
+                conn: sqlite3.Connection = Depends(db_dep),
+                admin: sqlite3.Row = Depends(require_broadcaster)):
+    """Zbanuje celý cluster účtů (alt farma) naráz. Admina vždy přeskočí; staff přeskočí, pokud
+    nebanuje sám admin. Sundá session. (Ban zařízení neřeší – to dělá ban po jednom.)"""
+    banned, skipped = 0, 0
+    for uid in data.user_ids[:200]:
+        u = conn.execute("SELECT role FROM users WHERE id = ?", (uid,)).fetchone()
+        if not u:
+            continue
+        if u["role"] == ROLE_ADMIN or (admin["role"] != ROLE_ADMIN and u["role"] in STAFF_ROLES):
+            skipped += 1
+            continue
+        conn.execute("UPDATE users SET banned = 1, ban_reason = ? WHERE id = ?",
+                     ((data.reason or "alt cluster")[:200], uid))
+        conn.execute("DELETE FROM sessions WHERE user_id = ?", (uid,))
+        banned += 1
+    conn.commit()
+    record_audit(conn, admin, request, "ban.cluster", f"{banned} účtů", (data.reason or "")[:200])
+    return {"banned": banned, "skipped": skipped}
 
 
 @router.post("/users/{user_id}/ban")
