@@ -336,6 +336,13 @@ CREATE TABLE IF NOT EXISTS fair_log (
     created_at  TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_fairlog_user ON fair_log(user_id, id);
+CREATE TABLE IF NOT EXISTS rank_snapshots (
+    user_id INTEGER NOT NULL,
+    day     TEXT NOT NULL,                        -- YYYY-MM-DD
+    rank    INTEGER NOT NULL,
+    PRIMARY KEY (user_id, day)
+);
+CREATE INDEX IF NOT EXISTS idx_ranksnap_day ON rank_snapshots(day);
 CREATE INDEX IF NOT EXISTS idx_pred_opts_pred ON prediction_options(prediction_id);
 CREATE INDEX IF NOT EXISTS idx_pred_bets_pred ON prediction_bets(prediction_id);
 

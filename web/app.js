@@ -29,11 +29,11 @@ function esc(s) {
 function fmtPts(n) { return Number(n).toLocaleString("cs-CZ") + " sedláků"; }
 function userTier(rank) {   // titul podle POZICE na leaderboardu (rank); mimo TOP 100 = bez titulu
   if (!rank || rank < 1) return "";
-  if (rank <= 3) return "UNREAL";
-  if (rank <= 10) return "ELITE";
-  if (rank <= 30) return "GOLD";
-  if (rank <= 50) return "SILVER";
-  if (rank <= 100) return "BRONZE";
+  if (rank <= 3) return "Král";
+  if (rank <= 10) return "Zeman";
+  if (rank <= 30) return "Rychtář";
+  if (rank <= 50) return "Hospodář";
+  if (rank <= 100) return "Nádeník";
   return "";
 }
 const RARITY = {
@@ -892,14 +892,27 @@ async function buyProduct(id) {
 
 /* ---------- LEADERBOARD ---------- */
 // Liga (titul) podle POZICE na leaderboardu (rank). [maxRank, emoji, label, cls, mult]; rank > 100 = bez titulu.
-const TIERS = [[3, "🌈", "UNREAL", "unreal", 10], [10, "💎", "ELITE", "elite", 5], [30, "🥇", "GOLD", "gold", 3], [50, "🥈", "SILVER", "silver", 2], [100, "🥉", "BRONZE", "bronze", 2]];
+const TIERS = [[3, "👑", "KRÁL", "unreal", 10], [10, "⚜️", "ZEMAN", "elite", 5], [30, "🏘️", "RYCHTÁŘ", "gold", 3], [50, "🐂", "HOSPODÁŘ", "silver", 2], [100, "🌱", "NÁDENÍK", "bronze", 2]];
 function tierByRank(rank) { return (rank && rank >= 1) ? (TIERS.find(([max]) => rank <= max) || null) : null; }
 function tierChip(rank) {
   const t = tierByRank(rank);
   if (!t) return "";   // mimo TOP 100 → bez titulu
   const [, e, label, cls] = t;
-  const icon = (cls === "unreal" || cls === "elite") ? `${e} ` : `<span class="tier-ingot"></span>`;   // UNREAL 🌈 / ELITE 💎, jinak cihla
-  return `<span class="tier-chip tier-${cls}">${icon}${label}</span>`;
+  return `<span class="tier-chip tier-${cls}">${e} ${label}</span>`;   // feudální erb (emoji) pro každý tier
+}
+const TIER_COLOR = { unreal: "#f0c040", elite: "#a78bfa", gold: "#79b8e6", silver: "#e0a878", bronze: "#9ccc65" };
+function tierBand(cls) {
+  const t = TIERS.find((x) => x[3] === cls); if (!t) return "";
+  return `<div class="lb-band" style="color:${TIER_COLOR[cls] || "#8b93a3"}">${t[1]} ${t[2]} <span class="lb-band-line"></span></div>`;
+}
+function lbSectioned(rows, isMe) {       // seskupí řádky leaderboardu do feudálních lig se záhlavím
+  let html = "", last = null;
+  for (const r of rows) {
+    const t = tierByRank(r.rank); const cls = t ? t[3] : "_none";
+    if (cls !== last) { if (t) html += tierBand(cls); last = cls; }
+    html += lbRow(r, isMe(r));
+  }
+  return `<div class="lb-list lb-sectioned">${html}</div>`;
 }
 
 function podiumCard(r, isMe) {
@@ -920,12 +933,20 @@ function podiumCard(r, isMe) {
     </div>`;
 }
 
+function deltaTag(d) {
+  if (d == null) return `<span class="lb-delta flat">·</span>`;       // bez snapshotu = beztečka
+  if (d > 0) return `<span class="lb-delta up">▲${d}</span>`;
+  if (d < 0) return `<span class="lb-delta down">▼${-d}</span>`;
+  return `<span class="lb-delta flat">—</span>`;
+}
 function lbRow(r, isMe) {
   const meTag = isMe ? `<span class="me-tag">TY</span>` : "";
+  const fire = r.climber ? `<span class="lb-fire">🔥 STOUPÁ TÝDNE</span>` : "";
   return `
-    <div class="lb-row${isMe ? " me" : ""}" style="--d:${Math.min(r.rank, 24) * 0.025}s">
+    <div class="lb-row${isMe ? " me" : ""}${r.climber ? " climber" : ""}" style="--d:${Math.min(r.rank, 24) * 0.025}s">
       <span class="lb-rank">${r.rank}</span>${avatarHTML(r.username, r.avatar_url, "", cosF(r))}
-      <div class="lb-id"><a class="uname prof-link ${cosN(r)}" href="#/u/${encodeURIComponent(r.username)}">${esc(r.username)}${meTag}</a><span class="lb-sub">${lbBadges(r)}${tierChip(r.rank)}</span></div>
+      <div class="lb-id"><a class="uname prof-link ${cosN(r)}" href="#/u/${encodeURIComponent(r.username)}">${esc(r.username)}${meTag}</a><span class="lb-sub">${lbBadges(r)}${tierChip(r.rank)}${fire}</span></div>
+      ${deltaTag(r.delta)}
       <span class="pts">${fmtPts(r.points)}</span>
     </div>`;
 }
@@ -957,11 +978,21 @@ async function pageLeaderboard() {
     const rest = rows.slice(3);
     const order = top.length === 3 ? [1, 0, 2] : [0, 1, 2]; // zlato doprostřed jen při plném pódiu
     const podium = top.length ? `<div class="podium">${order.map((i) => { const r = top[i]; return r ? podiumCard(r, isMe(r)) : ""; }).join("")}</div>` : "";
+    const myIdx = rows.findIndex(isMe);
+    let predskok = "";
+    if (myRow && myIdx > 0) {
+      const above = rows[myIdx - 1];
+      const need = Math.max(1, above.points - myRow.points + 1);
+      predskok = `+${need.toLocaleString("cs-CZ")} sedláků a přeskočíš <b>@${esc(above.username)}</b>`;
+    }
+    const myDelta = (myRow && myRow.delta != null && myRow.delta !== 0)
+      ? ` · <span class="${myRow.delta > 0 ? "lb-delta up" : "lb-delta down"}">${myRow.delta > 0 ? "▲" + myRow.delta : "▼" + (-myRow.delta)} dnes</span>` : "";
     const myBar = myRow
-      ? `<div class="lb-mybar">📍 Tvoje pozice: <b>#${myRow.rank}</b> · <b>${fmtPts(myRow.points)}</b></div>`
-      : (myName ? `<div class="lb-mybar">Zatím nejsi v TOP ${rows.length} – sbírej sedláky! 🌾</div>` : "");
-    const list = rest.length ? `<div class="lb-list">${rest.map((r) => lbRow(r, isMe(r))).join("")}</div>` : "";
-    $("#lb").innerHTML = (rows.length ? `<div class="lb-meta">🌾 TOP ${rows.length} diváků</div>` : "") + podium + myBar + list + (rows.length ? "" : `<div class="empty">Zatím žádní uživatelé.</div>`) + `<div id="chatLeaders"></div>`;
+      ? `<div class="lb-mybar"><div class="lb-mybar-av">${avatarHTML(myRow.username, myRow.avatar_url, "", cosF(myRow))}</div><div class="lb-mybar-body"><div class="lb-mybar-top">📍 Tvoje pozice: <b>#${myRow.rank}</b></div>${(predskok || myDelta) ? `<div class="lb-mybar-sub">${predskok}${myDelta}</div>` : ""}</div>${tierChip(myRow.rank)}</div>`
+      : (myName ? `<div class="lb-mybar" style="justify-content:center">Zatím nejsi v TOP ${rows.length} – sbírej sedláky! 🌾</div>` : "");
+    const list = rest.length ? lbSectioned(rest, isMe) : "";
+    const legend = rows.length ? `<div class="lb-legend">${TIERS.slice().reverse().map((t, i, a) => `<span style="color:${TIER_COLOR[t[3]] || "#8b93a3"}">${t[1]} ${t[2][0] + t[2].slice(1).toLowerCase()}</span>${i < a.length - 1 ? '<span class="lb-leg-sep">›</span>' : ""}`).join("")}</div>` : "";
+    $("#lb").innerHTML = (rows.length ? `<div class="lb-meta">🌾 TOP ${rows.length} diváků</div>` : "") + podium + myBar + list + legend + (rows.length ? "" : `<div class="empty">Zatím žádní uživatelé.</div>`) + `<div id="chatLeaders"></div>`;
     animateCounts($("#lb"));
     loadChatLeaders();
   } catch (e) { $("#lb").innerHTML = `<div class="empty">${esc(e.message)}</div>`; }
@@ -4883,7 +4914,7 @@ function onGameFinished(g) {
 /* ============================================================
    RANK-UP OSLAVA (konfety + toast)
 ============================================================ */
-const LEAGUE_LABELS = { bronze: "Bronze", silver: "Silver", gold: "Gold", elite: "Elite", unreal: "UNREAL" };
+const LEAGUE_LABELS = { bronze: "Nádeník", silver: "Hospodář", gold: "Rychtář", elite: "Zeman", unreal: "Král" };
 function celebrateConfetti() {
   const colors = ["#ff9d2e", "#46d369", "#ff5b5b", "#7c5cff", "#ffd23e", "#2ee6c5"];
   const wrap = document.createElement("div");

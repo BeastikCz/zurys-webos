@@ -9,8 +9,9 @@ import json
 import threading
 import time
 import traceback
+from datetime import date, timedelta
 
-from .db import get_conn, now_iso
+from .db import get_conn, now_iso, get_setting, set_setting
 
 CHECK_INTERVAL_SEC = 600   # sken každých 10 min – odznaky nejsou time-critical
 
@@ -118,7 +119,7 @@ def scan_and_award(conn) -> int:
 
 # Pořadí lig podle prestiže (pro detekci POSTUPU). "" = mimo TOP 100.
 _LEAGUE_ORDER = {"": 0, "bronze": 1, "silver": 2, "gold": 3, "elite": 4, "unreal": 5}
-_LEAGUE_LABEL = {"bronze": "Bronze", "silver": "Silver", "gold": "Gold", "elite": "Elite", "unreal": "UNREAL"}
+_LEAGUE_LABEL = {"bronze": "Nádeník", "silver": "Hospodář", "gold": "Rychtář", "elite": "Zeman", "unreal": "Král"}
 _SHOUTOUT_MIN = _LEAGUE_ORDER["gold"]   # bot oznámí v chatu jen postupy do Gold a výš
 OVERTAKE_NOTIFY_MAX_RANK = 100          # „přeskočil tě" jen pro lidi v TOP 100 (kolem lig)
 
@@ -175,6 +176,23 @@ def scan_rankups(conn) -> int:
     return len(announces)
 
 
+def snapshot_ranks(conn) -> int:
+    """1× DENNĚ uloží aktuální pozice (top 200) → podklad pro ▲▼ pohyby a „stoupá týдne".
+    Idempotentní na den (flag v app_settings). Drží ~10 dní, starší maže."""
+    today = date.today().isoformat()
+    if get_setting(conn, "rank_snapshot_day", "") == today:
+        return 0
+    rows = conn.execute(
+        "SELECT id FROM users WHERE banned = 0 ORDER BY points DESC, username ASC LIMIT 200").fetchall()
+    for rank, r in enumerate(rows, 1):
+        conn.execute("INSERT INTO rank_snapshots (user_id, day, rank) VALUES (?,?,?) "
+                     "ON CONFLICT(user_id, day) DO UPDATE SET rank = excluded.rank", (r["id"], today, rank))
+    conn.execute("DELETE FROM rank_snapshots WHERE day < ?", ((date.today() - timedelta(days=10)).isoformat(),))
+    set_setting(conn, "rank_snapshot_day", today)
+    conn.commit()
+    return len(rows)
+
+
 def _loop() -> None:
     while True:
         try:
@@ -182,6 +200,7 @@ def _loop() -> None:
             try:
                 scan_and_award(conn)
                 scan_rankups(conn)
+                snapshot_ranks(conn)                 # 1× denně pozice pro ▲▼ pohyby
                 from . import topchatter
                 topchatter.maybe_payout(conn)        # 1× denně výplata TOP 3 chatterů
             finally:

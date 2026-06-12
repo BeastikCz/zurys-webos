@@ -67,9 +67,26 @@ def leaderboard(limit: int = Query(50, ge=1, le=200),
         "ORDER BY points DESC, username ASC LIMIT ?",
         (limit,),
     ).fetchall()
-    return [
-        {
-            "rank": i + 1,
+    # ▲▼ pohyby z denních snapshotů (den/týден zpět). Chybí-li snapshot, delta = None (žádná šipka).
+    ysnap, wsnap = {}, {}
+    try:
+        from datetime import date, timedelta
+        yday = (date.today() - timedelta(days=1)).isoformat()
+        wago = (date.today() - timedelta(days=7)).isoformat()
+        ysnap = {r["user_id"]: r["rank"] for r in conn.execute(
+            "SELECT user_id, rank FROM rank_snapshots WHERE day = ?", (yday,))}
+        wsnap = {r["user_id"]: r["rank"] for r in conn.execute(
+            "SELECT user_id, rank FROM rank_snapshots WHERE day = ?", (wago,))}
+    except Exception:
+        pass
+    out, best_id, best_gain = [], None, 0
+    for i, r in enumerate(rows):
+        cur = i + 1
+        delta = (ysnap[r["id"]] - cur) if r["id"] in ysnap else None
+        if r["id"] in wsnap and (wsnap[r["id"]] - cur) > best_gain:
+            best_gain, best_id = wsnap[r["id"]] - cur, r["id"]
+        out.append({
+            "rank": cur,
             "username": r["username"],
             "avatar_url": r["avatar_url"],
             "points": r["points"],
@@ -78,9 +95,14 @@ def leaderboard(limit: int = Query(50, ge=1, le=200),
             "is_vip": bool(r["is_vip"]),
             "is_og": bool(r["is_og"]),
             "cos": cosmetics.resolve(r),
-        }
-        for i, r in enumerate(rows)
-    ]
+            "delta": delta,
+            "climber": False,
+        })
+    if best_id is not None and best_gain >= 3:            # „stoupá týдne" jen při reálném skoku (≥3 pozice)
+        for row, r in zip(out, rows):
+            if r["id"] == best_id:
+                row["climber"] = True
+    return out
 
 
 @router.get("/profile/public")
