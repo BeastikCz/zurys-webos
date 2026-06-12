@@ -304,7 +304,6 @@ function pageShop() {
   view.innerHTML = `
     <div class="ticker"><div class="ticker-track" id="tickerTrack"></div></div>
     <div id="dropBanner"></div>
-    <div id="chatGoal"></div>
     <div class="da-head"><h1>Zurys <span class="accent">Shop</span></h1>
       <p>Utrať nasbírané sedláky za prémiové skiny a odměny — instantky, limitky i tomboly. 🌾</p></div>
     <div id="happyBanner"></div>
@@ -317,10 +316,9 @@ function pageShop() {
   renderFilters();
   loadActivity();
   loadDropBanner();
-  loadCommunityGoal();
   loadSoldFeed();
   loadMilestone();
-  dropTimer = setInterval(() => { if (!document.hidden) { loadDropBanner(); loadCommunityGoal(); loadSoldFeed(); } }, 10000);
+  dropTimer = setInterval(() => { if (!document.hidden) { loadDropBanner(); loadSoldFeed(); } }, 10000);
   cardTimer = setInterval(updateCardTimers, 1000);
   shopState.page = 1; shopState.items = [];
   loadProducts(true);
@@ -1772,6 +1770,7 @@ function pageBonusy() {
   }
   view.innerHTML = `
     <div class="page-head"><h1>🎁 Denní odměny</h1><p class="muted">Vyzvedni si streak a zatoč kolem štěstí – každý den nové sedláky! 🍀</p></div>
+    <div id="chatGoal" style="margin-bottom:18px"></div>
     <div class="bonus-grid">
       <div id="dailyCard"></div>
       <div id="wheelCard"></div>
@@ -1782,6 +1781,8 @@ function pageBonusy() {
   loadWheel();
   loadPartnerLinks();
   loadQuests();
+  loadCommunityGoal();
+  dropTimer = setInterval(() => { if (!document.hidden) loadCommunityGoal(); }, 12000);
 }
 
 /* ---------- Kolo štěstí (denní spin) ---------- */
