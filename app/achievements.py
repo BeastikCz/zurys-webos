@@ -24,6 +24,7 @@ BADGES = [
     {"key": "gambler",     "emoji": "🎰", "name": "Gambler",      "desc": "Podej 20 / 50 / 100 sázek v predikcích",    "stat": "bets",     "tiers": [20, 50, 100]},
     {"key": "loyal",       "emoji": "🔥", "name": "Věrný divák",  "desc": "Denní série 7 / 30 / 100 dní",              "stat": "streak",   "tiers": [7, 30, 100]},
     {"key": "millionaire", "emoji": "💎", "name": "Milionář",     "desc": "Vydělej celkem 1 000 000 sedláků",          "stat": "earned",   "tiers": [1_000_000]},
+    {"key": "patron",      "emoji": "🎖️", "name": "Mecenáš",      "desc": "Utrať celkem 25k / 100k / 250k v shopu",    "stat": "spent",    "tiers": [25_000, 100_000, 250_000]},
     {"key": "rich",        "emoji": "🧀", "name": "Boháč",        "desc": "Měj 100 000 sedláků na účtu naráz",         "stat": "balance",  "tiers": [100_000]},
     {"key": "lucky",       "emoji": "🎟️", "name": "Šťastlivec",   "desc": "Vyhraj v tombole",                          "stat": "raffle",   "tiers": [1]},
     {"key": "champion",    "emoji": "🏆", "name": "Šampion",      "desc": "Buď #1 na žebříčku",                        "stat": "is_rank1", "tiers": [1]},
@@ -33,7 +34,7 @@ BADGES = [
     {"key": "og",          "emoji": "🌟", "name": "OG člen",      "desc": "Patří k OG komunitě",                       "stat": "is_og",    "tiers": [1]},
 ]
 
-_STAT_KEYS = ("drops", "pvp_won", "pvp_lost", "bets", "streak", "earned",
+_STAT_KEYS = ("drops", "pvp_won", "pvp_lost", "bets", "streak", "earned", "spent",
               "balance", "raffle", "is_rank1", "is_sub", "is_vip", "is_og")
 
 
@@ -89,6 +90,8 @@ def _collect_stats(conn) -> dict:
         ensure(r["uid"])["bets"] = r["c"]
     for r in conn.execute("SELECT user_id uid, COALESCE(SUM(change),0) c FROM points_log WHERE change>0 GROUP BY user_id"):
         ensure(r["uid"])["earned"] = r["c"]
+    for r in conn.execute("SELECT user_id uid, COALESCE(SUM(points_spent),0) c FROM orders GROUP BY user_id"):
+        ensure(r["uid"])["spent"] = r["c"]
     for r in conn.execute("SELECT user_id uid, COUNT(*) c FROM raffle_winners GROUP BY user_id"):
         ensure(r["uid"])["raffle"] = r["c"]
     return stats

@@ -216,6 +216,12 @@ class FairSeedIn(BaseModel):
     client_seed: str = Field(default="", max_length=64)
 
 
+class ShopDiscountIn(BaseModel):
+    """Happy-hour sleva na shop (admin). pct 0 = vypnuto; live_only 1 = jen když je live."""
+    pct: int = Field(ge=0, le=90)
+    live_only: int = Field(default=0, ge=0, le=1)
+
+
 class DropClaimIn(BaseModel):
     code: str = Field(min_length=1, max_length=64)
     hp: Optional[str] = ""        # honeypot – boti vyplní, lidé ne

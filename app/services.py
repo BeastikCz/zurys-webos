@@ -6,7 +6,7 @@ from typing import List, Optional, Tuple
 from fastapi import HTTPException
 
 from .config import ROLE_ADMIN, ORDER_PENDING, UNLIMITED_STOCK, SKIN_TRADE_KEYWORDS
-from .db import now_iso
+from .db import now_iso, get_setting
 from .deps import add_points, try_debit
 
 
@@ -14,6 +14,27 @@ def needs_trade_link(category) -> bool:
     """Vyžaduje tato kategorie odměny Steam trade link? (CS skiny – nože/rukavice/zbraně)"""
     c = (category or "").lower()
     return any(k in c for k in SKIN_TRADE_KEYWORDS)
+
+
+def shop_discount_pct(conn) -> int:
+    """Happy-hour sleva na nákupy (%). 0 = vypnuto. Volitelně jen když je live. Řídí admin.
+    Aplikuje se SERVER-SIDE (validate + apply), ať se opravdu účtuje míň, ne jen zobrazí."""
+    try:
+        pct = int(get_setting(conn, "shop_discount_pct", "0") or "0")
+    except (ValueError, TypeError):
+        pct = 0
+    if pct <= 0:
+        return 0
+    if get_setting(conn, "shop_discount_live_only", "0") == "1":
+        from . import live
+        if not live.is_live(conn):
+            return 0
+    return min(90, pct)
+
+
+def disc_unit(cost: int, pct: int) -> int:
+    """Cena za kus po slevě (zaokrouhleno)."""
+    return round(cost * (100 - pct) / 100) if pct > 0 else cost
 
 
 def _has_trade_link(user) -> bool:
@@ -93,6 +114,7 @@ def validate_items(conn: sqlite3.Connection, user: sqlite3.Row,
     Nekontroluje zůstatek bodů – ten řeší volající podle součtu.
     """
     total = 0
+    disc = shop_discount_pct(conn)
     for product_id, qty in items:
         if qty < 1:
             return 0, "Neplatné množství."
@@ -126,7 +148,7 @@ def validate_items(conn: sqlite3.Connection, user: sqlite3.Row,
         if needs_trade_link(p["category"]) and not _has_trade_link(user):
             return 0, (f"Na „{p['name']}“ potřebuješ vyplněný Steam trade link – doplň si ho "
                        f"v profilu (👤 Můj profil → 🎁 Steam trade link) a zkus to znovu.")
-        total += p["cost_points"] * qty
+        total += disc_unit(p["cost_points"], disc) * qty
     return total, None
 
 
@@ -141,13 +163,15 @@ def apply_purchase(conn: sqlite3.Connection, user: sqlite3.Row,
     order_ids: List[int] = []
     ts = now_iso()
     total = 0
+    disc = shop_discount_pct(conn)
     for product_id, qty in items:
         p = conn.execute("SELECT * FROM products WHERE id = ?", (product_id,)).fetchone()
+        unit = disc_unit(p["cost_points"], disc)
         for _ in range(qty):
             cur = conn.execute(
                 "INSERT INTO orders (user_id, product_id, product_name, points_spent, status, created_at) "
                 "VALUES (?, ?, ?, ?, ?, ?)",
-                (user["id"], product_id, p["name"], p["cost_points"], ORDER_PENDING, ts),
+                (user["id"], product_id, p["name"], unit, ORDER_PENDING, ts),
             )
             order_ids.append(cur.lastrowid)
             if p["type"] == "raffle":
@@ -157,7 +181,7 @@ def apply_purchase(conn: sqlite3.Connection, user: sqlite3.Row,
                 )
         if p["stock"] != UNLIMITED_STOCK:
             conn.execute("UPDATE products SET stock = stock - ? WHERE id = ?", (qty, product_id))
-        total += p["cost_points"] * qty
+        total += unit * qty
     # atomický odečet – když zůstatek mezitím nestačí (souběh), vrať vše zpět
     if not try_debit(conn, user["id"], total, f"Nákup odměn ({len(order_ids)} ks)"):
         conn.rollback()

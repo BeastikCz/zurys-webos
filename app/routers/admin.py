@@ -23,8 +23,8 @@ from ..models import (ProductIn, SkinLookupIn, SkinSearchIn, ImageUploadIn, User
                       BanIn, DropCreateIn, AutoDropIn, RuleIn, EconomyIn, IpBanIn, IpUnbanIn, BotToggleIn,
                       LiveModeIn, LegacyImportIn, PatchNoteIn, CommunityGoalIn, ManualOrderIn, ManualOrderBulkIn,
                       PointsLogPurgeIn, PartnerLinkIn, PartnerFlashConfigIn, GamesRakeIn, LiveHappyIn,
-                      SelfExcludeIn)
-from ..services import product_public
+                      SelfExcludeIn, ShopDiscountIn)
+from ..services import product_public, shop_discount_pct
 from ..security import new_code, secure_choice
 
 router = APIRouter(prefix="/admin", tags=["admin"], dependencies=[Depends(admin_guard)])
@@ -1749,6 +1749,27 @@ def security_anticheat(conn: sqlite3.Connection = Depends(db_dep)):
 # Otisk sdílený víc než tolika účty NEbanujeme jako „zařízení" – je slabý (model+prohlížeč+jazyk),
 # takže sdílený otisk = spíš různí lidé na stejném mobilu než alty. Brání „ban 1 → sestřel 7".
 FP_DEVICE_BAN_MAX_SHARED = 2
+
+
+@router.get("/shop-discount")
+def get_shop_discount(conn: sqlite3.Connection = Depends(db_dep)):
+    """Stav happy-hour slevy na shop."""
+    pct = int(get_setting(conn, "shop_discount_pct", "0") or "0")
+    return {"pct": pct, "live_only": get_setting(conn, "shop_discount_live_only", "0") == "1",
+            "is_live": live.is_live(conn), "active_now": shop_discount_pct(conn)}
+
+
+@router.post("/shop-discount")
+def set_shop_discount(data: ShopDiscountIn, request: Request,
+                      conn: sqlite3.Connection = Depends(db_dep),
+                      admin: sqlite3.Row = Depends(require_admin)):
+    """Admin nastaví happy-hour slevu (%) + zda jen během streamu."""
+    set_setting(conn, "shop_discount_pct", str(data.pct))
+    set_setting(conn, "shop_discount_live_only", "1" if data.live_only else "0")
+    conn.commit()
+    record_audit(conn, admin, request, "shop.discount",
+                 f"{data.pct}%" + (" (jen live)" if data.live_only else ""), "")
+    return {"pct": data.pct, "live_only": bool(data.live_only), "active_now": shop_discount_pct(conn)}
 
 
 @router.post("/users/{user_id}/gamble-block")

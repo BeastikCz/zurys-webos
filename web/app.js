@@ -13,7 +13,7 @@ const state = {
   demoAdmin: null,
 };
 
-const shopState = { type: "all", subs: false, vip: false, page: 1, items: [], total: 0, hasMore: false };
+const shopState = { type: "all", subs: false, vip: false, afford: false, sort: null, page: 1, items: [], total: 0, hasMore: false };
 const adminState = { tab: "products", orderFilter: "all", userQuery: "", products: [],
   auditAction: "", auditAdmin: "", auditOffset: 0, auditLimit: 50,
   loginsQuery: "", loginsIp: "", loginsOffset: 0, loginsLimit: 60,
@@ -305,8 +305,12 @@ function pageShop() {
     <div class="ticker"><div class="ticker-track" id="tickerTrack"></div></div>
     <div id="dropBanner"></div>
     <div id="chatGoal"></div>
-    <div class="da-head"><h1>Drop <span class="accent">Arena</span></h1>
-      <p>Vyhraj premium skiny — tomboly, instantní odměny a limitky pro suby.</p></div>
+    <div class="da-head"><h1>Zurys <span class="accent">Shop</span></h1>
+      <p>Utrať nasbírané sedláky za prémiové skiny a odměny — instantky, limitky i tomboly. 🌾</p></div>
+    <div id="happyBanner"></div>
+    <div id="soldFeed"></div>
+    <div id="shopHero"></div>
+    <div id="shopMilestone"></div>
     <div class="da-filters" id="filters"></div>
     <div class="da-grid" id="prodGrid">${skeletonCards(8)}</div>
     <div style="text-align:center;margin-top:26px" id="loadMoreWrap"></div>`;
@@ -314,7 +318,9 @@ function pageShop() {
   loadActivity();
   loadDropBanner();
   loadCommunityGoal();
-  dropTimer = setInterval(() => { if (!document.hidden) { loadDropBanner(); loadCommunityGoal(); } }, 10000);
+  loadSoldFeed();
+  loadMilestone();
+  dropTimer = setInterval(() => { if (!document.hidden) { loadDropBanner(); loadCommunityGoal(); loadSoldFeed(); } }, 10000);
   cardTimer = setInterval(updateCardTimers, 1000);
   shopState.page = 1; shopState.items = [];
   loadProducts(true);
@@ -460,7 +466,10 @@ function renderFilters() {
   const f = [["all", "Vše"], ["instant", "Instantní"], ["raffle", "Tombola"], ["ending", "Končí brzy"]];
   const chips = f.map(([k, l]) => `<button class="chip ${shopState.type === k ? "active" : ""}" data-action="filter-type" data-type="${k}">${l}</button>`).join("");
   $("#filters").innerHTML = chips +
-    `<span class="spacer"></span><button class="chip ${shopState.subs ? "active" : ""}" data-action="toggle-subs">👑 Jen subs</button>`;
+    `<span class="spacer"></span>` +
+    `<button class="chip ${shopState.afford ? "active" : ""}" data-action="toggle-afford">🌾 Na co mám</button>` +
+    `<button class="chip ${shopState.sort ? "active" : ""}" data-action="sort-price">${shopState.sort === "price_desc" ? "⬇" : "⬆"} Cena</button>` +
+    `<button class="chip ${shopState.subs ? "active" : ""}" data-action="toggle-subs">👑 Jen subs</button>`;
 }
 
 async function loadProducts(reset) {
@@ -471,16 +480,74 @@ async function loadProducts(reset) {
     const data = await api("/shop/products?" + new URLSearchParams(params).toString());
     if (reset) shopState.items = data.items; else shopState.items.push(...data.items);
     shopState.total = data.total; shopState.hasMore = data.has_more;
+    shopState.discount = data.discount_pct || 0;
+    renderHappyBanner();
     renderGrid();
   } catch (e) { toast(e.message, "error"); }
 }
 
+function renderHappyBanner() {
+  const el = $("#happyBanner"); if (!el) return;
+  const d = shopState.discount || 0;
+  el.innerHTML = d > 0 ? `<div class="happy-banner">🔴 <b>HAPPY HOUR!</b> Všechno <b>−${d} %</b> právě teď — utrácej dokud sleva běží! 🌾</div>` : "";
+}
+async function loadSoldFeed() {
+  const el = $("#soldFeed"); if (!el) return;
+  try {
+    const r = await api("/shop/recent?limit=10");
+    if (!r.length) { el.innerHTML = ""; return; }
+    el.innerHTML = `<div class="sold-feed"><span class="sold-live">🟢 PRÁVĚ KOUPILI</span><div class="sold-track">${r.map((s) => `<span class="sold-item">${uLink(s.username)} <span class="faint">${s.product_type === "raffle" ? "tiket " : ""}${esc(s.product_name)}</span></span>`).join(`<span class="sold-sep">·</span>`)}</div></div>`;
+  } catch (e) { el.innerHTML = ""; }
+}
+async function loadMilestone() {
+  const el = $("#shopMilestone"); if (!el) return;
+  if (!state.user) { el.innerHTML = ""; return; }
+  try {
+    const m = await api("/shop/milestone");
+    if (m.top) { el.innerHTML = `<div class="ms-bar"><div class="ms-top">🏆 Utraceno <b>${Number(m.spent).toLocaleString("cs-CZ")} 🌾</b> — <b style="color:var(--accent)">Magnát 🥇</b> odemčen!</div></div>`; return; }
+    const span = (m.next_at - m.prev_at) || 1;
+    const pct = Math.max(3, Math.min(100, Math.round((m.spent - m.prev_at) * 100 / span)));
+    el.innerHTML = `<div class="ms-bar">
+        <div class="ms-top">🏆 Utraceno celkem <b>${Number(m.spent).toLocaleString("cs-CZ")} 🌾</b> <span class="faint">— další odměna: <b style="color:var(--text)">${esc(m.next_reward)}</b></span></div>
+        <div class="ms-track"><div class="ms-fill" style="width:${pct}%"></div></div>
+        <div class="ms-foot faint">ještě ${Number(m.next_at - m.spent).toLocaleString("cs-CZ")} 🌾 do odměny</div>
+      </div>`;
+  } catch (e) { el.innerHTML = ""; }
+}
+
+function shopHeroHTML(p) {
+  const [rlabel, rhex] = rarityInfo(p.rarity);
+  const cd = countdown(p.ends_at);
+  const priceTxt = Number(p.cost_points).toLocaleString("cs-CZ");
+  const img = p.image_url ? `background-image:url('${esc(p.image_url)}')` : `background:radial-gradient(circle at 42% 40%, ${rhex}66, transparent 70%)`;
+  const btn = !state.user
+    ? `<button class="da-btn buy" data-action="connect" style="width:auto;padding:10px 22px">Připoj se a hraj</button>`
+    : (!p.in_stock ? `<span class="miss">Vyprodáno</span>`
+      : (state.user.points < p.cost_points ? `<span class="miss">chybí ${(p.cost_points - state.user.points).toLocaleString("cs-CZ")} 🌾</span>`
+        : `<button class="da-btn buy" data-action="buy" data-id="${p.id}" style="width:auto;padding:10px 22px">Vyzvednout ➤</button>`));
+  return `<div class="shop-hero" style="--rar:${rhex}">
+      <div class="shop-hero-img" data-action="open-product" data-id="${p.id}" style="${img}">${p.image_url ? "" : `<span style="font-size:52px">${emojiFor(p)}</span>`}</div>
+      <div class="shop-hero-body">
+        <span class="shop-hero-rar" style="color:${rhex}">${rlabel ? "★ " + rlabel + " · " : ""}FEATURED 🔥</span>
+        <div class="shop-hero-name" data-action="open-product" data-id="${p.id}">${esc(p.name)}</div>
+        ${cd && cd !== "KONEC" ? `<div class="shop-hero-cd">⏳ končí za ${cd}${!p.unlimited && p.stock > 0 ? ` · zbývá ${p.stock} ks` : ""}</div>` : ""}
+        <div class="shop-hero-buy"><span class="da-price"><span class="coin"></span>${priceTxt} sedláků${p.cost_orig ? ` <s class="da-orig">${Number(p.cost_orig).toLocaleString("cs-CZ")}</s>` : ""}</span>${btn}</div>
+      </div>
+    </div>`;
+}
 function renderGrid() {
   const grid = $("#prodGrid"); if (!grid) return;
-  if (!shopState.items.length) {
-    grid.innerHTML = `<div class="empty" style="grid-column:1/-1"><div class="big">🗃️</div>Žádné odměny pro zvolený filtr.</div>`;
+  const all = shopState.items.slice();
+  const hero = all.find((p) => p.hot && p.image_url && countdown(p.ends_at) !== "KONEC") || null;   // spotlight = hot + obrázek
+  let items = hero ? all.filter((p) => p.id !== hero.id) : all;
+  if (shopState.sort === "price_asc") items.sort((a, b) => a.cost_points - b.cost_points);
+  else if (shopState.sort === "price_desc") items.sort((a, b) => b.cost_points - a.cost_points);
+  if (shopState.afford && state.user) items = items.filter((p) => state.user.points >= p.cost_points && p.in_stock);
+  const heroEl = $("#shopHero"); if (heroEl) heroEl.innerHTML = hero ? shopHeroHTML(hero) : "";
+  if (!items.length) {
+    grid.innerHTML = hero ? "" : `<div class="empty" style="grid-column:1/-1"><div class="big">🗃️</div>Žádné odměny pro zvolený filtr.</div>`;
   } else {
-    grid.innerHTML = shopState.items.map(productCardHTML).join("");
+    grid.innerHTML = items.map(productCardHTML).join("");
   }
   const wrap = $("#loadMoreWrap");
   if (wrap) wrap.innerHTML = shopState.hasMore
@@ -497,6 +564,7 @@ function productCardHTML(p) {
   if (p.hot) badges.push(`<span class="da-b b-hot">HOT</span>`);
   if (p.subs_only) badges.push(`<span class="da-b b-sub">SUB</span>`);
   if (cd && !ended) badges.push(`<span class="da-b b-end">KONČÍ</span>`);
+  if (!isRaffle && !p.unlimited && p.stock > 0 && p.stock <= 5) badges.push(`<span class="da-b b-scar">zbývá ${p.stock}</span>`);
   const bg = p.image_url
     ? `background-image:url('${esc(p.image_url)}');background-size:contain;background-repeat:no-repeat;background-position:center`
     : `background: radial-gradient(circle at 50% 38%, ${rhex}33, transparent 68%), linear-gradient(180deg, var(--surface-2), var(--bg-2))`;
@@ -514,17 +582,21 @@ function productCardHTML(p) {
     progress = `<div class="da-progress"><div class="bar"><div class="fill" style="width:${pct}%"></div></div><div class="nums"><span>V tombole</span><span>${sold}/${p.stock}</span></div>${capLine}</div>`;
   }
 
+  const subLocked = p.subs_only && state.user && !state.user.is_sub && state.user.role !== "sub" && state.user.role !== "admin";
+  const cant = state.user && !ended && p.in_stock && !subLocked && state.user.points < p.cost_points;  // přihlášený, koupitelné, ale chybí body
+
   let btn;
   const priceTxt = Number(p.cost_points).toLocaleString("cs-CZ") + " sedláků";
   if (ended) btn = `<button class="da-btn waiting" disabled>${isRaffle ? "⏳ Čeká na vylosování" : "⏳ Akce skončila"}</button>`;
   else if (!state.user) btn = `<button class="da-btn buy" data-action="connect">Připoj se a hraj</button>`;
-  else if (p.subs_only && !state.user.is_sub && state.user.role !== "sub" && state.user.role !== "admin") btn = `<button class="da-btn locked" disabled>🔒 Pouze pro subs</button>`;
+  else if (subLocked) btn = `<button class="da-btn locked" disabled>🔒 Pouze pro subs</button>`;
   else if (!p.in_stock) btn = `<button class="da-btn waiting" disabled>Vyprodáno</button>`;
-  else if (state.user.points < p.cost_points) btn = `<button class="da-btn waiting" disabled>Nemáš dost sedláků</button>`;
+  else if (state.user.points < p.cost_points) btn = `<button class="da-btn waiting" disabled>chybí ${(p.cost_points - state.user.points).toLocaleString("cs-CZ")} 🌾</button>`;
   else btn = `<button class="da-btn buy" data-action="buy" data-id="${p.id}">${isRaffle ? "Koupit tiket" : "Vyzvednout"} — ${priceTxt}</button>`;
 
   return `
-    <div class="da-card ${ended ? "sold-out" : ""}">
+    <div class="da-card ${ended ? "sold-out" : ""}${cant ? " cant" : ""}" style="--rar:${rhex}">
+      <div class="da-rbar"></div>
       <div class="da-badges">${badges.join("")}</div>
       ${cd ? `<div class="da-timer" data-ends="${esc(p.ends_at)}">${ended ? "UKONČENO" : cd}</div>` : ""}
       <div class="da-img" data-action="open-product" data-id="${p.id}" style="${bg}">
@@ -534,7 +606,7 @@ function productCardHTML(p) {
       <div class="da-body">
         <div class="da-name" data-action="open-product" data-id="${p.id}">${esc(p.name)}</div>
         <div class="da-type">${typeLine}</div>
-        <div class="da-price"><span class="coin"></span>${priceTxt}${isRaffle ? ` <small>/ tiket</small>` : ""}</div>
+        <div class="da-price"><span class="coin"></span>${priceTxt}${p.cost_orig ? ` <s class="da-orig">${Number(p.cost_orig).toLocaleString("cs-CZ")}</s>` : ""}${isRaffle ? ` <small>/ tiket</small>` : ""}</div>
         ${progress}
         ${btn}
       </div>
@@ -2317,10 +2389,19 @@ async function uploadCoinIcon() {
   } catch (e) { if (info) info.textContent = "⚠️ " + e.message; toast(e.message, "error"); }
   finally { if (f) f.value = ""; }
 }
+async function saveShopDiscount() {
+  const pct = Math.max(0, Math.min(90, parseInt((document.getElementById("shop_disc_pct") || {}).value || "0", 10) || 0));
+  const liveOnly = document.getElementById("shop_disc_live_only") && document.getElementById("shop_disc_live_only").classList.contains("on") ? 1 : 0;
+  try {
+    const r = await api("/admin/shop-discount", { method: "POST", body: { pct, live_only: liveOnly } });
+    toast(r.pct > 0 ? `Happy hour: −${r.pct}%${r.live_only ? " (jen live)" : ""} 🔴` : "Happy hour vypnut", "success");
+    adminEconomy();
+  } catch (e) { toast(e.message, "error"); }
+}
 async function adminEconomy() {
   const box = $("#adminContent");
   try {
-    const [e, lv, dash, rake, health] = await Promise.all([api("/admin/economy"), api("/admin/economy/live"), api("/admin/economy/dashboard"), api("/admin/economy/games-rake"), api("/admin/economy/health?days=14").catch(() => null)]);
+    const [e, lv, dash, rake, health, hh] = await Promise.all([api("/admin/economy"), api("/admin/economy/live"), api("/admin/economy/dashboard"), api("/admin/economy/games-rake"), api("/admin/economy/health?days=14").catch(() => null), api("/admin/shop-discount").catch(() => ({ pct: 0, live_only: false, active_now: 0 }))]);
     const modeBtn = (m, label) => `<button class="btn btn-sm ${lv.mode === m ? "btn-primary" : "btn-ghost"}" data-action="eco-live-mode" data-mode="${m}">${label}</button>`;
     box.innerHTML = `
       ${economyDashboardHTML(dash)}
@@ -2337,6 +2418,13 @@ async function adminEconomy() {
         <div class="faint" style="font-size:12.5px;margin-bottom:8px">Režim detekce (kick.com/zurys1337):</div>
         <div class="toolbar">${modeBtn("auto", "Auto (Kick API)")} ${modeBtn("on", "Vždy zapnuto")} ${modeBtn("off", "Vždy vypnuto")}</div>
         ${lv.mode === "auto" && !lv.detectable ? `<div style="font-size:12.5px;margin-top:10px;color:#e0a857">⚠️ Auto-detekce potřebuje <b>připojeného reálného bota</b> (Kick API). Dokud není, počítá se jako offline — nebo přepni na „Vždy zapnuto", když jsi live.</div>` : ""}
+      </div>
+      <div class="panel" style="margin-bottom:16px">
+        <div class="section-title" style="margin-top:0">🔴 Happy hour — sleva na shop</div>
+        <p class="muted" style="font-size:13px;margin-bottom:14px">Dočasná sleva na <b>všechny nákupy</b> v shopu — táhne diváky utrácet (a koukat živě, když dáš „jen když live"). 0 % = vypnuto. ${hh.active_now ? `<b style="color:#46d369">Teď aktivní: −${hh.active_now} %</b>` : `<span class="faint">Teď: vypnuto</span>`}</p>
+        <div class="eco-row"><div><b>Sleva (%)</b><br><span class="faint" style="font-size:12px">0–90 % (0 = vypnuto)</span></div><input class="input" id="shop_disc_pct" type="number" min="0" max="90" value="${hh.pct}" style="width:92px"></div>
+        ${ecoToggle("shop_disc_live_only", "Jen když je LIVE", "Sleva platí jen během streamu (víc concurrent diváků)", hh.live_only)}
+        <div class="row-between" style="margin-top:16px"><span class="faint" style="font-size:12px">Projeví se hned (banner + škrtnuté ceny v shopu).</span><button class="btn btn-accent" data-action="shop-disc-save">💾 Uložit happy hour</button></div>
       </div>
       <div class="panel">
         <div class="section-title" style="margin-top:0">💰 Ekonomika – pasivní výdělek</div>
@@ -4079,6 +4167,7 @@ function handleAction(action, el) {
     case "cos-buy": buyCosmetic(el.dataset.key); break;
     case "cos-equip": equipCosmetic(el.dataset.key); break;
     case "dm-send": dmSend(el.dataset.mode, el.dataset.id); break;
+    case "shop-disc-save": saveShopDiscount(); break;
     case "fair-rotate": fairRotate(); break;
     case "fair-verify": fairVerify(); break;
     case "self-excl": selfExclude(el.dataset.dur); break;
@@ -4091,6 +4180,8 @@ function handleAction(action, el) {
     case "logout": doLogout(); break;
     case "filter-type": shopState.type = el.dataset.type; shopState.page = 1; pageShop(); break;
     case "toggle-subs": shopState.subs = !shopState.subs; shopState.page = 1; pageShop(); break;
+    case "toggle-afford": shopState.afford = !shopState.afford; renderFilters(); renderGrid(); break;
+    case "sort-price": shopState.sort = shopState.sort === "price_asc" ? "price_desc" : "price_asc"; renderFilters(); renderGrid(); break;
     case "toggle-vip": shopState.vip = !shopState.vip; shopState.page = 1; pageShop(); break;
     case "load-more": shopState.page++; loadProducts(false); break;
     case "row-scroll": { const t = document.getElementById(el.dataset.target); if (t) t.scrollBy({ left: parseInt(el.dataset.dir, 10) * 460, behavior: "smooth" }); break; }

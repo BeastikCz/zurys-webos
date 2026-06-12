@@ -7,13 +7,22 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from ..deps import db_dep, get_current_user, require_user
 from ..db import now_iso
 from ..models import PurchaseIn
-from ..services import product_public, validate_items, apply_purchase
+from ..services import product_public, validate_items, apply_purchase, shop_discount_pct, disc_unit
 
 router = APIRouter(prefix="/shop", tags=["shop"])
 
 EXCHANGE_CATEGORY = "Směnárna"
 # prodané tikety pro tomboly (progress bar)
 _TICKETS = "(SELECT COUNT(*) FROM raffle_entries e WHERE e.product_id = p.id) AS tickets_sold"
+
+
+def _apply_disc(pub: dict, disc: int) -> dict:
+    """Promítne happy-hour slevu do veřejného dictu produktu (cena po slevě + původní cena)."""
+    if disc > 0 and pub.get("cost_points"):
+        pub["cost_orig"] = pub["cost_points"]
+        pub["cost_points"] = disc_unit(pub["cost_points"], disc)
+        pub["discount_pct"] = disc
+    return pub
 
 
 @router.get("/products")
@@ -60,13 +69,15 @@ def list_products(
         params + order_params + [page_size, offset],
     ).fetchall()
 
-    items = [product_public(r) for r in rows]
+    disc = shop_discount_pct(conn)
+    items = [_apply_disc(product_public(r), disc) for r in rows]
     return {
         "items": items,
         "total": total,
         "page": page,
         "page_size": page_size,
         "has_more": offset + len(items) < total,
+        "discount_pct": disc,
     }
 
 
@@ -77,7 +88,7 @@ def product_detail(product_id: int, conn: sqlite3.Connection = Depends(db_dep)):
     ).fetchone()
     if not row:
         raise HTTPException(status_code=404, detail="Odměna nenalezena.")
-    return product_public(row)
+    return _apply_disc(product_public(row), shop_discount_pct(conn))
 
 
 @router.post("/purchase")
@@ -129,6 +140,26 @@ def recent_purchases(limit: int = Query(12, ge=1, le=50),
         }
         for r in rows
     ]
+
+
+@router.get("/milestone")
+def my_milestone(user: sqlite3.Row = Depends(require_user), conn: sqlite3.Connection = Depends(db_dep)):
+    """Kolik user celkem utratil v shopu + další milník (progress lišta „Mecenáš")."""
+    spent = conn.execute("SELECT COALESCE(SUM(points_spent),0) c FROM orders WHERE user_id = ?",
+                         (user["id"],)).fetchone()["c"]
+    tiers = [(25000, "Sedlák mecenáš 🥉"), (100000, "Velký mecenáš 🥈"), (250000, "Magnát 🥇")]
+    nxt = next((t for t in tiers if spent < t[0]), None)
+    prev = 0
+    for amt, _lbl in tiers:
+        if spent >= amt:
+            prev = amt
+    return {
+        "spent": spent,
+        "prev_at": prev,
+        "next_at": nxt[0] if nxt else None,
+        "next_reward": nxt[1] if nxt else None,
+        "top": nxt is None,
+    }
 
 
 @router.get("/activity")
