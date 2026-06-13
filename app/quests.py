@@ -20,15 +20,15 @@ QUESTS_ENABLED = True
 # CÍLE (targets) zvednuté: týdenní mají zabrat celý týden (ne den), denní mají dávat
 # poctivý poměr cena/výkon (víc práce za stejnou odměnu = míň inflace na úsilí).
 QUESTS = [
-    {"key": "d_drop", "period": "daily",  "name": "Drop lovec",    "desc": "Chytni 2 dropy",                      "stat": "drops",   "target": 2,    "reward": 100},
-    {"key": "d_duel", "period": "daily",  "name": "Vítěz dne",     "desc": "Vyhraj 3 PvP duely",                  "stat": "pvp_won", "target": 3,    "reward": 100},
-    {"key": "d_earn", "period": "daily",  "name": "Sedlák dříč",   "desc": "Vydělej 400 sedláků koukáním/chatem na streamu 📺", "stat": "earned",  "target": 400,  "reward": 150},
-    {"key": "d_bet",  "period": "daily",  "name": "Sázkař",        "desc": "Podej 3 sázky v predikci",            "stat": "bets",    "target": 3,    "reward": 80},
-    {"key": "d_chat", "period": "daily",  "name": "Ukecaný",       "desc": "Napiš 12× do chatu během streamu 💬", "stat": "chat",    "target": 12,   "reward": 120},
-    {"key": "w_drop", "period": "weekly", "name": "Týdenní lovec", "desc": "Chytni 40 dropů za týden",            "stat": "drops",   "target": 40,   "reward": 700},
-    {"key": "w_duel", "period": "weekly", "name": "Gladiátor",     "desc": "Vyhraj 25 PvP duelů za týden",        "stat": "pvp_won", "target": 25,   "reward": 700},
-    {"key": "w_earn", "period": "weekly", "name": "Magnát",        "desc": "Vydělej 8 000 sedláků na streamu za týden 📺", "stat": "earned",  "target": 8000, "reward": 900},
-    {"key": "w_chat", "period": "weekly", "name": "Tlachal týdne", "desc": "Buď ukecaný celý týден — 200 zpráv 💬", "stat": "chat",    "target": 200,  "reward": 800},
+    {"key": "d_drop", "period": "daily",  "name": "Drop lovec",    "desc": "Chytni 3 dropy",                      "stat": "drops",   "target": 3,    "reward": 100},
+    {"key": "d_duel", "period": "daily",  "name": "Vítěz dne",     "desc": "Vyhraj 5 PvP duelů",                  "stat": "pvp_won", "target": 5,    "reward": 100},
+    {"key": "d_earn", "period": "daily",  "name": "Sedlák dříč",   "desc": "Vydělej 700 sedláků koukáním/chatem na streamu 📺", "stat": "earned",  "target": 700,  "reward": 150},
+    {"key": "d_bet",  "period": "daily",  "name": "Sázkař",        "desc": "Podej 5 sázek v predikci",            "stat": "bets",    "target": 5,    "reward": 80},
+    {"key": "d_chat", "period": "daily",  "name": "Ukecaný",       "desc": "Napiš 20× do chatu během streamu 💬", "stat": "chat",    "target": 20,   "reward": 120},
+    {"key": "w_drop", "period": "weekly", "name": "Týdenní lovec", "desc": "Chytni 60 dropů za týden",            "stat": "drops",   "target": 60,   "reward": 700},
+    {"key": "w_duel", "period": "weekly", "name": "Gladiátor",     "desc": "Vyhraj 40 PvP duelů za týden",        "stat": "pvp_won", "target": 40,   "reward": 700},
+    {"key": "w_earn", "period": "weekly", "name": "Magnát",        "desc": "Vydělej 12 000 sedláků na streamu za týden 📺", "stat": "earned",  "target": 12000, "reward": 900},
+    {"key": "w_chat", "period": "weekly", "name": "Tlachal týdne", "desc": "Buď ukecaný celý týден — 350 zpráv 💬", "stat": "chat",    "target": 350,  "reward": 800},
 ]
 _BY_KEY = {q["key"]: q for q in QUESTS}
 
