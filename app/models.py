@@ -226,6 +226,17 @@ class ShopDiscountIn(BaseModel):
     minutes: int = Field(default=0, ge=0, le=1440)   # časovač: 0 = bez limitu, jinak auto-vypnutí za N min (max 24 h)
 
 
+class MinesStartIn(BaseModel):
+    """Start Mines: sázka (1–5000) + počet bomb (1–24) v mřížce 5×5."""
+    bet: int = Field(ge=1, le=5000)
+    mines: int = Field(default=3, ge=1, le=24)
+
+
+class MinesRevealIn(BaseModel):
+    """Odkrytí pole (0–24) v aktivní hře Mines."""
+    tile: int = Field(ge=0, le=24)
+
+
 class BanClusterIn(BaseModel):
     """Hromadný ban clusteru účtů (alt farma). Staff/admin se přeskočí."""
     user_ids: list[int] = Field(default_factory=list)

@@ -225,7 +225,7 @@ function render() {
     shop: pageShop, leaderboard: pageLeaderboard, exchange: pageExchange, redeem: pageRedeem,
     faq: pageFaq, pravidla: pageRules, cart: pageCart, profile: pageProfile, admin: pageAdmin,
     predikce: pagePredikce, games: pageGames, novinky: pageNews, bonusy: pageBonusy,
-    kosmetika: pageCosmetics, bj: pageBjRoom, zpravy: pageMessages, fair: pageFair,
+    kosmetika: pageCosmetics, bj: pageBjRoom, zpravy: pageMessages, fair: pageFair, mines: pageMines,
     connect: pageConnect, login: pageConnect, register: pageConnect, u: pageUserProfile,
   };
   (pages[r.name] || pageShop)(r.param);
@@ -4273,6 +4273,10 @@ function handleAction(action, el) {
     case "connect": openConnect(); break;
     case "claim-daily": doClaimDaily(); break;
     case "spin-wheel": doSpinWheel(); break;
+    case "mines-start": minesStart(); break;
+    case "mines-reveal": minesReveal(parseInt(el.dataset.tile, 10)); break;
+    case "mines-cashout": minesCashout(); break;
+    case "mines-new": pageMines(); break;
     case "claim-quest": claimQuest(el.dataset.key); break;
     case "claim-partner": claimPartnerLink(el.dataset.id, el.dataset.url); break;
     case "cos-buy": buyCosmetic(el.dataset.key); break;
@@ -4701,6 +4705,10 @@ async function pageGames() {
   $("#view").innerHTML = `
     <div class="page-head"><h1>🎮 Herna</h1></div>
     ${gambleBlockBanner()}
+    <div class="panel" style="margin-bottom:18px;display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap">
+      <div><b style="font-size:17px">💣 Mines</b> <span class="faint">— odkrývej pole, vyhni se bombám, cashni kdykoliv. Provably-fair, single-player.</span></div>
+      <button class="btn btn-accent" data-action="nav" data-href="mines">Hrát Mines →</button>
+    </div>
     ${(state.user && state.user.role === "admin") ? `<div style="margin-bottom:18px"><button class="btn btn-ghost btn-sm" data-action="nav" data-href="bj">🃏 Soukromý stůl (jen admin) →</button></div>` : ""}
     <div id="duelWrap">${skeletonCards(1)}</div>
     <div class="section-title" style="margin-top:26px">⚔️ Piškvorky 1v1</div>
@@ -4724,6 +4732,91 @@ async function pageGames() {
   if (duelTimer) clearInterval(duelTimer);
   duelTimer = setInterval(() => { if (!document.hidden) pollDuels(); }, 3500);
   loadGamesLobby();
+}
+
+/* ---------------- 💣 Mines (provably-fair, single-player) ---------------- */
+let _minesBet = 100, _minesMines = 3;
+async function pageMines() {
+  if (!state.user) { navigate("connect"); return; }
+  $("#view").innerHTML = `<div class="page-head"><h1>💣 Mines</h1><p class="muted">Odkrývej pole, vyhni se bombám, cashni kdykoliv. Provably-fair · mřížka 5×5 · max sázka 5000.</p></div>${gambleBlockBanner()}<div id="minesWrap">${skeletonCards(1)}</div>`;
+  try { renderMines(await api("/mines/state")); }
+  catch (e) { const w = $("#minesWrap"); if (w) w.innerHTML = `<div class="empty">${esc(e.message)}</div>`; }
+}
+function minesTile(i, g, ended) {
+  const rev = g && g.revealed && g.revealed.includes(i);
+  const isMine = ended && g && g.layout && g.layout.includes(i);
+  const hit = g && g.hit === i;
+  let cls = "mines-tile", inner = "";
+  if (rev) { cls += " safe"; inner = "💎"; }
+  else if (isMine) { cls += hit ? " bomb hit" : " bomb"; inner = "💣"; }
+  else if (ended) { cls += " dim"; }
+  else { cls += " hidden"; }
+  const clickable = g && g.status === "active" && !rev;
+  return `<button class="${cls}" ${clickable ? `data-action="mines-reveal" data-tile="${i}"` : "disabled"}>${inner}</button>`;
+}
+function renderMines(d) {
+  const box = $("#minesWrap"); if (!box) return;
+  const g = d.game, active = d.active && g && g.status === "active", ended = g && g.status !== "active";
+  const grid = (cls) => `<div class="mines-grid ${cls || ""}">${Array.from({ length: 25 }, (_, i) => minesTile(i, g, ended)).join("")}</div>`;
+  if (active) {
+    box.innerHTML = `
+      <div class="mines-hud panel">
+        <div><b>Sázka ${fmtPts(g.bet)}</b> · 💣 ${g.mines} bomb · odkryto ${g.safe_count}</div>
+        <div class="mines-mult">×${g.mult.toFixed(2)} <span class="faint" style="font-size:13px">další ×${g.next_mult.toFixed(2)}</span></div>
+        <button class="btn btn-accent" data-action="mines-cashout">💰 Cashout ${fmtPts(g.cashout)}</button>
+      </div>
+      ${grid()}
+      <div class="faint" style="font-size:12px;margin-top:10px;text-align:center">💎 bezpečno (násobič roste) · 💣 konec · cashni kdykoliv 🌾</div>`;
+  } else {
+    let banner = "";
+    if (ended) {
+      banner = g.status === "cashed"
+        ? `<div class="panel ok" style="margin-bottom:14px">💰 Vyhráls <b>${fmtPts(g.payout)}</b>! (×${g.mult.toFixed(2)})</div>`
+        : `<div class="panel bad" style="margin-bottom:14px">💥 Bomba! Přišels o sázku ${fmtPts(g.bet)}. Příště líp! 🌾</div>`;
+    }
+    const opts = Array.from({ length: 24 }, (_, i) => i + 1).map((n) => `<option value="${n}" ${n === _minesMines ? "selected" : ""}>${n} 💣</option>`).join("");
+    box.innerHTML = `
+      ${banner}
+      <div class="panel mines-setup">
+        <div class="mines-setup-row">
+          <label>Sázka<input class="input" id="minesBet" type="number" min="1" max="${d.max_bet || 5000}" value="${_minesBet}"></label>
+          <label>Počet bomb<select class="input" id="minesMines">${opts}</select></label>
+          <button class="btn btn-accent" data-action="mines-start">▶ Spustit hru</button>
+        </div>
+        <div class="faint" style="font-size:12px;margin-top:8px">Zůstatek: <b>${fmtPts(d.balance)}</b> · víc bomb = vyšší násobič, ale větší riziko. Max výhra 100 000.</div>
+      </div>
+      ${ended ? grid("ended") : `<div class="mines-grid preview">${Array.from({ length: 25 }, () => `<button class="mines-tile hidden" disabled></button>`).join("")}</div>`}
+      ${ended ? `<div style="text-align:center;margin-top:14px"><button class="btn btn-ghost" data-action="mines-new">🔄 Nová hra</button></div>` : ""}`;
+  }
+}
+async function minesStart() {
+  const betEl = document.getElementById("minesBet"), mEl = document.getElementById("minesMines");
+  _minesBet = Math.max(1, Math.min(5000, parseInt(betEl && betEl.value, 10) || 0));
+  _minesMines = Math.max(1, Math.min(24, parseInt(mEl && mEl.value, 10) || 3));
+  if (_minesBet < 1) { toast("Zadej sázku.", "error"); return; }
+  try {
+    const d = await api("/mines/start", { method: "POST", body: { bet: _minesBet, mines: _minesMines } });
+    if (state.user) { state.user.points = d.balance; renderHeader(); }
+    renderMines({ active: true, game: d.game, max_bet: 5000, balance: d.balance });
+  } catch (e) { toast(e.message, "error"); }
+}
+async function minesReveal(tile) {
+  try {
+    const d = await api("/mines/reveal", { method: "POST", body: { tile } });
+    const bal = typeof d.balance === "number" ? d.balance : (state.user && state.user.points);
+    if (typeof d.balance === "number" && state.user) { state.user.points = d.balance; renderHeader(); }
+    if (d.cashed) { try { confettiBurst(); } catch (e) {} toast(`Full clear! +${fmtPts(d.payout)} sedláků 🌾`, "success"); }
+    renderMines({ active: d.game.status === "active", game: d.game, max_bet: 5000, balance: bal });
+  } catch (e) { toast(e.message, "error"); }
+}
+async function minesCashout() {
+  try {
+    const d = await api("/mines/cashout", { method: "POST" });
+    if (state.user) { state.user.points = d.balance; renderHeader(); }
+    try { confettiBurst(); } catch (e) {}
+    toast(`Cashout +${fmtPts(d.payout)} sedláků! 💰`, "success");
+    renderMines({ active: false, game: d.game, max_bet: 5000, balance: d.balance });
+  } catch (e) { toast(e.message, "error"); }
 }
 
 /* ---------------- ⚔️ Duely 1v1 (coinflip / kostky) ---------------- */

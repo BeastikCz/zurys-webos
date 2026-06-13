@@ -522,6 +522,25 @@ CREATE TABLE IF NOT EXISTS bj_chat (
     created_at  TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_bjchat_room ON bj_chat(room_id, id);
+
+-- Mines (single-player provably-fair): 1 aktivní hra na uživatele. layout = JSON pozic bomb,
+-- revealed = JSON odkrytých bezpečných polí. Bomby se hráči NEposílají, dokud hra běží.
+CREATE TABLE IF NOT EXISTS mines_games (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    bet         INTEGER NOT NULL,
+    mines       INTEGER NOT NULL,
+    layout      TEXT NOT NULL,
+    revealed    TEXT NOT NULL DEFAULT '[]',
+    status      TEXT NOT NULL DEFAULT 'active',
+    payout      INTEGER NOT NULL DEFAULT 0,
+    server_hash TEXT,
+    client_seed TEXT,
+    nonce       INTEGER,
+    created_at  TEXT NOT NULL,
+    ended_at    TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_mines_user ON mines_games(user_id, status);
 """
 
 
@@ -568,6 +587,13 @@ _MIGRATIONS = [
     ("users", "fair_server_hash", "TEXT"),    # SHA-256 commit (ukázán předem)
     ("users", "fair_client_seed", "TEXT"),    # client seed (hráč si mění)
     ("users", "fair_nonce", "INTEGER NOT NULL DEFAULT 0"),
+    # mines_games: dorovnání sloupců na PRE-EXISTUJÍCÍ prod tabulku (CREATE IF NOT EXISTS byla
+    # no-op, protože tabulka už existovala s jiným/starým schématem). Nullable – kód je vždy plní.
+    ("mines_games", "layout", "TEXT"),
+    ("mines_games", "server_hash", "TEXT"),
+    ("mines_games", "client_seed", "TEXT"),
+    ("mines_games", "nonce", "INTEGER"),
+    ("mines_games", "ended_at", "TEXT"),
 ]
 
 

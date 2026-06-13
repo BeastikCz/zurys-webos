@@ -56,3 +56,26 @@ def weighted_index(server_seed: str, client_seed: str, nonce: int, weights) -> i
         if r < acc:
             return i
     return len(weights) - 1
+
+
+def mine_positions(server_seed: str, client_seed: str, nonce: int, total: int, mines: int):
+    """Deterministicky a ověřitelně vybere `mines` různých pozic bomb z `total` polí (Mines).
+    Fisher-Yates shuffle řízený bytestreamem SHA256(digest:counter) → reprodukovatelné i v JS."""
+    mines = max(1, min(int(mines), total - 1))
+    base = digest(server_seed, client_seed, nonce)
+    buf, ctr = bytearray(), 0
+
+    def rand_below(n: int) -> int:
+        nonlocal buf, ctr
+        while len(buf) < 4:
+            buf.extend(hashlib.sha256(f"{base}:{ctr}".encode()).digest())
+            ctr += 1
+        v = int.from_bytes(buf[:4], "big")
+        del buf[:4]
+        return v % n
+
+    arr = list(range(total))
+    for i in range(total - 1, 0, -1):
+        j = rand_below(i + 1)
+        arr[i], arr[j] = arr[j], arr[i]
+    return sorted(arr[:mines])

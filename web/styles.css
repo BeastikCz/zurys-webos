@@ -955,6 +955,23 @@ footer.site-footer { border-top: 1px solid var(--border); padding: 22px 0; color
 .cos-owned { font-size: 11px; font-weight: 800; color: var(--success); }
 .prof-look-strip { display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap; margin: 14px 0 16px; padding-top: 16px; border-top: 1px solid var(--border); }
 
+/* ===== 💣 Mines ===== */
+.mines-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; max-width: 420px; margin: 0 auto; }
+.mines-tile { aspect-ratio: 1; border-radius: 12px; border: 1px solid var(--border); background: var(--bg-2); font-size: 26px; display: grid; place-items: center; cursor: default; transition: transform .1s ease, background .15s, border-color .15s; }
+.mines-tile.hidden { background: var(--surface); cursor: pointer; }
+.mines-tile.hidden:hover { transform: translateY(-2px); border-color: var(--accent); background: rgba(255,255,255,.05); }
+.mines-tile.safe { background: rgba(70,211,105,.14); border-color: #46d369; }
+.mines-tile.bomb { background: rgba(255,80,90,.14); border-color: #ff505a; }
+.mines-tile.bomb.hit { background: rgba(255,80,90,.38); border-color: #ff505a; animation: mines-pop .35s ease; }
+.mines-tile.dim { opacity: .42; }
+@keyframes mines-pop { 0% { transform: scale(.7); } 60% { transform: scale(1.16); } 100% { transform: scale(1); } }
+.mines-hud { display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap; margin-bottom: 16px; }
+.mines-mult { font-size: 20px; font-weight: 900; color: #46d369; }
+.mines-setup { margin-bottom: 18px; }
+.mines-setup-row { display: flex; align-items: flex-end; gap: 14px; flex-wrap: wrap; }
+.mines-setup-row label { display: flex; flex-direction: column; gap: 5px; font-size: 13px; font-weight: 800; }
+.mines-setup-row .input { max-width: 150px; }
+
 /* Zodpovědné sázení – self-exclusion tlačítka */
 .se-btns { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
 
