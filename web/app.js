@@ -2395,7 +2395,16 @@ async function saveShopDiscount() {
   const pct = Math.max(0, Math.min(90, parseInt((document.getElementById("shop_disc_pct") || {}).value || "0", 10) || 0));
   const liveOnly = document.getElementById("shop_disc_live_only") && document.getElementById("shop_disc_live_only").classList.contains("on") ? 1 : 0;
   const sub2x = document.getElementById("shop_disc_sub_2x") && document.getElementById("shop_disc_sub_2x").classList.contains("on") ? 1 : 0;
-  const minutes = Math.max(0, Math.min(720, parseInt((document.getElementById("shop_disc_minutes") || {}).value || "0", 10) || 0));
+  let minutes = Math.max(0, Math.min(1440, parseInt((document.getElementById("shop_disc_minutes") || {}).value || "0", 10) || 0));
+  // „Konec v čase" (HH:MM v lokálním čase) přebije minuty: spočítej minuty do toho času (dnes, nebo zítra když už je po)
+  const untilTime = ((document.getElementById("shop_disc_until_time") || {}).value || "").trim();
+  if (untilTime) {
+    const [hh, mm] = untilTime.split(":").map(Number);
+    const target = new Date();
+    target.setHours(hh, mm, 0, 0);
+    if (target <= new Date()) target.setDate(target.getDate() + 1);
+    minutes = Math.max(1, Math.min(1440, Math.ceil((target - new Date()) / 60000)));
+  }
   try {
     const r = await api("/admin/shop-discount", { method: "POST", body: { pct, live_only: liveOnly, sub_2x: sub2x, minutes } });
     const bits = [r.pct > 0 ? `−${r.pct}%` : null, r.sub_2x ? "2× subs 🟣" : null, r.live_only ? "jen live" : null, r.until ? `⏳ ${minutes} min` : null].filter(Boolean);
@@ -2430,7 +2439,8 @@ async function adminEconomy() {
         <div class="eco-row"><div><b>Sleva (%)</b><br><span class="faint" style="font-size:12px">0–90 % (0 = vypnuto)</span></div><input class="input" id="shop_disc_pct" type="number" min="0" max="90" value="${hh.pct}" style="width:92px"></div>
         ${ecoToggle("shop_disc_live_only", "Jen když je LIVE", "Sleva platí jen během streamu (víc concurrent diváků)", hh.live_only)}
         ${ecoToggle("shop_disc_sub_2x", "2× body za subs a gift subs 🟣", "Během happy hour dají subscribe, resub i gift sub dvojnásob sedláků. Sdílí přepínač jen-když-live. Funguje i bez slevy na shop.", hh.sub_2x)}
-        <div class="eco-row"><div><b>Časovač (min)</b><br><span class="faint" style="font-size:12px">0 = bez limitu; jinak se happy hour sám vypne za N min</span></div><input class="input" id="shop_disc_minutes" type="number" min="0" max="720" value="0" style="width:92px"></div>
+        <div class="eco-row"><div><b>Časovač (min)</b><br><span class="faint" style="font-size:12px">0 = bez limitu; jinak se happy hour sám vypne za N min</span></div><input class="input" id="shop_disc_minutes" type="number" min="0" max="1440" value="0" style="width:92px"></div>
+        <div class="eco-row"><div><b>…nebo konec v čase</b><br><span class="faint" style="font-size:12px">HH:MM ve tvém čase — přebije minuty; prázdné = nepoužít</span></div><input class="input" id="shop_disc_until_time" type="time" value="" style="width:120px"></div>
         ${hh.until ? `<div class="faint" style="font-size:12.5px;margin-top:8px;color:#46d369">⏳ Časovač běží — happy hour se sám vypne <b>${new Date(hh.until).toLocaleTimeString("cs-CZ")}</b>.</div>` : ""}
         <div class="row-between" style="margin-top:16px"><span class="faint" style="font-size:12px">Projeví se hned (banner + škrtnuté ceny v shopu; 2× subs platí pro nové Kick eventy).</span><button class="btn btn-accent" data-action="shop-disc-save">💾 Uložit happy hour</button></div>
       </div>
