@@ -105,6 +105,44 @@ def leaderboard(limit: int = Query(50, ge=1, le=200),
     return out
 
 
+_weekly_cache = {"at": 0.0, "data": None}
+_WEEKLY_TTL = 60   # s – board se nemusí počítat při každém pollu (jen scan na čtení)
+
+
+@router.get("/leaderboard/weekly")
+def leaderboard_weekly(conn: sqlite3.Connection = Depends(db_dep)):
+    """Žebříček: kdo NASBÍRAL nejvíc sedláků tento týден. ČISTĚ READ-ONLY z points_log –
+    NEsahá na users.points, NIC neresetuje. „Týden" = jen filtr created_at >= pondělí 00:00.
+    Cache 60 s (čtení nelockuje zápis, ale ať se velký points_log neskenuje pořád)."""
+    import time
+    from datetime import datetime, timezone, timedelta
+    nowm = time.monotonic()
+    if _weekly_cache["data"] is not None and nowm - _weekly_cache["at"] < _WEEKLY_TTL:
+        return _weekly_cache["data"]
+    now = datetime.now(timezone.utc)
+    monday = (now - timedelta(days=now.weekday())).replace(hour=0, minute=0, second=0, microsecond=0)
+    start = monday.isoformat()
+    rows = conn.execute(
+        "SELECT u.id, u.username, u.avatar_url, u.role, u.is_sub, u.is_vip, u.is_og, "
+        "  u.cos_name, u.cos_frame, u.cos_banner, SUM(l.change) AS gained "
+        "FROM points_log l JOIN users u ON u.id = l.user_id "
+        "WHERE l.change > 0 AND l.created_at >= ? "
+        "GROUP BY l.user_id ORDER BY gained DESC, u.username ASC LIMIT 50",
+        (start,),
+    ).fetchall()
+    data = {
+        "week_start": start,
+        "rows": [{
+            "rank": i + 1, "username": r["username"], "avatar_url": r["avatar_url"],
+            "gained": r["gained"], "role": r["role"],
+            "is_sub": bool(r["is_sub"]), "is_vip": bool(r["is_vip"]), "is_og": bool(r["is_og"]),
+            "cos": cosmetics.resolve(r),
+        } for i, r in enumerate(rows)],
+    }
+    _weekly_cache.update(at=nowm, data=data)
+    return data
+
+
 @router.get("/profile/public")
 def public_profile(nick: str = Query("", max_length=64),
                    viewer: sqlite3.Row = Depends(require_user),

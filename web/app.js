@@ -1079,10 +1079,27 @@ async function pageLeaderboard() {
       : (myName ? `<div class="lb-mybar" style="justify-content:center">Zatím nejsi v TOP ${rows.length} – sbírej sedláky! 🌾</div>` : "");
     const list = rest.length ? lbSectioned(rest, isMe) : "";
     const legend = rows.length ? `<div class="lb-legend">${TIERS.slice().reverse().map((t, i, a) => `<span style="color:${TIER_COLOR[t[3]] || "#8b93a3"}">${t[1]} ${t[2][0] + t[2].slice(1).toLowerCase()}</span>${i < a.length - 1 ? '<span class="lb-leg-sep">›</span>' : ""}`).join("")}</div>` : "";
-    $("#lb").innerHTML = (rows.length ? `<div class="lb-meta">🌾 TOP ${rows.length} diváků</div>` : "") + podium + myBar + list + legend + (rows.length ? "" : `<div class="empty">Zatím žádní uživatelé.</div>`) + `<div id="chatLeaders"></div>`;
+    $("#lb").innerHTML = (rows.length ? `<div class="lb-meta">🌾 TOP ${rows.length} diváků</div>` : "") + podium + myBar + list + legend + (rows.length ? "" : `<div class="empty">Zatím žádní uživatelé.</div>`) + `<div id="weeklyEarners"></div><div id="chatLeaders"></div>`;
     animateCounts($("#lb"));
+    loadWeeklyEarners();
     loadChatLeaders();
   } catch (e) { $("#lb").innerHTML = `<div class="empty">${esc(e.message)}</div>`; }
+}
+
+async function loadWeeklyEarners() {
+  const box = document.getElementById("weeklyEarners"); if (!box) return;
+  try {
+    const d = await api("/leaderboard/weekly");
+    const rows = (d && d.rows) || [];
+    if (!rows.length) { box.innerHTML = ""; return; }
+    const myName = state.user && state.user.username;
+    box.innerHTML = `<div class="section-title" style="margin-top:28px">📅 Tento týden — nejvíc nasbíráno <span class="faint" style="font-weight:400;font-size:13px">— kdo tento týden vydělal nejvíc sedláků (zůstatky se NEresetují) 🌾</span></div>
+      <div class="lb-list">${rows.slice(0, 15).map((r, i) => {
+        const rk = i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : (i + 1);
+        const mine = !!myName && r.username === myName;
+        return `<div class="lb-row${mine ? " me" : ""}"><span class="lb-rank">${rk}</span>${avatarHTML(r.username, r.avatar_url, "", cosF(r))}<div class="lb-id"><a class="uname prof-link ${cosN(r)}" href="#/u/${encodeURIComponent(r.username)}">${esc(r.username)}</a> ${roleBadge(r.role)}</div><span class="pts" style="color:#46d369">+${fmtPts(r.gained)}</span></div>`;
+      }).join("")}</div>`;
+  } catch (e) { box.innerHTML = ""; }
 }
 
 async function loadChatLeaders() {
