@@ -17,7 +17,7 @@ from typing import Optional
 from fastapi import HTTPException, Request
 
 from .config import ROLE_ADMIN, DATACENTER_CIDRS, TRUSTED_IPS
-from .db import now_iso
+from .db import now_iso, get_setting
 from .deps import client_ip
 from . import iprep, alerts
 
@@ -154,8 +154,10 @@ def evaluate_risk(conn: sqlite3.Connection, user, request: Request,
     reasons = []
     score = 0
 
-    # Kritické: zařízení zabanované → 100 (instant block)
-    if fp_hash:
+    # Kritické: zařízení zabanované → 100 (instant block).
+    # VYPNUTO defaultně (fp_ban_enforce != "1") – hrubý otisk dává falešné bany cizím lidem
+    # se stejným modelem/prohlížečem. Zapne se až bude přesnější fingerprint. Revert: setting "1".
+    if fp_hash and get_setting(conn, "fp_ban_enforce", "0") == "1":
         if conn.execute("SELECT 1 FROM fingerprint_bans WHERE fp_hash = ?",
                         (fp_hash,)).fetchone():
             return {"score": 100, "reasons": ["zařízení zabanováno"],

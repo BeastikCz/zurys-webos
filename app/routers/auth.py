@@ -18,7 +18,7 @@ from ..config import (SESSION_COOKIE, SESSION_DAYS, ROLE_USER, ROLE_ADMIN,
                       KICK_REDIRECT_URI, KICK_AUTH_URL, KICK_TOKEN_URL,
                       KICK_USER_URL, KICK_SCOPE, KICK_BOT_SCOPE,
                       KICK_BROADCASTER_CHANNEL)
-from ..db import now_iso
+from ..db import now_iso, get_setting
 from ..deps import (db_dep, get_current_user, require_admin, require_user, can_access,
                     to_public, client_ip, record_login, user_rank)
 from ..models import KickConnectIn, FingerprintIn
@@ -347,9 +347,11 @@ def fingerprint(data: FingerprintIn, request: Request,
         (user["id"], 1 if data.webdriver else 0, fp,
          (request.headers.get("user-agent") or "")[:300], now_iso()),
     )
-    # ban podle zařízení – pokud je otisk na blacklistu, zabanuj i tento (alt) účet
+    # ban podle zařízení – pokud je otisk na blacklistu, zabanuj i tento (alt) účet.
+    # VYPNUTO defaultně (fp_ban_enforce != "1"): hrubý otisk (model+prohlížeč+jazyk) sdílí
+    # i cizí lidi → falešné bany. Zapne se až bude přesnější fingerprint. Revert: setting "1".
     banned = False
-    if fp and user["role"] != ROLE_ADMIN and \
+    if fp and user["role"] != ROLE_ADMIN and get_setting(conn, "fp_ban_enforce", "0") == "1" and \
             conn.execute("SELECT 1 FROM fingerprint_bans WHERE fp_hash = ?", (fp,)).fetchone():
         conn.execute("UPDATE users SET banned = 1, ban_reason = ? WHERE id = ?",
                      ("Zabanované zařízení (fingerprint)", user["id"]))
