@@ -891,6 +891,22 @@ footer.site-footer { border-top: 1px solid var(--border); padding: 22px 0; color
 .cn-holo    { background: linear-gradient(90deg,#ffc8f0,#c8e0ff,#c8fff0,#fff0c8,#ffc8f0); background-size:300% 100%;
   -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent; color:transparent !important;
   animation: cos-shine 6s linear infinite; }
+.cn-mint     { color: #5fe8b0 !important; }
+.cn-indigo   { color: #6b78ff !important; }
+.cn-lavender { color: #c8a8ff !important; }
+.cn-magenta  { color: #ff3cc8 !important; }
+.cn-chrome   { background: linear-gradient(90deg,#ffffff,#aab2c0,#f0f4fa,#aab2c0); background-size:220% 100%;
+  -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent; color:transparent !important;
+  animation: cos-shine 3.5s linear infinite; }
+.cn-cyber    { background: linear-gradient(90deg,#ff2ec8,#2ee0ff,#ff2ec8); background-size:240% 100%;
+  -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent; color:transparent !important;
+  animation: cos-shine 3s linear infinite; }
+.cn-rosegold { background: linear-gradient(90deg,#ffd9e0,#f0a8c0,#ffce8a,#f0a8c0); background-size:220% 100%;
+  -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent; color:transparent !important;
+  animation: cos-shine 4s linear infinite; }
+.cn-aurora   { background: linear-gradient(90deg,#46e08a,#4db4ff,#b06bff,#46e08a); background-size:300% 100%;
+  -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent; color:transparent !important;
+  animation: cos-shine 5s linear infinite; }
 
 .avatar.cf-bronze  { box-shadow: 0 0 0 2px #b5743b; }
 .avatar.cf-silver  { box-shadow: 0 0 0 2px #cfd6e2; }
