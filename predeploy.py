@@ -41,7 +41,19 @@ for o, c, name in [("{", "}", "složená"), ("(", ")", "kulatá"), ("[", "]", "h
         errs.append("app.js: nevyvážená %s závorka %d/%d" % (name, js.count(o), js.count(c)))
 if css.count("{") != css.count("}"):
     errs.append("styles.css: nevyvážené {} %d/%d" % (css.count("{"), css.count("}")))
-print("app.js + styles.css OK")
+print("app.js + styles.css balance OK")
+
+# 2b) node --check app.js – skutečný JS parser. Balanční heuristika výše NEchytí
+# rozbitý string (např. rovná " v českém textu předčasně ukončí JS string) – přesně
+# tahle třída bugů shodila app.js v prohlížeči, i když predeploy byl zelený. Gatujeme natvrdo.
+try:
+    nr = subprocess.run(["node", "--check", "web/app.js"], capture_output=True, text=True)
+    if nr.returncode != 0:
+        errs.append("app.js: node --check FAILED (rozbitá JS syntaxe):\n" + ((nr.stderr or nr.stdout or "")[-500:]))
+    else:
+        print("node --check app.js OK")
+except FileNotFoundError:
+    print("node nenalezen – node --check PRESKOCEN (jen heuristika). Pro plny JS syntax check nainstaluj Node.")
 
 print()
 if errs:
