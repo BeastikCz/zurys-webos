@@ -5,6 +5,7 @@ podvrh (403), jinak přičteme sedláky a VŽDY vrátíme 200 (jinak nás Kick o
 Dedup přes Kick-Event-Message-Id (Kick retryuje).
 """
 import json
+import time
 from collections import deque
 
 from fastapi import APIRouter, BackgroundTasks, Request, Response
@@ -57,21 +58,41 @@ async def kick_webhook(request: Request, background: BackgroundTasks):
         payload = json.loads(body.decode("utf-8")) if body else {}
     except (ValueError, UnicodeDecodeError):
         payload = {}
-    try:
-        conn = get_conn()
+    # Zpracování s RETRY na přechodný „database is locked" (1-writer SQLite, krátká
+    # contention pod zátěží). Každý pokus = čerstvý conn; neúspěšný commit se rollbackne
+    # (nic nezapsáno) → retry je bezpečný, žádné dvojí připsání.
+    result, last_exc = None, None
+    for attempt in range(3):
         try:
-            result = kickevents.handle_event(conn, etype, payload)
-            conn.commit()
-            if etype and etype != "chat.message.sent":   # diagnostika: sub/resub/gift/follow eventy
-                print(f"[kick-webhook] event {etype} -> {result}")
-        finally:
-            conn.close()
-        if result and result.get("reply"):     # chat příkaz → bot odpoví po vrácení 200
+            conn = get_conn()
+            try:
+                result = kickevents.handle_event(conn, etype, payload)
+                conn.commit()
+            finally:
+                conn.close()
+            last_exc = None
+            break
+        except Exception as e:  # pragma: no cover
+            last_exc = e
+            if "database is locked" in str(e).lower() and attempt < 2:
+                time.sleep(0.15 * (attempt + 1))   # 150 ms, pak 300 ms
+                continue
+            break
+
+    if last_exc is None:
+        if etype and etype != "chat.message.sent":   # diagnostika: sub/resub/gift/follow eventy
+            print(f"[kick-webhook] event {etype} -> {result}")
+        if result and result.get("reply"):           # chat příkaz → bot odpoví po vrácení 200
             background.add_task(_send_command_reply, result["reply"])
-    except Exception as e:  # pragma: no cover
+    else:
+        e = last_exc
         print("[kick-webhook] handle error:", etype, e)
+        # přechodný lock i po retry → tichý alert (hrubý klíč, delší cooldown, bez pingu),
+        # ať to nezaplaví Discord; reálná sustained contention se i tak 1×/15 min ozve.
+        locked = "database is locked" in str(e).lower()
         alerts.send("🟠 Kick webhook chyba: " + str(etype),
                     detail=type(e).__name__ + ": " + str(e)[:300],
-                    key="kick:" + str(etype), cooldown=300)
+                    key=("kick:db-locked" if locked else "kick:" + str(etype)),
+                    cooldown=(900 if locked else 300))
 
     return Response(status_code=200)
