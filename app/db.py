@@ -548,6 +548,7 @@ _MIGRATIONS = [
     ("drop_claims", "ip", "TEXT"),
     ("drop_claims", "fp_hash", "TEXT"),
     ("games", "active_at", "TEXT"),
+    ("predictions", "lock_at", "TEXT"),      # auto-lock: ISO čas, kdy se sázky samy zavřou (NULL = ruční)
     ("users", "last_league", "TEXT"),        # nejvyšší dosažená liga (pro detekci postupu)
     ("users", "pending_rankup", "TEXT"),     # fronta konfet: liga k oslavě při dalším načtení
     ("users", "last_rank", "INTEGER"),       # poslední známá pozice (pro „přeskočil tě")

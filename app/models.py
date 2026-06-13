@@ -90,6 +90,7 @@ class PredictionCreateIn(BaseModel):
     question: str = Field(min_length=3, max_length=200)
     options: List[str]                          # 2–4 možnosti
     game: str = Field(default="CS2", max_length=40)
+    lock_seconds: int = Field(default=180, ge=0, le=3600)   # auto-lock za N s (0 = ručně, default 3 min)
 
     @field_validator("options")
     @classmethod

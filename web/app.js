@@ -749,6 +749,7 @@ function predCardHTML(p) {
   return `<div class="panel pred-card" data-pred="${p.id}" data-status="${p.status}" data-myopt="${mine ? mine.option_id : 0}" data-myamt="${mine ? mine.amount : 0}" style="margin-bottom:16px">
     <div class="row-between" style="margin-bottom:3px"><b style="font-size:17px">🎯 ${esc(p.question)}</b>${badge}</div>
     <div class="faint" style="font-size:12.5px;margin-bottom:12px">${esc(p.game)} · celkový bank <b class="pred-bank">${fmtPts(p.total_pool)}</b></div>
+    ${!locked && p.lock_at ? `<div class="pred-countdown" data-lockat="${esc(p.lock_at)}" style="font-size:14px;font-weight:800;color:var(--accent-2);margin:-4px 0 12px">⏳ …</div>` : ""}
     ${state.user && !locked
       ? `<div class="field" style="margin-bottom:12px"><label>Sázka (sedláci) — pak klikni na možnost</label><input class="input" id="predAmt-${p.id}" type="number" min="1" placeholder="např. 100" style="max-width:220px"></div>`
       : (!state.user
@@ -787,9 +788,25 @@ async function predBet(pid, oid) {
 }
 
 /* --- Predikce: živá aktualizace (polling + patch DOM, ať se nemaže rozepsaná sázka) --- */
-let _predTimer = null, _predMode = null;
-function startPredPoll(mode) { stopPredPoll(); _predMode = mode; _predTimer = setInterval(pollPredictions, 7000); }
-function stopPredPoll() { if (_predTimer) clearInterval(_predTimer); _predTimer = null; _predMode = null; }
+let _predTimer = null, _predMode = null, _predCdTimer = null;
+function startPredPoll(mode) {
+  stopPredPoll(); _predMode = mode; _predTimer = setInterval(pollPredictions, 7000);
+  _predCdTimer = setInterval(tickPredCd, 1000); tickPredCd();   // odpočet do zavření sázek (1 s)
+}
+function stopPredPoll() {
+  if (_predTimer) clearInterval(_predTimer); _predTimer = null; _predMode = null;
+  if (_predCdTimer) clearInterval(_predCdTimer); _predCdTimer = null;
+}
+// Živý odpočet „sázky se zavřou za M:SS" (čte data-lockat z karet, běží i mezi 7s polly).
+function tickPredCd() {
+  document.querySelectorAll(".pred-countdown[data-lockat]").forEach((el) => {
+    const t = Date.parse(el.dataset.lockat || ""); if (!t) { el.textContent = ""; return; }
+    const d = Math.round((t - Date.now()) / 1000);
+    if (d <= 0) { el.textContent = "🔒 Sázky se zavírají…"; return; }
+    const m = Math.floor(d / 60), s = d % 60;
+    el.textContent = `⏳ Sázky se zavřou za ${m}:${String(s).padStart(2, "0")}`;
+  });
+}
 function _setText(el, v) { if (el && el.textContent !== v) el.textContent = v; }
 function _setBump(el, v) { if (el && el.textContent !== v) { el.textContent = v; el.classList.remove("pred-bump"); void el.offsetWidth; el.classList.add("pred-bump"); } }
 async function pollPredictions() {
@@ -3541,6 +3558,13 @@ async function adminPredictions() {
       <form data-submit="pred-create">
         <div class="field"><label>Otázka</label><input class="input" id="predQ" placeholder="Vyhrajeme příští zápas?" maxlength="200" autocomplete="off"></div>
         <div class="field"><label>Možnosti — 2 až 4, oddělené čárkou</label><input class="input" id="predOpts" value="Ano, Ne" autocomplete="off"></div>
+        <div class="field"><label>Auto-zavřít sázky za ⏱️</label><select class="input" id="predLock" style="max-width:240px">
+          <option value="0">Ručně (zavřu sám)</option>
+          <option value="60">1 minuta</option>
+          <option value="120">2 minuty</option>
+          <option value="180" selected>3 minuty</option>
+          <option value="300">5 minut</option>
+        </select><div class="form-hint" style="margin-top:5px">Po uplynutí se sázky samy zavřou, divákům běží odpočet.</div></div>
         <button class="btn btn-primary" type="submit">🎯 Vytvořit predikci</button>
       </form>
     </div>`;
@@ -3590,9 +3614,10 @@ async function createPrediction() {
   const options = ($("#predOpts")?.value || "").split(",").map((s) => s.trim()).filter(Boolean);
   if (q.length < 3) { toast("Zadej otázku (aspoň 3 znaky).", "error"); return; }
   if (options.length < 2) { toast("Zadej aspoň 2 možnosti (oddělené čárkou).", "error"); return; }
+  const lockSeconds = parseInt(($("#predLock") || {}).value || "180", 10) || 0;
   try {
-    await api("/predictions", { method: "POST", body: { question: q, options, game: "CS2" } });
-    toast("Predikce vytvořena 🎯", "success");
+    await api("/predictions", { method: "POST", body: { question: q, options, game: "CS2", lock_seconds: lockSeconds } });
+    toast(lockSeconds ? `Predikce vytvořena 🎯 — sázky se zavřou za ${Math.round(lockSeconds / 60 * 10) / 10} min` : "Predikce vytvořena 🎯", "success");
     adminPredictions();
   } catch (e) { toast(e.message, "error"); }
 }

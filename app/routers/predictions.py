@@ -13,6 +13,7 @@ Escrow + atomický odečet (try_debit) brání mínusu i dvojímu odečtu. Výpl
 přes status guard (jen ze stavu open/locked → resolved).
 """
 import sqlite3
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -79,7 +80,20 @@ def _pred_public(conn, p, me_id: Optional[int]) -> dict:
         "id": p["id"], "question": p["question"], "game": p["game"], "status": p["status"],
         "total_pool": total, "options": options, "my_bet": my_bet,
         "winner_option_id": p["winner_option_id"], "created_at": p["created_at"],
+        "lock_at": (p["lock_at"] if "lock_at" in p.keys() else None),
     }
+
+
+def _autolock_due(conn) -> int:
+    """Lazy auto-lock: zamkne všechny OPEN predikce, kterým vypršel lock_at (countdown sázek).
+    Voláno z veřejného výpisu (diváci pollují → zamkne se do vteřin) i ze sázky (enforcement)."""
+    now = now_iso()
+    cur = conn.execute(
+        "UPDATE predictions SET status='locked', locked_at=? "
+        "WHERE status='open' AND lock_at IS NOT NULL AND lock_at <= ?", (now, now))
+    if cur.rowcount:
+        conn.commit()
+    return cur.rowcount
 
 
 # ======================= VEŘEJNÉ =======================
@@ -88,6 +102,7 @@ def list_predictions(user: Optional[sqlite3.Row] = Depends(get_current_user),
                      conn: sqlite3.Connection = Depends(db_dep)):
     """Aktivní predikce (open/locked) + pár posledních vyhodnocených."""
     me_id = user["id"] if user else None
+    _autolock_due(conn)                          # zavři sázky, kterým vypršel countdown
     active = conn.execute(
         "SELECT * FROM predictions WHERE status IN ('open','locked') ORDER BY id DESC"
     ).fetchall()
@@ -107,6 +122,7 @@ def place_bet(pid: int, data: PredictionBetIn,
     """Vsadí (nebo navýší sázku) na možnost. Vklad jde hned do escrow."""
     require_can_gamble(user)                # sebevyloučení ze sázek (Tipsport-style)
     rate_limit(f"pred:bet:{user['id']}", 30, 60)
+    _autolock_due(conn)                     # countdown mohl mezitím vypršet → zavři pozdní sázku
     p = _get_pred(conn, pid)
     if p["status"] != "open":
         raise HTTPException(status_code=400, detail="Sázky na tuhle predikci jsou už uzavřené.")
@@ -146,10 +162,12 @@ def create_prediction(data: PredictionCreateIn, request: Request,
                       staff: sqlite3.Row = Depends(require_pred_staff),
                       conn: sqlite3.Connection = Depends(db_dep)):
     ts = now_iso()
+    lock_at = ((datetime.now(timezone.utc) + timedelta(seconds=data.lock_seconds)).isoformat()
+               if data.lock_seconds > 0 else None)
     cur = conn.execute(
-        "INSERT INTO predictions (question, game, status, created_by, created_at) "
-        "VALUES (?, ?, 'open', ?, ?)",
-        (data.question.strip(), (data.game or "CS2").strip(), staff["id"], ts),
+        "INSERT INTO predictions (question, game, status, created_by, created_at, lock_at) "
+        "VALUES (?, ?, 'open', ?, ?, ?)",
+        (data.question.strip(), (data.game or "CS2").strip(), staff["id"], ts, lock_at),
     )
     pid = cur.lastrowid
     for i, label in enumerate(data.options):
@@ -191,7 +209,7 @@ def unlock_prediction(pid: int, request: Request,
     p = _get_pred(conn, pid)
     if p["status"] != "locked":
         raise HTTPException(status_code=400, detail="Predikce není zamčená.")
-    conn.execute("UPDATE predictions SET status = 'open', locked_at = NULL WHERE id = ?", (pid,))
+    conn.execute("UPDATE predictions SET status = 'open', locked_at = NULL, lock_at = NULL WHERE id = ?", (pid,))
     record_audit(conn, staff, request, "prediction.unlock", f"#{pid}")
     conn.commit()
     return _pred_public(conn, _get_pred(conn, pid), staff["id"])
