@@ -37,16 +37,18 @@ def test_quest_progress_and_claim(client):
         with pytest.raises(ValueError):
             quests.claim_quest(conn, uid, "d_drop")
 
-        # simuluj chycení dropu (stat 'drops' = COUNT drop_claims)
-        drop = conn.execute(
-            "INSERT INTO drops (code, points, max_winners, active, created_at) VALUES ('Q',100,1,1,?)",
-            (now_iso(),)).lastrowid
-        conn.execute("INSERT INTO drop_claims (drop_id, user_id, position, created_at) VALUES (?,?,1,?)",
-                     (drop, uid, now_iso()))
+        # simuluj chycení dropů (stat 'drops' = COUNT drop_claims) – kolik je třeba dle targetu
+        d_drop_target = next(q["target"] for q in quests.QUESTS if q["key"] == "d_drop")
+        for i in range(d_drop_target):
+            drop = conn.execute(
+                "INSERT INTO drops (code, points, max_winners, active, created_at) VALUES (?,100,1,1,?)",
+                (f"Q{i}", now_iso())).lastrowid
+            conn.execute("INSERT INTO drop_claims (drop_id, user_id, position, created_at) VALUES (?,?,1,?)",
+                         (drop, uid, now_iso()))
         conn.commit()
 
         d_drop2 = next(q for q in quests.get_quests(conn, uid) if q["key"] == "d_drop")
-        assert d_drop2["progress"] == 1 and d_drop2["completed"]
+        assert d_drop2["progress"] == d_drop_target and d_drop2["completed"]
 
         # claim splněného → +100 (vyvážená odměna d_drop)
         before = conn.execute("SELECT points FROM users WHERE id=?", (uid,)).fetchone()["points"]
@@ -69,12 +71,13 @@ def test_chat_quest_progress(client):
         conn.commit()
         d_chat = next(q for q in quests.get_quests(conn, uid) if q["key"] == "d_chat")
         assert d_chat["progress"] == 0 and not d_chat["completed"]
-        for _ in range(4):   # 4 cooldown-gated odměny za chat
+        d_chat_target = next(q["target"] for q in quests.QUESTS if q["key"] == "d_chat")
+        for _ in range(d_chat_target):   # cooldown-gated odměny za chat dle targetu
             conn.execute("INSERT INTO points_log (user_id, change, reason, created_at) VALUES (?,?,?,?)",
                          (uid, 1, "Aktivita v chatu", now_iso()))
         conn.commit()
         d_chat2 = next(q for q in quests.get_quests(conn, uid) if q["key"] == "d_chat")
-        assert d_chat2["progress"] == 4 and d_chat2["completed"]
+        assert d_chat2["progress"] == d_chat_target and d_chat2["completed"]
     finally:
         conn.close()
 
