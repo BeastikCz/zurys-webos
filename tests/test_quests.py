@@ -48,11 +48,11 @@ def test_quest_progress_and_claim(client):
         d_drop2 = next(q for q in quests.get_quests(conn, uid) if q["key"] == "d_drop")
         assert d_drop2["progress"] == 1 and d_drop2["completed"]
 
-        # claim splněného → +200
+        # claim splněného → +100 (vyvážená odměna d_drop)
         before = conn.execute("SELECT points FROM users WHERE id=?", (uid,)).fetchone()["points"]
         res = quests.claim_quest(conn, uid, "d_drop")
         after = conn.execute("SELECT points FROM users WHERE id=?", (uid,)).fetchone()["points"]
-        assert after - before == 200 and res["reward"] == 200
+        assert after - before == 100 and res["reward"] == 100
 
         # druhý claim → chyba (už vyzvednuto)
         with pytest.raises(ValueError):
