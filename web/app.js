@@ -4774,7 +4774,7 @@ function renderMines(d) {
         ? `<div class="panel ok" style="margin-bottom:14px">💰 Vyhráls <b>${fmtPts(g.payout)}</b>! (×${g.mult.toFixed(2)})</div>`
         : `<div class="panel bad" style="margin-bottom:14px">💥 Bomba! Přišels o sázku ${fmtPts(g.bet)}. Příště líp! 🌾</div>`;
     }
-    const opts = Array.from({ length: 24 }, (_, i) => i + 1).map((n) => `<option value="${n}" ${n === _minesMines ? "selected" : ""}>${n} 💣</option>`).join("");
+    const opts = Array.from({ length: 22 }, (_, i) => i + 3).map((n) => `<option value="${n}" ${n === _minesMines ? "selected" : ""}>${n} 💣</option>`).join("");
     box.innerHTML = `
       ${banner}
       <div class="panel mines-setup">
@@ -4792,7 +4792,7 @@ function renderMines(d) {
 async function minesStart() {
   const betEl = document.getElementById("minesBet"), mEl = document.getElementById("minesMines");
   _minesBet = Math.max(1, Math.min(5000, parseInt(betEl && betEl.value, 10) || 0));
-  _minesMines = Math.max(1, Math.min(24, parseInt(mEl && mEl.value, 10) || 3));
+  _minesMines = Math.max(3, Math.min(24, parseInt(mEl && mEl.value, 10) || 3));
   if (_minesBet < 1) { toast("Zadej sázku.", "error"); return; }
   try {
     const d = await api("/mines/start", { method: "POST", body: { bet: _minesBet, mines: _minesMines } });

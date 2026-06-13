@@ -17,6 +17,7 @@ from .. import fairness
 router = APIRouter(prefix="/mines", tags=["mines"])
 
 GRID = 25            # 5×5
+MIN_MINES = 3        # minimálně 3 bomby
 MAX_BET = 5000
 MAX_PAYOUT = 100000  # strop výplaty na hru (ochrana ekonomiky před zázračným full-clearem)
 HOUSE_EDGE = 0.01    # 1 %
@@ -98,8 +99,8 @@ def start(data: MinesStartIn, user: sqlite3.Row = Depends(require_user),
     bet, mines = data.bet, data.mines
     if bet < 1 or bet > MAX_BET:
         raise HTTPException(status_code=400, detail=f"Sázka musí být 1–{MAX_BET} sedláků.")
-    if mines < 1 or mines > GRID - 1:
-        raise HTTPException(status_code=400, detail="Počet bomb musí být 1–24.")
+    if mines < MIN_MINES or mines > GRID - 1:
+        raise HTTPException(status_code=400, detail=f"Počet bomb musí být {MIN_MINES}–24.")
     if not try_debit(conn, user["id"], bet, f"Mines sázka ({mines} bomb)"):
         raise HTTPException(status_code=400, detail=f"Nemáš dost sedláků (sázka {bet}).")
     ss, sh, cs, nonce = _fair_consume(conn, user["id"])

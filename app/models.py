@@ -227,9 +227,9 @@ class ShopDiscountIn(BaseModel):
 
 
 class MinesStartIn(BaseModel):
-    """Start Mines: sázka (1–5000) + počet bomb (1–24) v mřížce 5×5."""
+    """Start Mines: sázka (1–5000) + počet bomb (3–24) v mřížce 5×5."""
     bet: int = Field(ge=1, le=5000)
-    mines: int = Field(default=3, ge=1, le=24)
+    mines: int = Field(default=3, ge=3, le=24)
 
 
 class MinesRevealIn(BaseModel):
