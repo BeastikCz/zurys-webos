@@ -237,6 +237,12 @@ class MinesRevealIn(BaseModel):
     tile: int = Field(ge=0, le=24)
 
 
+class ProfileBioIn(BaseModel):
+    """Bio na profilu + vypíchnutá oblíbená hra (showcase)."""
+    bio: str = Field(default="", max_length=160)
+    fav_game: str = Field(default="", max_length=24)
+
+
 class BanClusterIn(BaseModel):
     """Hromadný ban clusteru účtů (alt farma). Staff/admin se přeskočí."""
     user_ids: list[int] = Field(default_factory=list)

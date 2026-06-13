@@ -11,7 +11,7 @@ from ..config import ORDER_PENDING, UNLIMITED_STOCK, ROLE_ADMIN
 from ..db import now_iso
 from ..deps import (db_dep, require_user, add_points, try_debit, record_audit, client_ip,
                     user_rank, tier_for_rank, self_excluded_until)
-from ..models import RedeemIn, TradeUrlIn, GiftIn, QuestClaimIn, CosmeticIn, FairSeedIn, SelfExcludeIn
+from ..models import RedeemIn, TradeUrlIn, GiftIn, QuestClaimIn, CosmeticIn, FairSeedIn, SelfExcludeIn, ProfileBioIn
 from ..services import product_public, role_allows
 from ..ratelimit import rate_limit
 from ..security import secure_weighted_choice
@@ -212,6 +212,8 @@ def public_profile(nick: str = Query("", max_length=64),
         "raffle_wins": raffle_wins, "badges": badges, "showcase": showcase, "cos": cosmetics.resolve(u),
         "is_sub": bool(u["is_sub"]), "is_vip": bool(u["is_vip"]), "is_og": bool(u["is_og"]),
         "daily_streak": (u["daily_streak"] if "daily_streak" in u.keys() else 0) or 0,
+        "bio": (u["bio"] if "bio" in u.keys() else "") or "",
+        "fav_game": (u["fav_game"] if "fav_game" in u.keys() else "") or "",
     }
 
 
@@ -518,6 +520,23 @@ def set_trade_url(data: TradeUrlIn,
                  (url or None, user["id"]))
     conn.commit()
     return {"steam_trade_url": url or None}
+
+
+_FAV_GAMES = {"", "Mines", "Kolo štěstí", "Piškvorky", "Duely", "Blackjack", "Predikce", "Tomboly"}
+
+
+@router.post("/profile/bio")
+def set_bio(data: ProfileBioIn, user: sqlite3.Row = Depends(require_user),
+            conn: sqlite3.Connection = Depends(db_dep)):
+    """Nastaví bio + vypíchnutou oblíbenou hru na vlastním profilu (showcase)."""
+    bio = " ".join((data.bio or "").split())[:160]       # ořež + sjednoť whitespace
+    fav = (data.fav_game or "").strip()
+    if fav not in _FAV_GAMES:
+        fav = ""
+    conn.execute("UPDATE users SET bio = ?, fav_game = ? WHERE id = ?",
+                 (bio or None, fav or None, user["id"]))
+    conn.commit()
+    return {"bio": bio, "fav_game": fav}
 
 
 # ---------------- Exchange: poslání sedláků kamarádovi ----------------

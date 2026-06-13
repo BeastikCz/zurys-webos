@@ -1233,6 +1233,7 @@ async function pageUserProfile(nick) {
           <div class="ph-badges">${subVipBadges(p) || ""}</div>
         </div>
       </div>
+      ${profileBioHTML(p, false)}
       ${isStaff(state.user) && state.user.id !== p.id ? `<a href="#/zpravy/${p.id}" class="btn btn-primary" style="margin:16px 0 2px;display:inline-block">✉️ Napsat zprávu</a>` : ""}
       <div class="stat-grid" style="margin-top:18px">
         ${statBox(fmtPts(p.points), "Sedláků teď", "accent")}
@@ -1694,6 +1695,7 @@ function pageProfile() {
         <div class="muted" style="font-size:13px;min-width:0">🎨 <b style="color:var(--text)">Můj vzhled</b> — barvy nicku a rámečky avataru (vidí to všichni)</div>
         <a href="#/kosmetika" class="btn btn-primary btn-sm">Upravit vzhled →</a>
       </div>
+      <div id="myBio" style="margin:8px 0 4px">${skeletonCards(1)}</div>
       <div id="myBadges" style="margin:6px 0 18px"></div>
       <div class="sub-tabs">
         <button class="active" data-action="prof-tab" data-tab="orders">📦 Moje objednávky</button>
@@ -1725,6 +1727,45 @@ function pageProfile() {
     </div>`;
   loadProfTab("orders");
   loadMyBadges();
+  loadMyBio();
+}
+const FAV_GAMES = ["", "Mines", "Kolo štěstí", "Piškvorky", "Duely", "Blackjack", "Predikce", "Tomboly"];
+let _myProfileBio = { bio: "", fav_game: "" };
+function profileBioHTML(p, editable) {
+  const bio = (p.bio || "").trim(), fav = (p.fav_game || "").trim();
+  if (!bio && !fav && !editable) return "";
+  const favChip = fav ? `<span class="bio-fav">🎮 ${esc(fav)}</span>` : "";
+  const txt = bio ? `<div class="bio-text">${esc(bio)}</div>` : (editable ? `<div class="bio-text faint">Zatím žádné bio — řekni něco o sobě ✍️</div>` : "");
+  return `<div class="profile-bio">${txt}<div class="bio-row">${favChip}${editable ? `<button class="btn btn-ghost btn-sm" data-action="bio-edit">✏️ Upravit bio</button>` : ""}</div></div>`;
+}
+async function loadMyBio() {
+  const box = document.getElementById("myBio"); if (!box || !state.user) return;
+  try {
+    const p = await api("/profile/public?nick=" + encodeURIComponent(state.user.username));
+    _myProfileBio = { bio: p.bio || "", fav_game: p.fav_game || "" };
+    box.innerHTML = profileBioHTML(p, true);
+  } catch (e) { box.innerHTML = ""; }
+}
+function editBio() {
+  const box = document.getElementById("myBio"); if (!box) return;
+  const opts = FAV_GAMES.map((g) => `<option value="${esc(g)}" ${g === _myProfileBio.fav_game ? "selected" : ""}>${g ? esc(g) : "— žádná —"}</option>`).join("");
+  box.innerHTML = `<div class="profile-bio bio-edit">
+    <textarea class="input" id="bioInput" maxlength="160" rows="2" placeholder="Napiš něco o sobě (max 160 znaků)…">${esc(_myProfileBio.bio)}</textarea>
+    <div class="bio-row" style="margin-top:8px">
+      <label style="font-size:13px;font-weight:700;display:flex;align-items:center;gap:6px">🎮 Oblíbená hra <select class="input" id="bioFav" style="max-width:160px">${opts}</select></label>
+      <button class="btn btn-primary btn-sm" data-action="bio-save">💾 Uložit</button>
+      <button class="btn btn-ghost btn-sm" data-action="bio-cancel">Zrušit</button>
+    </div>
+  </div>`;
+}
+async function saveBio() {
+  const ta = document.getElementById("bioInput"), fav = document.getElementById("bioFav");
+  try {
+    const r = await api("/profile/bio", { method: "POST", body: { bio: (ta && ta.value) || "", fav_game: (fav && fav.value) || "" } });
+    _myProfileBio = { bio: r.bio || "", fav_game: r.fav_game || "" };
+    toast("Bio uloženo ✓", "success");
+    const box = document.getElementById("myBio"); if (box) box.innerHTML = profileBioHTML({ bio: r.bio, fav_game: r.fav_game }, true);
+  } catch (e) { toast(e.message, "error"); }
 }
 async function loadMyBadges() {
   const box = document.getElementById("myBadges"); if (!box || !state.user) return;
@@ -4277,6 +4318,9 @@ function handleAction(action, el) {
     case "mines-reveal": minesReveal(parseInt(el.dataset.tile, 10)); break;
     case "mines-cashout": minesCashout(); break;
     case "mines-new": pageMines(); break;
+    case "bio-edit": editBio(); break;
+    case "bio-save": saveBio(); break;
+    case "bio-cancel": loadMyBio(); break;
     case "claim-quest": claimQuest(el.dataset.key); break;
     case "claim-partner": claimPartnerLink(el.dataset.id, el.dataset.url); break;
     case "cos-buy": buyCosmetic(el.dataset.key); break;

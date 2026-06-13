@@ -972,6 +972,13 @@ footer.site-footer { border-top: 1px solid var(--border); padding: 22px 0; color
 .mines-setup-row label { display: flex; flex-direction: column; gap: 5px; font-size: 13px; font-weight: 800; }
 .mines-setup-row .input { max-width: 150px; }
 
+/* ===== Profil bio ===== */
+.profile-bio { background: var(--bg-2); border: 1px solid var(--border); border-radius: var(--r); padding: 12px 14px; margin: 12px 0; }
+.profile-bio .bio-text { font-size: 14px; line-height: 1.55; white-space: pre-wrap; word-break: break-word; }
+.profile-bio .bio-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 8px; }
+.bio-fav { font-size: 12.5px; font-weight: 800; padding: 3px 10px; border-radius: 999px; background: rgba(255,157,46,.14); color: var(--accent); border: 1px solid rgba(255,157,46,.3); }
+.profile-bio.bio-edit textarea { width: 100%; resize: vertical; min-height: 48px; }
+
 /* Zodpovědné sázení – self-exclusion tlačítka */
 .se-btns { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
 

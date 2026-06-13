@@ -555,6 +555,8 @@ _MIGRATIONS = [
     ("users", "daily_streak", "INTEGER NOT NULL DEFAULT 0"),
     ("users", "last_wheel", "TEXT"),
     ("users", "steam_trade_url", "TEXT"),
+    ("users", "bio", "TEXT"),          # osobní bio na profilu (max 160 znaků)
+    ("users", "fav_game", "TEXT"),     # vypíchnutá oblíbená hra (showcase)
     ("users", "is_sub", "INTEGER NOT NULL DEFAULT 0"),
     ("users", "is_vip", "INTEGER NOT NULL DEFAULT 0"),
     ("users", "is_og", "INTEGER NOT NULL DEFAULT 0"),
