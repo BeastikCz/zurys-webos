@@ -86,14 +86,20 @@ def _pred_public(conn, p, me_id: Optional[int]) -> dict:
 
 
 def _autolock_due(conn) -> int:
-    """Lazy auto-lock: zamkne všechny OPEN predikce, kterým vypršel lock_at (countdown sázek).
-    Voláno z veřejného výpisu (diváci pollují → zamkne se do vteřin) i ze sázky (enforcement)."""
+    """Lazy auto-lock: zamkne OPEN predikce, kterým vypršel lock_at (countdown sázek).
+    NEJDŘÍV levný SELECT – UPDATE (write lock) JEN když fakt něco vypršelo. Jinak by každý
+    poll /predictions (každý divák co 7 s) dělal write lock → z čtení zápis → contention
+    a 500 „database is locked" přímo na /predictions. Teď je to v 99 % případů čistý read."""
     now = now_iso()
+    due = conn.execute(
+        "SELECT 1 FROM predictions WHERE status='open' AND lock_at IS NOT NULL AND lock_at <= ? LIMIT 1",
+        (now,)).fetchone()
+    if not due:
+        return 0
     cur = conn.execute(
         "UPDATE predictions SET status='locked', locked_at=? "
         "WHERE status='open' AND lock_at IS NOT NULL AND lock_at <= ?", (now, now))
-    if cur.rowcount:
-        conn.commit()
+    conn.commit()
     return cur.rowcount
 
 
