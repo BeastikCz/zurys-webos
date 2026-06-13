@@ -48,6 +48,12 @@ def get_conn() -> sqlite3.Connection:
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
     conn.execute("PRAGMA journal_mode = WAL")
+    # synchronous=NORMAL: s WAL je to bezpečné (DB zůstane konzistentní; při tvrdém pádu
+    # OS/power se může ztratit jen pár posledních commitů) a HLAVNĚ to ruší fsync na každý
+    # commit → mnohonásobně vyšší write throughput. Bez toho 1 SQLite writer nestíhal nápor
+    # (heartbeaty + chat + drop claims) → „database is locked" kaskády a výpadky.
+    conn.execute("PRAGMA synchronous = NORMAL")
+    conn.execute("PRAGMA busy_timeout = 15000")   # explicitně (čeká na lock místo okamžité chyby)
     return conn
 
 
