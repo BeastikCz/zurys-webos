@@ -869,6 +869,28 @@ footer.site-footer { border-top: 1px solid var(--border); padding: 22px 0; color
   -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent; color:transparent !important;
   animation: cos-shine 4s linear infinite; }
 @keyframes cos-shine { to { background-position: -300% 0; } }
+.cn-cyan    { color: #1fe0d4 !important; }
+.cn-lime    { color: #9be63a !important; }
+.cn-orange  { color: #ff9a3c !important; }
+.cn-crimson { color: #ff2e54 !important; }
+.cn-sunset  { background: linear-gradient(90deg,#ffd24d,#ff7a8a,#b06bff,#ff7a8a); background-size:240% 100%;
+  -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent; color:transparent !important;
+  animation: cos-shine 5s linear infinite; }
+.cn-ice     { background: linear-gradient(90deg,#e6ffff,#7fe6ff,#c4f4ff,#7fe6ff); background-size:220% 100%;
+  -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent; color:transparent !important;
+  animation: cos-shine 3.5s linear infinite; }
+.cn-toxic   { background: linear-gradient(90deg,#b6ff3c,#2dff77,#eaff7a,#2dff77); background-size:240% 100%;
+  -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent; color:transparent !important;
+  animation: cos-shine 3s linear infinite; }
+.cn-galaxy  { background: linear-gradient(90deg,#7b6bff,#c46bff,#ff6bd0,#6bb4ff,#7b6bff); background-size:300% 100%;
+  -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent; color:transparent !important;
+  animation: cos-shine 5s linear infinite; }
+.cn-lava    { background: linear-gradient(90deg,#ffd24d,#ff7a18,#ff3030,#ff7a18,#ffd24d); background-size:260% 100%;
+  -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent; color:transparent !important;
+  animation: cos-shine 3s linear infinite; }
+.cn-holo    { background: linear-gradient(90deg,#ffc8f0,#c8e0ff,#c8fff0,#fff0c8,#ffc8f0); background-size:300% 100%;
+  -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent; color:transparent !important;
+  animation: cos-shine 6s linear infinite; }
 
 .avatar.cf-bronze  { box-shadow: 0 0 0 2px #b5743b; }
 .avatar.cf-silver  { box-shadow: 0 0 0 2px #cfd6e2; }
@@ -879,6 +901,13 @@ footer.site-footer { border-top: 1px solid var(--border); padding: 22px 0; color
 @keyframes cf-pulse-em { 0%,100% { box-shadow:0 0 0 2px #18d68a, 0 0 0 0 rgba(24,214,138,.5);} 50% { box-shadow:0 0 0 2px #18d68a, 0 0 12px 2px rgba(24,214,138,.7);} }
 @keyframes cf-pulse-neon { 0%,100% { box-shadow:0 0 0 2px #00e0ff, 0 0 0 0 rgba(0,224,255,.5);} 50% { box-shadow:0 0 0 2px #b06bff, 0 0 14px 2px rgba(176,107,255,.7);} }
 @keyframes cf-fire { 0% { box-shadow:0 0 0 2px #ff7a18, 0 0 12px -1px #ff5a00;} 50% { box-shadow:0 0 0 2px #ffb300, 0 0 16px 1px #ff7a00;} 100% { box-shadow:0 0 0 2px #ff5a00, 0 0 12px -1px #ff3000;} }
+.avatar.cf-ruby     { box-shadow: 0 0 0 2px #ff3b5c, 0 0 10px -2px rgba(255,59,92,.6); }
+.avatar.cf-sapphire { box-shadow: 0 0 0 2px #3b86ff, 0 0 10px -2px rgba(59,134,255,.6); }
+.avatar.cf-amethyst { box-shadow: 0 0 0 2px #b06bff, 0 0 10px -2px rgba(176,107,255,.6); }
+.avatar.cf-ice      { box-shadow: 0 0 0 2px #7fe6ff; animation: cf-pulse-ice 1.8s ease-in-out infinite; }
+.avatar.cf-rainbow  { animation: cf-rainbow 4s linear infinite; }
+@keyframes cf-pulse-ice { 0%,100% { box-shadow:0 0 0 2px #7fe6ff, 0 0 0 0 rgba(127,230,255,.5);} 50% { box-shadow:0 0 0 2px #cdf6ff, 0 0 14px 2px rgba(127,230,255,.75);} }
+@keyframes cf-rainbow { 0% { box-shadow:0 0 0 2px #ff4d6d;} 20% { box-shadow:0 0 0 2px #ff9d2e;} 40% { box-shadow:0 0 0 2px #ffe24d;} 60% { box-shadow:0 0 0 2px #46e08a;} 80% { box-shadow:0 0 0 2px #4db4ff;} 100% { box-shadow:0 0 0 2px #ff4d6d;} }
 
 .cb-midnight { background: linear-gradient(120deg,#141a3a,#2a1a4a 60%,#0c1030); }
 .cb-aurora   { background: linear-gradient(120deg,#1b3a5a,#2a6a7a 40%,#5a3a7a 80%,#7a3a5a); }
