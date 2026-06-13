@@ -6,7 +6,7 @@ from typing import List, Optional, Tuple
 from fastapi import HTTPException
 
 from .config import ROLE_ADMIN, ORDER_PENDING, UNLIMITED_STOCK, SKIN_TRADE_KEYWORDS
-from .db import now_iso, get_setting
+from .db import now_iso, get_setting, set_setting
 from .deps import add_points, try_debit
 
 
@@ -16,9 +16,29 @@ def needs_trade_link(category) -> bool:
     return any(k in c for k in SKIN_TRADE_KEYWORDS)
 
 
+def _happy_expired_off(conn) -> bool:
+    """Časovač happy hour: když je nastavený konec (happy_until) a vypršel → vypni VŠE
+    (sleva + 2× subs + časovač). Lazy auto-off (jako maintenance). True = právě/už vyprchal."""
+    until = get_setting(conn, "happy_until", "") or ""
+    if not until:
+        return False
+    try:
+        if datetime.now(timezone.utc) >= datetime.fromisoformat(until):
+            set_setting(conn, "shop_discount_pct", "0")
+            set_setting(conn, "happy_sub_2x", "0")
+            set_setting(conn, "happy_until", "")
+            conn.commit()
+            return True
+    except (ValueError, TypeError):
+        return False
+    return False
+
+
 def shop_discount_pct(conn) -> int:
     """Happy-hour sleva na nákupy (%). 0 = vypnuto. Volitelně jen když je live. Řídí admin.
     Aplikuje se SERVER-SIDE (validate + apply), ať se opravdu účtuje míň, ne jen zobrazí."""
+    if _happy_expired_off(conn):
+        return 0
     try:
         pct = int(get_setting(conn, "shop_discount_pct", "0") or "0")
     except (ValueError, TypeError):
@@ -40,6 +60,8 @@ def disc_unit(cost: int, pct: int) -> int:
 def sub_points_mult(conn) -> int:
     """Happy-hour násobič bodů za subs/gift subs: 2× když zapnuto (happy_sub_2x), jinak 1×.
     Sdílí přepínač „jen když live" se shop slevou (shop_discount_live_only). Řídí admin."""
+    if _happy_expired_off(conn):
+        return 1
     if get_setting(conn, "happy_sub_2x", "0") != "1":
         return 1
     if get_setting(conn, "shop_discount_live_only", "0") == "1":

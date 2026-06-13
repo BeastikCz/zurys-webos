@@ -1873,10 +1873,12 @@ FP_DEVICE_BAN_MAX_SHARED = 2
 @router.get("/shop-discount")
 def get_shop_discount(conn: sqlite3.Connection = Depends(db_dep)):
     """Stav happy-hour slevy na shop."""
+    active_now = shop_discount_pct(conn)   # vyhodnotí i auto-expiry časovače (vyčistí prošlé)
     pct = int(get_setting(conn, "shop_discount_pct", "0") or "0")
     return {"pct": pct, "live_only": get_setting(conn, "shop_discount_live_only", "0") == "1",
             "sub_2x": get_setting(conn, "happy_sub_2x", "0") == "1",
-            "is_live": live.is_live(conn), "active_now": shop_discount_pct(conn)}
+            "until": get_setting(conn, "happy_until", "") or "",
+            "is_live": live.is_live(conn), "active_now": active_now}
 
 
 @router.post("/shop-discount")
@@ -1887,30 +1889,37 @@ def set_shop_discount(data: ShopDiscountIn, request: Request,
     Při přechodu VYP→ZAP (a když je promo teď reálně aktivní) bot oznámí happy hour v chatu."""
     old_pct = int(get_setting(conn, "shop_discount_pct", "0") or "0")
     old_sub2x = get_setting(conn, "happy_sub_2x", "0") == "1"
+    now_on = data.pct > 0 or bool(data.sub_2x)
+    # Časovač: konec = teď + N min (jen když je promo zapnuté a minutes>0); jinak bez limitu.
+    until_iso = ((datetime.now(timezone.utc) + timedelta(minutes=data.minutes)).isoformat()
+                 if data.minutes > 0 and now_on else "")
     set_setting(conn, "shop_discount_pct", str(data.pct))
     set_setting(conn, "shop_discount_live_only", "1" if data.live_only else "0")
     set_setting(conn, "happy_sub_2x", "1" if data.sub_2x else "0")
+    set_setting(conn, "happy_until", until_iso)
     conn.commit()
     record_audit(conn, admin, request, "shop.discount",
-                 f"{data.pct}%" + (" (jen live)" if data.live_only else "") + (" +2× subs" if data.sub_2x else ""), "")
+                 f"{data.pct}%" + (" (jen live)" if data.live_only else "") + (" +2× subs" if data.sub_2x else "")
+                 + (f" {data.minutes}min" if until_iso else ""), "")
     # Chat oznámení: jen při ZAPNUTÍ (VYP→ZAP) a jen když je promo teď reálně aktivní
     # (respektuje „jen když live" – neoznamuj happy hour do offline chatu, když ještě neběží).
     disc_now = shop_discount_pct(conn)
     sub2x_active = bool(data.sub_2x) and (not data.live_only or live.is_live(conn))
-    was_on, now_on = (old_pct > 0 or old_sub2x), (data.pct > 0 or bool(data.sub_2x))
+    was_on = old_pct > 0 or old_sub2x
     if (disc_now > 0 or sub2x_active) and now_on and not was_on:
         parts = []
         if sub2x_active:
             parts.append("2× sedláků za subscribe / resub / gift sub 🟣")
         if disc_now > 0:
             parts.append(f"−{disc_now} % na všechno v shopu")
+        dur = f" (jen {data.minutes} min!)" if until_iso else ""
         try:
             from .. import kickbot
-            kickbot.send_message(conn, "🔴 HAPPY HOUR! Teď " + " a ".join(parts) + " 🌾 — využij to!", kind="happyhour")
+            kickbot.send_message(conn, "🔴 HAPPY HOUR! Teď " + " a ".join(parts) + dur + " 🌾 — využij to!", kind="happyhour")
         except Exception:
             pass
     return {"pct": data.pct, "live_only": bool(data.live_only), "sub_2x": bool(data.sub_2x),
-            "active_now": disc_now}
+            "minutes": data.minutes, "until": until_iso, "active_now": disc_now}
 
 
 @router.post("/users/{user_id}/gamble-block")

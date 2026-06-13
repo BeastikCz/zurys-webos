@@ -222,6 +222,7 @@ class ShopDiscountIn(BaseModel):
     pct: int = Field(ge=0, le=90)
     live_only: int = Field(default=0, ge=0, le=1)
     sub_2x: int = Field(default=0, ge=0, le=1)
+    minutes: int = Field(default=0, ge=0, le=720)   # časovač: 0 = bez limitu, jinak auto-vypnutí za N min
 
 
 class BanClusterIn(BaseModel):
