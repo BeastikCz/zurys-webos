@@ -13,6 +13,11 @@ import urllib.request
 _WEBHOOK = os.environ.get("DISCORD_ALERT_WEBHOOK", "").strip()
 _last: dict = {}
 _lock = threading.Lock()
+# Globální brzda proti záplavě: jeden incident zasáhne víc klíčů naráz (každý endpoint
+# co spadne = jiný key) → bez tohohle se Discord zaplaví. Max N alertů za okno, zbytek se zahodí.
+_global_ts: list = []
+_GLOBAL_MAX = 8
+_GLOBAL_WINDOW = 600   # s (10 min)
 
 
 def enabled() -> bool:
@@ -79,6 +84,11 @@ def send(title: str, detail: str = "", key: str = None, cooldown: int = 180,
     with _lock:
         if k in _last and now - _last[k] < cooldown:
             return
+        # globální brzda – při incidentu nezaplav Discord (víc klíčů naráz)
+        _global_ts[:] = [t for t in _global_ts if now - t < _GLOBAL_WINDOW]
+        if len(_global_ts) >= _GLOBAL_MAX:
+            return
+        _global_ts.append(now)
         _last[k] = now
     body = ("@everyone " if ping else "") + "**" + (title or "Alert")[:240] + "**"
     if detail:

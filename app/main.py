@@ -362,9 +362,14 @@ async def origin_lock(request: Request, call_next):
 # Alert na neošetřené chyby (500) → Discord (pokud je webhook), pak vrátí čistý 500.
 @app.exception_handler(Exception)
 async def _on_unhandled(request: Request, exc: Exception):
+    msg = str(exc)[:400]
+    locked = "database is locked" in msg.lower()
+    # „database is locked" je přechodná + při zátěži zasáhne víc cest naráz → jeden hrubý
+    # klíč, delší cooldown, BEZ pingu (jinak zaplaví Discord, jak se stalo při výpadku).
     alerts.send("🔴 Chyba 500: " + request.method + " " + request.url.path,
-                detail=type(exc).__name__ + ": " + str(exc)[:400],
-                key="500:" + request.url.path, cooldown=300, ping=True)
+                detail=type(exc).__name__ + ": " + msg,
+                key=("500:db-locked" if locked else "500:" + request.url.path),
+                cooldown=(900 if locked else 300), ping=(not locked))
     return JSONResponse(status_code=500, content={"detail": "Něco se pokazilo, zkus to prosím znovu."})
 
 
