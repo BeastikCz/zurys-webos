@@ -217,9 +217,11 @@ class FairSeedIn(BaseModel):
 
 
 class ShopDiscountIn(BaseModel):
-    """Happy-hour sleva na shop (admin). pct 0 = vypnuto; live_only 1 = jen když je live."""
+    """Happy-hour sleva na shop (admin). pct 0 = vypnuto; live_only 1 = jen když je live.
+    sub_2x 1 = během happy hour dvojnásobné body za subs/gift subs."""
     pct: int = Field(ge=0, le=90)
     live_only: int = Field(default=0, ge=0, le=1)
+    sub_2x: int = Field(default=0, ge=0, le=1)
 
 
 class BanClusterIn(BaseModel):

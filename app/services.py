@@ -37,6 +37,18 @@ def disc_unit(cost: int, pct: int) -> int:
     return round(cost * (100 - pct) / 100) if pct > 0 else cost
 
 
+def sub_points_mult(conn) -> int:
+    """Happy-hour násobič bodů za subs/gift subs: 2× když zapnuto (happy_sub_2x), jinak 1×.
+    Sdílí přepínač „jen když live" se shop slevou (shop_discount_live_only). Řídí admin."""
+    if get_setting(conn, "happy_sub_2x", "0") != "1":
+        return 1
+    if get_setting(conn, "shop_discount_live_only", "0") == "1":
+        from . import live
+        if not live.is_live(conn):
+            return 1
+    return 2
+
+
 def _has_trade_link(user) -> bool:
     """Má uživatel vyplněný Steam trade link?"""
     try:

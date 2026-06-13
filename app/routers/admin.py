@@ -1875,6 +1875,7 @@ def get_shop_discount(conn: sqlite3.Connection = Depends(db_dep)):
     """Stav happy-hour slevy na shop."""
     pct = int(get_setting(conn, "shop_discount_pct", "0") or "0")
     return {"pct": pct, "live_only": get_setting(conn, "shop_discount_live_only", "0") == "1",
+            "sub_2x": get_setting(conn, "happy_sub_2x", "0") == "1",
             "is_live": live.is_live(conn), "active_now": shop_discount_pct(conn)}
 
 
@@ -1882,13 +1883,34 @@ def get_shop_discount(conn: sqlite3.Connection = Depends(db_dep)):
 def set_shop_discount(data: ShopDiscountIn, request: Request,
                       conn: sqlite3.Connection = Depends(db_dep),
                       admin: sqlite3.Row = Depends(require_admin)):
-    """Admin nastaví happy-hour slevu (%) + zda jen během streamu."""
+    """Admin nastaví happy-hour slevu (%) + zda jen během streamu + 2× body za subs.
+    Při přechodu VYP→ZAP (a když je promo teď reálně aktivní) bot oznámí happy hour v chatu."""
+    old_pct = int(get_setting(conn, "shop_discount_pct", "0") or "0")
+    old_sub2x = get_setting(conn, "happy_sub_2x", "0") == "1"
     set_setting(conn, "shop_discount_pct", str(data.pct))
     set_setting(conn, "shop_discount_live_only", "1" if data.live_only else "0")
+    set_setting(conn, "happy_sub_2x", "1" if data.sub_2x else "0")
     conn.commit()
     record_audit(conn, admin, request, "shop.discount",
-                 f"{data.pct}%" + (" (jen live)" if data.live_only else ""), "")
-    return {"pct": data.pct, "live_only": bool(data.live_only), "active_now": shop_discount_pct(conn)}
+                 f"{data.pct}%" + (" (jen live)" if data.live_only else "") + (" +2× subs" if data.sub_2x else ""), "")
+    # Chat oznámení: jen při ZAPNUTÍ (VYP→ZAP) a jen když je promo teď reálně aktivní
+    # (respektuje „jen když live" – neoznamuj happy hour do offline chatu, když ještě neběží).
+    disc_now = shop_discount_pct(conn)
+    sub2x_active = bool(data.sub_2x) and (not data.live_only or live.is_live(conn))
+    was_on, now_on = (old_pct > 0 or old_sub2x), (data.pct > 0 or bool(data.sub_2x))
+    if (disc_now > 0 or sub2x_active) and now_on and not was_on:
+        parts = []
+        if sub2x_active:
+            parts.append("2× sedláků za subscribe / resub / gift sub 🟣")
+        if disc_now > 0:
+            parts.append(f"−{disc_now} % na všechno v shopu")
+        try:
+            from .. import kickbot
+            kickbot.send_message(conn, "🔴 HAPPY HOUR! Teď " + " a ".join(parts) + " 🌾 — využij to!", kind="happyhour")
+        except Exception:
+            pass
+    return {"pct": data.pct, "live_only": bool(data.live_only), "sub_2x": bool(data.sub_2x),
+            "active_now": disc_now}
 
 
 @router.post("/users/{user_id}/gamble-block")

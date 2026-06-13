@@ -2394,9 +2394,11 @@ async function uploadCoinIcon() {
 async function saveShopDiscount() {
   const pct = Math.max(0, Math.min(90, parseInt((document.getElementById("shop_disc_pct") || {}).value || "0", 10) || 0));
   const liveOnly = document.getElementById("shop_disc_live_only") && document.getElementById("shop_disc_live_only").classList.contains("on") ? 1 : 0;
+  const sub2x = document.getElementById("shop_disc_sub_2x") && document.getElementById("shop_disc_sub_2x").classList.contains("on") ? 1 : 0;
   try {
-    const r = await api("/admin/shop-discount", { method: "POST", body: { pct, live_only: liveOnly } });
-    toast(r.pct > 0 ? `Happy hour: −${r.pct}%${r.live_only ? " (jen live)" : ""} 🔴` : "Happy hour vypnut", "success");
+    const r = await api("/admin/shop-discount", { method: "POST", body: { pct, live_only: liveOnly, sub_2x: sub2x } });
+    const bits = [r.pct > 0 ? `−${r.pct}%` : null, r.sub_2x ? "2× subs 🟣" : null, r.live_only ? "jen live" : null].filter(Boolean);
+    toast(bits.length ? `Happy hour: ${bits.join(" · ")} 🔴` : "Happy hour vypnut", "success");
     adminEconomy();
   } catch (e) { toast(e.message, "error"); }
 }
@@ -2426,7 +2428,8 @@ async function adminEconomy() {
         <p class="muted" style="font-size:13px;margin-bottom:14px">Dočasná sleva na <b>všechny nákupy</b> v shopu — táhne diváky utrácet (a koukat živě, když dáš „jen když live"). 0 % = vypnuto. ${hh.active_now ? `<b style="color:#46d369">Teď aktivní: −${hh.active_now} %</b>` : `<span class="faint">Teď: vypnuto</span>`}</p>
         <div class="eco-row"><div><b>Sleva (%)</b><br><span class="faint" style="font-size:12px">0–90 % (0 = vypnuto)</span></div><input class="input" id="shop_disc_pct" type="number" min="0" max="90" value="${hh.pct}" style="width:92px"></div>
         ${ecoToggle("shop_disc_live_only", "Jen když je LIVE", "Sleva platí jen během streamu (víc concurrent diváků)", hh.live_only)}
-        <div class="row-between" style="margin-top:16px"><span class="faint" style="font-size:12px">Projeví se hned (banner + škrtnuté ceny v shopu).</span><button class="btn btn-accent" data-action="shop-disc-save">💾 Uložit happy hour</button></div>
+        ${ecoToggle("shop_disc_sub_2x", "2× body za subs a gift subs 🟣", "Během happy hour dají subscribe, resub i gift sub dvojnásob sedláků. Sdílí přepínač jen-když-live. Funguje i bez slevy na shop.", hh.sub_2x)}
+        <div class="row-between" style="margin-top:16px"><span class="faint" style="font-size:12px">Projeví se hned (banner + škrtnuté ceny v shopu; 2× subs platí pro nové Kick eventy).</span><button class="btn btn-accent" data-action="shop-disc-save">💾 Uložit happy hour</button></div>
       </div>
       <div class="panel">
         <div class="section-title" style="margin-top:0">💰 Ekonomika – pasivní výdělek</div>

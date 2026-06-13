@@ -17,7 +17,7 @@ import rsa
 
 from .db import now_iso
 from .deps import add_points
-from . import economy, kickcommands
+from . import economy, kickcommands, services
 
 _KEY_URL = "https://api.kick.com/public/v1/public-key"
 _pub = None
@@ -147,18 +147,21 @@ def handle_event(conn, event_type: str, payload: dict) -> dict:
     if event_type in ("channel.subscription.new", "channel.subscription.renewal"):
         uname = (payload.get("subscriber") or {}).get("username")
         is_new = event_type.endswith("new")
-        pts = eco["eco_sub_pts"] if is_new else eco["eco_resub_pts"]
+        mult = services.sub_points_mult(conn)   # happy-hour 2× na subs (jinak 1×)
+        pts = (eco["eco_sub_pts"] if is_new else eco["eco_resub_pts"]) * mult
         exp = payload.get("expires_at")
-        _award_kick_user(conn, uname, pts, "Kick sub 🟣" if is_new else "Kick resub 🔁", set_sub=True, sub_expires_at=exp, log_event=True)
-        return {"ok": True, "type": event_type, "user": uname, "pts": pts}
+        label = ("Kick sub 🟣" if is_new else "Kick resub 🔁") + (" (happy 2×)" if mult > 1 else "")
+        _award_kick_user(conn, uname, pts, label, set_sub=True, sub_expires_at=exp, log_event=True)
+        return {"ok": True, "type": event_type, "user": uname, "pts": pts, "mult": mult}
 
     if event_type == "channel.subscription.gifts":
         gifter = (payload.get("gifter") or {}).get("username")   # None = anonym
         giftees = payload.get("giftees") or []
         n = len(giftees)
-        total = eco["eco_giftsub_pts"] * n
+        mult = services.sub_points_mult(conn)   # happy-hour 2× na gift subs (jinak 1×)
+        total = eco["eco_giftsub_pts"] * n * mult
         if gifter and total:
-            _award_kick_user(conn, gifter, total, f"Kick gift sub 🎁 ×{n}")
+            _award_kick_user(conn, gifter, total, f"Kick gift sub 🎁 ×{n}" + (" (happy 2×)" if mult > 1 else ""))
         gexp = payload.get("expires_at")
         for g in giftees:                                        # příjemci se stávají suby
             gu = (g or {}).get("username")
