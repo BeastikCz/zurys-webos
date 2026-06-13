@@ -13,6 +13,7 @@ Escrow + atomický odečet (try_debit) brání mínusu i dvojímu odečtu. Výpl
 přes status guard (jen ze stavu open/locked → resolved).
 """
 import sqlite3
+import threading
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
@@ -96,6 +97,28 @@ def _autolock_due(conn) -> int:
     return cur.rowcount
 
 
+def _pred_announce(text: str) -> None:
+    """Hláška o predikci do Kick chatu v BACKGROUND threadu s VLASTNÍM DB connection
+    (jako autodrop daemon). Kick API je synchronní HTTP – kdyby běželo v request threadu
+    na sdíleném conn, drží DB write lock + blokuje jediný worker → „database is locked"
+    a výpadek (stalo se 2026-06-13). Thread = request se vrátí hned, nic nedrží."""
+    def _bg():
+        try:
+            from ..db import get_conn
+            from .. import kickbot
+            c = get_conn()
+            try:
+                kickbot.send_message(c, text, kind="prediction")
+            finally:
+                c.close()
+        except Exception:
+            pass
+    try:
+        threading.Thread(target=_bg, daemon=True).start()
+    except Exception:
+        pass
+
+
 # ======================= VEŘEJNÉ =======================
 @router.get("")
 def list_predictions(user: Optional[sqlite3.Row] = Depends(get_current_user),
@@ -177,6 +200,12 @@ def create_prediction(data: PredictionCreateIn, request: Request,
         )
     record_audit(conn, staff, request, "prediction.create", f"#{pid}", data.question[:80])
     conn.commit()
+    q = data.question.strip()
+    if data.lock_seconds > 0:
+        mins = max(1, round(data.lock_seconds / 60))
+        _pred_announce(f"🎯 Nová predikce: {q} — sázejte na zurys.live! Sázky se zavřou za {mins} min ⏳🌾")
+    else:
+        _pred_announce(f"🎯 Nová predikce: {q} — sázejte na zurys.live! 🌾")
     return _pred_public(conn, _get_pred(conn, pid), staff["id"])
 
 
@@ -256,6 +285,11 @@ def resolve_prediction(pid: int, data: PredictionResolveIn, request: Request,
     record_audit(conn, staff, request, "prediction.resolve", f"#{pid}",
                  f"vítěz: {opt['label']} ({paid_winners} výherců, bank {total})")
     conn.commit()
+    if total > 0:
+        if win_pool == 0:
+            _pred_announce(f"🎯 Výsledek: {p['question']} → ✅ {opt['label']}! Nikdo netrefil — vklady vráceny.")
+        else:
+            _pred_announce(f"🎯 Výsledek: {p['question']} → ✅ {opt['label']}! {paid_winners} výherců si rozdělilo {total} sedláků 🌾")
     return _pred_public(conn, _get_pred(conn, pid), staff["id"])
 
 
