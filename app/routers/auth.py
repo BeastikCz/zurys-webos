@@ -309,6 +309,12 @@ def me(user: Optional[sqlite3.Row] = Depends(get_current_user),
                 (user["id"],)).fetchone()["c"]
     except Exception:
         data["dm_unread"] = 0
+    try:                                                       # počet nepřečtených notifikací (zvoneček)
+        data["notif_unread"] = conn.execute(
+            "SELECT COUNT(*) AS c FROM notifications WHERE user_id = ? AND read = 0",
+            (user["id"],)).fetchone()["c"]
+    except Exception:
+        data["notif_unread"] = 0
     return {"user": data}
 
 

@@ -248,9 +248,10 @@ function renderHeader() {
 
   const cartBtn = `<button class="icon-btn" data-action="nav" data-href="cart" title="Košík">🛒${cartCount() ? `<span class="cart-badge">${cartCount()}</span>` : ""}</button>`;
   const msgBtn = u ? `<button class="icon-btn" data-action="nav" data-href="zpravy" title="Zprávy">✉️${u.dm_unread ? `<span class="cart-badge">${u.dm_unread}</span>` : ""}</button>` : "";
+  const notifBtn = u ? `<button class="icon-btn" data-action="open-notifs" title="Notifikace">🔔${u.notif_unread ? `<span class="cart-badge">${u.notif_unread}</span>` : ""}</button>` : "";
   let right;
   if (u) {
-    right = `<div class="pts-pill" title="Tvůj zůstatek"><span class="coin"></span><b>${Number(u.points).toLocaleString("cs-CZ")}</b><span class="lbl">sedláků</span></div>${cartBtn}${msgBtn}
+    right = `<div class="pts-pill" title="Tvůj zůstatek"><span class="coin"></span><b>${Number(u.points).toLocaleString("cs-CZ")}</b><span class="lbl">sedláků</span></div>${cartBtn}${msgBtn}${notifBtn}
       <a href="#/profile" class="user-chip" title="Můj profil">${avatarHTML(u.username, u.avatar_url, "", cosF(u))}<div style="display:flex;flex-direction:column;line-height:1.15"><span class="uc-name ${cosN(u)}">${esc(u.username)}</span><span class="uc-tier">${userTier(u.rank) ? "★ " + userTier(u.rank) : ""}</span></div></a>
       <button class="btn btn-ghost btn-sm logout-top" data-action="logout" title="Odhlásit">Odhlásit</button>`;
   } else {
@@ -270,7 +271,7 @@ function renderHeader() {
     items.map(([k, l]) => `<a href="#/${k}" class="${route === k ? "active" : ""}">${l}${navDot(k)}</a>`).join("")
     + `<a href="#/cart" class="${route === "cart" ? "active" : ""}">🛒 Košík${cartCount() ? ` (${cartCount()})` : ""}</a>`
     + (u
-      ? `<a href="#/zpravy" class="${route === "zpravy" ? "active" : ""}">✉️ Zprávy${u.dm_unread ? ` (${u.dm_unread})` : ""}</a><a href="#/profile" class="${route === "profile" ? "active" : ""}">👤 Profil</a>${isStaff(u) ? `<a href="#/admin" class="${route === "admin" ? "active" : ""}">🛠️ ${u.role === "admin" ? "Admin" : "Panel"}</a>` : ""}<a href="#" data-action="logout">🚪 Odhlásit</a>`
+      ? `<a href="#/zpravy" class="${route === "zpravy" ? "active" : ""}">✉️ Zprávy${u.dm_unread ? ` (${u.dm_unread})` : ""}</a><a href="#" data-action="open-notifs">🔔 Notifikace${u.notif_unread ? ` (${u.notif_unread})` : ""}</a><a href="#/profile" class="${route === "profile" ? "active" : ""}">👤 Profil</a>${isStaff(u) ? `<a href="#/admin" class="${route === "admin" ? "active" : ""}">🛠️ ${u.role === "admin" ? "Admin" : "Panel"}</a>` : ""}<a href="#" data-action="logout">🚪 Odhlásit</a>`
       : `<a href="#" data-action="connect">🟢 Připojit přes Kick</a>`);
 
   refreshStreamDot();
@@ -1541,6 +1542,54 @@ async function openNewsPanel() {
   } catch (e) {
     const body = $("#newsPanelBody"); if (body) body.innerHTML = `<div class="empty">Novinky se nepodařilo načíst.</div>`;
   }
+}
+
+/* ---- Notifikace (zvoneček) ---- */
+async function openNotifs() {
+  if (!state.user) { navigate("connect"); return; }
+  const root = $("#notifPanelRoot"); if (!root) return;
+  root.innerHTML = `<div class="news-panel-backdrop" data-action="close-notifs"></div>
+    <aside class="news-panel" role="dialog" aria-label="Notifikace">
+      <div class="news-panel-head">
+        <div class="news-panel-title">🔔 Notifikace</div>
+        <button class="modal-close" data-action="close-notifs" title="Zavřít">✕</button>
+      </div>
+      <div class="news-panel-body" id="notifPanelBody"><div class="skeleton" style="height:64px;margin-bottom:10px"></div><div class="skeleton" style="height:64px"></div></div>
+    </aside>`;
+  root.classList.add("open");
+  try {
+    const r = await api("/notifications");
+    const items = r.items || [];
+    const body = $("#notifPanelBody"); if (!body) return;
+    body.innerHTML = items.length
+      ? `<div class="notif-list">${items.map(notifItemHTML).join("")}</div>`
+      : `<div class="empty"><div class="big">🔔</div>Zatím žádné notifikace.</div>`;
+    if (r.unread) {                                   // označit přečtené + shodit badge
+      api("/notifications/read", { method: "POST" }).catch(() => {});
+      if (state.user) { state.user.notif_unread = 0; renderHeader(); }
+    }
+  } catch (e) {
+    const body = $("#notifPanelBody"); if (body) body.innerHTML = `<div class="empty">Notifikace se nepodařilo načíst.</div>`;
+  }
+}
+function closeNotifs() { const root = $("#notifPanelRoot"); if (root) { root.classList.remove("open"); root.innerHTML = ""; } }
+function notifItemHTML(n) {
+  const clickable = n.link ? ` data-action="notif-go" data-link="${esc(n.link)}" style="cursor:pointer"` : "";
+  return `<div class="notif-item${n.read ? "" : " unread"}"${clickable}>
+    <div class="notif-ico">${esc(n.icon || "🔔")}</div>
+    <div class="notif-main">
+      <div class="notif-title">${esc(n.title)}</div>
+      ${n.body ? `<div class="notif-body">${esc(n.body)}</div>` : ""}
+      <div class="notif-time">${timeAgo(n.created_at)}</div>
+    </div>
+  </div>`;
+}
+async function pollNotifBadge() {
+  if (!state.user || document.hidden) return;
+  try {
+    const r = await api("/notifications/unread");
+    if (r.count !== state.user.notif_unread) { state.user.notif_unread = r.count; renderHeader(); }
+  } catch (e) { }
 }
 function closeNewsPanel() {
   const root = $("#newsPanelRoot"); if (!root) return;
@@ -4539,6 +4588,9 @@ function handleAction(action, el) {
     case "game-back": navigate("games"); break;
     case "open-news": openNewsPanel(); break;
     case "close-news": closeNewsPanel(); break;
+    case "open-notifs": openNotifs(); break;
+    case "close-notifs": closeNotifs(); break;
+    case "notif-go": closeNotifs(); if (el.dataset.link) location.hash = el.dataset.link; break;
     /* admin */
     case "admin-tab": renderAdminTab(el.dataset.tab); break;
     case "product-new": productForm(null); break;
@@ -5458,6 +5510,7 @@ async function init() {
   render();
   refreshBonusDot();   // rozsvítí tečku na „Bonusy", pokud je co vyzvednout
   if (!window._dmBadgeTimer) window._dmBadgeTimer = setInterval(pollDmBadge, 20000);   // live ✉️ badge (šetrný interval)
+  if (!window._notifBadgeTimer) window._notifBadgeTimer = setInterval(pollNotifBadge, 20000);   // live 🔔 badge
 }
 window.addEventListener("hashchange", render);
 

@@ -696,6 +696,38 @@ def gift_points(data: GiftIn, request: Request,
                        f"Body máš zatím zablokované — když admin zamítne, vrátí se ti zpět."}
 
 
+# ---------------- Notifikace (zvoneček v hlavičce) ----------------
+@router.get("/notifications")
+def notifications_list(user: sqlite3.Row = Depends(require_user),
+                       conn: sqlite3.Connection = Depends(db_dep)):
+    """Posledních 30 notifikací uživatele + počet nepřečtených."""
+    rows = conn.execute(
+        "SELECT id, icon, title, body, link, read, created_at FROM notifications "
+        "WHERE user_id = ? ORDER BY id DESC LIMIT 30", (user["id"],)).fetchall()
+    unread = conn.execute(
+        "SELECT COUNT(*) AS c FROM notifications WHERE user_id = ? AND read = 0",
+        (user["id"],)).fetchone()["c"]
+    return {"items": [dict(r) for r in rows], "unread": unread}
+
+
+@router.get("/notifications/unread")
+def notifications_unread(user: sqlite3.Row = Depends(require_user),
+                         conn: sqlite3.Connection = Depends(db_dep)):
+    """Jen počet nepřečtených – levný poll pro badge."""
+    c = conn.execute("SELECT COUNT(*) AS c FROM notifications WHERE user_id = ? AND read = 0",
+                     (user["id"],)).fetchone()["c"]
+    return {"count": c}
+
+
+@router.post("/notifications/read")
+def notifications_mark_read(user: sqlite3.Row = Depends(require_user),
+                            conn: sqlite3.Connection = Depends(db_dep)):
+    """Označí všechny notifikace uživatele jako přečtené."""
+    conn.execute("UPDATE notifications SET read = 1 WHERE user_id = ? AND read = 0", (user["id"],))
+    conn.commit()
+    return {"ok": True}
+
+
 # ---------------- Denní bonus – 7denní streak ----------------
 DAILY_LADDER = [10, 20, 30, 40, 50, 75, 200]  # PTS za den 1..7
 DAILY_COOLDOWN_H = 20    # jak často lze vyzvednout

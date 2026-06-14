@@ -762,6 +762,16 @@ footer.site-footer { border-top: 1px solid var(--border); padding: 22px 0; color
 .news-panel-body { padding: 16px; overflow-y: auto; flex: 1; }
 @media (max-width: 600px) { .news-fab { padding: 0; width: 44px; justify-content: center; } .news-fab .nf-lbl { display: none; } }
 
+/* ---------- 🔔 Notifikace (zvoneček) ---------- */
+.notif-list { display: flex; flex-direction: column; gap: 8px; }
+.notif-item { display: flex; gap: 11px; padding: 11px 12px; border-radius: 11px; background: var(--surface-2); border: 1px solid var(--border); }
+.notif-item.unread { background: rgba(255,157,46,.10); border-color: rgba(255,157,46,.40); }
+.notif-ico { font-size: 20px; line-height: 1.1; flex-shrink: 0; }
+.notif-main { min-width: 0; flex: 1; }
+.notif-title { font-weight: 700; font-size: 13.5px; }
+.notif-body { color: var(--muted); font-size: 12.5px; margin-top: 2px; line-height: 1.45; }
+.notif-time { color: var(--faint); font-size: 11.5px; margin-top: 4px; }
+
 /* ---------- 🃏 Casino blackjack stůl (felt) ---------- */
 .bj-felt { position: relative; overflow: hidden; margin-bottom: 12px; padding: 18px 14px 26px;
   border: 3px solid var(--gold); border-radius: 18px 18px 90px 90px / 18px 18px 48px 48px;

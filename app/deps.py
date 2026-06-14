@@ -327,6 +327,22 @@ def add_points(conn: sqlite3.Connection, user_id: int, change: int, reason: str)
     )
 
 
+def notify(conn: sqlite3.Connection, user_id: int, icon: str, title: str,
+           body: str = "", link: str = "") -> None:
+    """Vloží in-app notifikaci uživateli (zvoneček v hlavičce). Necommituje – commituje caller.
+
+    Drží max 50 nejnovějších na uživatele, ať tabulka neroste donekonečna."""
+    conn.execute(
+        "INSERT INTO notifications (user_id, icon, title, body, link, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+        (user_id, icon, title[:120], (body or "")[:300], (link or "")[:80], now_iso()),
+    )
+    conn.execute(
+        "DELETE FROM notifications WHERE user_id = ? AND id NOT IN "
+        "(SELECT id FROM notifications WHERE user_id = ? ORDER BY id DESC LIMIT 50)",
+        (user_id, user_id),
+    )
+
+
 def user_rank(conn: sqlite3.Connection, points: int, username: str) -> int:
     """Pozice uživatele v žebříčku (1 = nejvíc sedláků). Stejné řazení jako leaderboard
     (points DESC, username ASC), takže rank == pozice na leaderboardu."""

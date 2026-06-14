@@ -16,7 +16,7 @@ from ..config import (ALL_ROLES, PRODUCT_TYPES, PRODUCT_PERIODS, ORDER_PENDING, 
                       UNLIMITED_STOCK, ROLE_ADMIN, ROLE_MOD, MOD_POINTS_MAX, STAFF_ROLES, DB_PATH, DATA_DIR, UPLOAD_DIR,
                       ANTICHEAT_RULES, DATACENTER_CIDRS)
 from ..db import now_iso, set_setting, get_setting
-from ..deps import db_dep, require_admin, require_user, require_broadcaster, admin_guard, to_public, add_points, record_audit, client_ip
+from ..deps import db_dep, require_admin, require_user, require_broadcaster, admin_guard, to_public, add_points, record_audit, client_ip, notify
 from .. import kickbot, economy, ipban, ddos, iprep, live, steam, cs_skins, autodrop, maintenance, alerts, digest, partners_flash, live_events, econ_health
 from .games import list_games_admin, cancel_game_admin, games_history, refund_game_admin, refund_duel_admin
 from ..models import (ProductIn, SkinLookupIn, SkinSearchIn, ImageUploadIn, UserRoleIn, UserFlagsIn, UserPointsIn, UserAdminMetaIn, OrderStatusIn, CodeGenIn,
@@ -975,11 +975,15 @@ def set_order_status(order_id: int, data: OrderStatusIn, request: Request,
                      admin: sqlite3.Row = Depends(require_user)):
     if data.status not in (ORDER_PENDING, ORDER_FULFILLED):
         raise HTTPException(status_code=400, detail="Neplatný stav objednávky.")
-    exists = conn.execute("SELECT id FROM orders WHERE id = ?", (order_id,)).fetchone()
-    if not exists:
+    row = conn.execute("SELECT user_id, product_name, status FROM orders WHERE id = ?", (order_id,)).fetchone()
+    if not row:
         raise HTTPException(status_code=404, detail="Objednávka nenalezena.")
     conn.execute("UPDATE orders SET status = ? WHERE id = ?", (data.status, order_id))
     record_audit(conn, admin, request, "order.status", f"#{order_id}", data.status)
+    # notifikace majiteli při přechodu na „vyřízeno" (ne při opakovaném nastavení)
+    if data.status == ORDER_FULFILLED and row["status"] != ORDER_FULFILLED and row["user_id"]:
+        notify(conn, row["user_id"], "📦", "Objednávka vyřízena",
+               f"Tvoje objednávka {row['product_name']} je vyřízená. 🎉", "#/profile")
     conn.commit()
     return {"ok": True, "id": order_id, "status": data.status}
 
@@ -1630,6 +1634,10 @@ def gift_request_approve(rid: int, request: Request,
                  (now_iso(), user["username"], rid))
     record_audit(conn, user, request, "gift.approve",
                  target=rcp["username"], details=f"+{g['amount']} PTS od {frm['username']}")
+    notify(conn, g["from_user_id"], "✅", "Dar schválen",
+           f"Tvůj dar {g['amount']} sedláků pro {rcp['username']} byl schválen. 🎁", "#/exchange")
+    notify(conn, g["to_user_id"], "🎁", "Dostal jsi dar!",
+           f"{frm['username']} ti poslal {g['amount']} sedláků.", "#/exchange")
     conn.commit()
     return {"ok": True, "status": "approved", "amount": g["amount"],
             "from": frm["username"], "to": rcp["username"]}
@@ -1656,6 +1664,8 @@ def gift_request_reject(rid: int, request: Request,
     target = rcp["username"] if rcp else str(g["to_user_id"])
     record_audit(conn, user, request, "gift.reject", target=target,
                  details=f"vráceno {g['amount']} PTS odesílateli")
+    notify(conn, g["from_user_id"], "↩️", "Dar zamítnut",
+           f"Tvůj dar {g['amount']} sedláků pro {target} byl zamítnut adminem — body se ti vrátily.", "#/exchange")
     conn.commit()
     return {"ok": True, "status": "rejected", "amount": g["amount"]}
 

@@ -555,6 +555,18 @@ CREATE TABLE IF NOT EXISTS gift_requests (
     decided_by    TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_gift_requests_status ON gift_requests(status, id);
+
+CREATE TABLE IF NOT EXISTS notifications (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    icon        TEXT NOT NULL DEFAULT '🔔',
+    title       TEXT NOT NULL,
+    body        TEXT,
+    link        TEXT,
+    read        INTEGER NOT NULL DEFAULT 0,
+    created_at  TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_notif_user ON notifications(user_id, read, id);
 """
 
 
