@@ -989,6 +989,9 @@ footer.site-footer { border-top: 1px solid var(--border); padding: 22px 0; color
 .wl-bar { height: 8px; border-radius: 6px; background: rgba(255,255,255,.08); overflow: hidden; }
 .wl-fill { height: 100%; background: var(--accent); transition: width .4s ease; }
 
+/* Emote místo textu v role/sub/vip/og badge */
+.badge.badge-emote { font-size: 14px; line-height: 1; letter-spacing: 0; padding: 3px 7px; }
+
 /* Zodpovědné sázení – self-exclusion tlačítka */
 .se-btns { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
 

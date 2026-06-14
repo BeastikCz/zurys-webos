@@ -111,16 +111,16 @@ function uLink(name) {
   return n ? `<a class="prof-link" href="#/u/${encodeURIComponent(n)}">${esc(n)}</a>` : esc(name || "?");
 }
 function roleBadge(role) {
-  const map = { admin: ["badge-admin", "Admin"], broadcaster: ["badge-admin", "Broadcaster"], mod: ["badge-vip-role", "Moderátor"], vip: ["badge-vip-role", "VIP"], sub: ["badge-sub-role", "Sub"], user: ["badge-user-role", "Divák"] };
-  const [cls, label] = map[role] || map.user;
-  return `<span class="badge badge-role ${cls}">${label}</span>`;
+  const map = { admin: ["badge-admin", "🛡️", "Admin"], broadcaster: ["badge-admin", "👑", "Broadcaster"], mod: ["badge-vip-role", "🔨", "Moderátor"], vip: ["badge-vip-role", "💎", "VIP"], sub: ["badge-sub-role", "💜", "Sub"], user: ["badge-user-role", "👤", "Divák"] };
+  const [cls, icon, label] = map[role] || map.user;
+  return `<span class="badge badge-role badge-emote ${cls}" title="${label}" aria-label="${label}">${icon}</span>`;
 }
 // Odznáčky SUB / VIP / OG (Kick status – display only, nezávislé na roli). Můžou být i víc naráz.
 function subVipBadges(u) {
   let s = "";
-  if (u && u.is_og) s += `<span class="badge badge-role badge-admin">OG</span> `;
-  if (u && u.is_sub) s += `<span class="badge badge-role badge-sub-role">SUB</span> `;
-  if (u && u.is_vip) s += `<span class="badge badge-role badge-vip-role">VIP</span> `;
+  if (u && u.is_og) s += `<span class="badge badge-role badge-emote badge-admin" title="OG" aria-label="OG">🏅</span> `;
+  if (u && u.is_sub) s += `<span class="badge badge-role badge-emote badge-sub-role" title="Sub" aria-label="Sub">💜</span> `;
+  if (u && u.is_vip) s += `<span class="badge badge-role badge-emote badge-vip-role" title="VIP" aria-label="VIP">💎</span> `;
   return s;
 }
 // Pro leaderboard: staff dostane svůj badge + sub/vip; běžný divák jen sub/vip (jinak „Divák").
