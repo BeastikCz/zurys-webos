@@ -46,7 +46,7 @@
 </style>
 </head>
 <body>
-  <img class="bg" id="bgA" src="/maint-end.jpg" alt="Náš web končí" style="opacity:1">
+  <img class="bg" id="bgA" src="/maint-1.jpg" alt="Probíhá údržba — brzy jsme zpátky" style="opacity:1">
   <img class="bg" id="bgB" alt="" style="opacity:0">
 
   <div class="cd" id="cd" hidden></div>
@@ -54,7 +54,7 @@
   <script>
     // ---- Slideshow maintenance fotek (plynulé prolínání každých 8 s) ----
     (function () {
-      var IMGS = ["/maint-end.jpg"];   // JEN jedna fotka → slideshow se nespustí (return níž u length < 2)
+      var IMGS = ["/maint-1.jpg", "/maint-2.jpg", "/maint-3.jpg", "/maint-4.jpg", "/maint-5.jpg", "/maint-6.jpg", "/maint-7.jpg", "/maint-8.png", "/maint-9.png", "/maint-10.png", "/maint-11.png"];   // slideshow (prolíná každých 8 s)
       var a = document.getElementById("bgA"), b = document.getElementById("bgB");
       if (!a || !b || IMGS.length < 2) return;
       IMGS.forEach(function (s) { var im = new Image(); im.src = s; });   // přednačtení (žádné blikání)
