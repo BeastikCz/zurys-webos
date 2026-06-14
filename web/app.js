@@ -4512,14 +4512,17 @@ function happyHourCardHTML(h) {
   return `<div class="panel" style="margin-bottom:18px;border-color:${on ? "var(--accent-2)" : "var(--border)"}">
     <div class="row-between"><div class="section-title" style="margin:0">🔴 Happy Hour (start streamu)</div>
       <span class="badge ${on ? "badge-sub" : ""}">${active ? "⚡ PRÁVĚ BĚŽÍ" : (on ? "🟢 ZAPNUTO" : "⚫ vypnuto")}</span></div>
-    <p class="form-hint" style="margin:8px 0 12px">Jakmile začneš streamovat, web sám zapne <b>×${h.livehappy_mult}</b> sedláků za sledování i chat na <b>${h.livehappy_minutes} min</b> a bot to oznámí v chatu. 🌾⚡</p>
+    <p class="form-hint" style="margin:8px 0 12px"><b>▶️ Spustit TEĎ</b> = ručně hned (countdown <b>${h.livehappy_minutes} min</b>, <b>×${h.livehappy_mult}</b> za sledování i chat, bot to oznámí v chatu). <b>🔔 Auto na startu</b> = web spustí HH sám, jakmile začneš streamovat. 🌾⚡</p>
     <div class="field-row">
       <div class="field"><label>Násobič (×)</label><input class="input" id="hh_mult" type="number" min="1" max="10" step="0.5" value="${h.livehappy_mult}"></div>
       <div class="field"><label>Trvání (min)</label><input class="input" id="hh_min" type="number" min="1" max="720" value="${h.livehappy_minutes}"></div>
     </div>
-    <div class="toolbar" style="margin-top:12px">
-      <button class="btn ${on ? "btn-danger" : "btn-primary"}" data-action="happy-toggle" data-on="${on ? 1 : 0}">${on ? "⏸️ Vypnout Happy Hour" : "▶️ Zapnout Happy Hour"}</button>
-      <button class="btn btn-sm" data-action="happy-save">💾 Uložit nastavení</button>
+    <div class="toolbar" style="margin-top:12px;flex-wrap:wrap">
+      ${active
+        ? `<button class="btn btn-danger" data-action="happy-stop">⏹️ Ukončit happy hour</button>`
+        : `<button class="btn btn-primary" data-action="happy-start">▶️ Spustit TEĎ</button>`}
+      <button class="btn btn-sm" data-action="happy-save">💾 Uložit</button>
+      <button class="btn btn-ghost btn-sm" data-action="happy-toggle" data-on="${on ? 1 : 0}">${on ? "🔕 Vypnout auto na startu" : "🔔 Auto na startu streamu"}</button>
     </div>
   </div>`;
 }
@@ -4531,7 +4534,26 @@ async function saveHappyHour(enable) {
   if (enable !== undefined) body.livehappy_enabled = enable;
   try {
     await api("/admin/live-happy", { method: "POST", body });
-    toast(enable === 1 ? "Happy Hour zapnut ▶️" : enable === 0 ? "Happy Hour vypnut ⏸️" : "Uloženo 💾", "success");
+    toast(enable === 1 ? "Auto na startu zapnuto 🔔" : enable === 0 ? "Auto na startu vypnuto 🔕" : "Uloženo 💾", "success");
+    adminDrops();
+  } catch (e) { toast(e.message, "error"); }
+}
+async function startHappyNow() {
+  if (!confirm("Spustit Happy Hour TEĎ? Oznámí to v Kick chatu. 🔥")) return;
+  try {
+    await api("/admin/live-happy", { method: "POST", body: {   // ulož aktuální mult/min než spustíš
+      livehappy_mult: parseFloat($("#hh_mult").value || "2"),
+      livehappy_minutes: parseInt($("#hh_min").value || "5", 10),
+    } });
+    const r = await api("/admin/live-happy/start", { method: "POST" });
+    toast(`🔥 Happy Hour běží! ×${r.mult} na ${r.minutes} min — bot to hlásí v chatu.`, "success");
+    adminDrops();
+  } catch (e) { toast(e.message, "error"); }
+}
+async function stopHappyNow() {
+  try {
+    await api("/admin/live-happy/stop", { method: "POST" });
+    toast("Happy Hour ukončen ⏹️", "info");
     adminDrops();
   } catch (e) { toast(e.message, "error"); }
 }
@@ -4821,6 +4843,8 @@ function handleAction(action, el) {
     case "autodrop-save": saveAutoDrop(); break;
     case "autodrop-toggle": saveAutoDrop(el.dataset.on === "1" ? 0 : 1); break;
     case "happy-save": saveHappyHour(); break;
+    case "happy-start": startHappyNow(); break;
+    case "happy-stop": stopHappyNow(); break;
     case "happy-toggle": saveHappyHour(el.dataset.on === "1" ? 0 : 1); break;
     case "subgoal-save": saveSubGoal(); break;
     case "subgoal-toggle": saveSubGoal(el.dataset.on === "1" ? 0 : 1); break;

@@ -237,12 +237,13 @@ def sub_goal_status(conn: sqlite3.Connection = Depends(db_dep)):
 
 @router.get("/happy-hour")
 def happy_hour_status(conn: sqlite3.Connection = Depends(db_dep)):
-    """Stav Happy Hour (veřejné – pro overlay/lištu): běží? násobič, konec, kolik vteřin zbývá."""
+    """Stav Happy Hour (veřejné – pro overlay/lištu). Jedno okno `happy_until`, víc perků:
+    ×mult za sledování/chat, sleva na shop %, 2× za subs – overlay vypíše co je zrovna aktivní."""
     from .. import live_events
-    cfg = live_events.get_config(conn)
-    until = cfg.get("active_until") or ""
+    from ..services import shop_discount_pct, sub_points_mult
+    until = get_setting(conn, "happy_until", "") or ""
     active, seconds_left = False, 0
-    if cfg.get("livehappy_enabled") and until:
+    if until:
         try:
             t = datetime.fromisoformat(until)
             if t.tzinfo is None:
@@ -252,8 +253,11 @@ def happy_hour_status(conn: sqlite3.Connection = Depends(db_dep)):
                 active, seconds_left = True, int(delta)
         except Exception:
             pass
-    return {"active": active, "mult": cfg.get("livehappy_mult", 1),
-            "active_until": until, "seconds_left": seconds_left}
+    watch_mult = live_events.happy_mult(conn)
+    return {"active": active, "active_until": until, "seconds_left": seconds_left,
+            "mult": watch_mult, "watch_mult": watch_mult,           # ×mult za sledování/chat (1.0 = ne)
+            "shop_pct": shop_discount_pct(conn),                    # sleva na shop v % (0 = ne)
+            "sub_2x": sub_points_mult(conn) >= 2}                   # 2× body za subs?
 
 
 # ---------------- Nábor moderátorů (přihláška) ----------------

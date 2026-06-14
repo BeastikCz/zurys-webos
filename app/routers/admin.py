@@ -2315,6 +2315,28 @@ def set_live_happy(data: LiveHappyIn, request: Request,
     return cfg
 
 
+@router.post("/live-happy/start")
+def live_happy_start(request: Request,
+                     conn: sqlite3.Connection = Depends(db_dep),
+                     admin: sqlite3.Row = Depends(require_user)):
+    """RUČNÍ spuštění Happy Hour TEĎ – countdown + ×mult + oznámení v chatu (background)."""
+    res = live_events.start_now(conn)
+    record_audit(conn, admin, request, "livehappy.start", "", f"{res['minutes']} min ×{res['mult']:g}")
+    conn.commit()
+    return {"ok": True, **res}
+
+
+@router.post("/live-happy/stop")
+def live_happy_stop(request: Request,
+                    conn: sqlite3.Connection = Depends(db_dep),
+                    admin: sqlite3.Row = Depends(require_user)):
+    """Okamžitě ukončí běžící Happy Hour."""
+    res = live_events.stop_now(conn)
+    record_audit(conn, admin, request, "livehappy.stop", "", "")
+    conn.commit()
+    return {"ok": True, **res}
+
+
 @router.post("/drops/auto")
 def set_autodrop(data: AutoDropIn, request: Request,
                  conn: sqlite3.Connection = Depends(db_dep),

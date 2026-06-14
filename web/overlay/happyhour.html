@@ -38,8 +38,8 @@
   <div class="card">
     <div class="flame">🔥</div>
     <div class="mid">
-      <div class="ttl">HAPPY HOUR <b id="mult">×2</b></div>
-      <div class="sub" id="subtxt">víc sedláků za sledování, chat i subs!</div>
+      <div class="ttl">HAPPY HOUR</div>
+      <div class="sub" id="subtxt">víc bodů pro všechny!</div>
     </div>
     <div class="clock"><span id="time">00:00</span><small>zbývá</small></div>
   </div>
@@ -64,10 +64,13 @@
       const g = await r.json();
       active = !!g.active;
       left = g.seconds_left || 0;
-      const mult = g.mult || 2;
-      const ms = "×" + (Number.isInteger(mult) ? mult : mult.toFixed(1));
-      document.getElementById("mult").textContent = ms;
-      document.getElementById("subtxt").textContent = ms + " sedláků za sledování, chat i subs!";
+      // poskládej co je zrovna aktivní (×mult za sledování / sleva v shopu / 2× subs)
+      const perks = [];
+      const wm = g.watch_mult || g.mult || 1;
+      if (wm > 1) perks.push("×" + (Number.isInteger(wm) ? wm : wm.toFixed(1)) + " za sledování & chat");
+      if (g.shop_pct > 0) perks.push("−" + g.shop_pct + "% v shopu");
+      if (g.sub_2x) perks.push("2× za subs");
+      document.getElementById("subtxt").textContent = perks.length ? perks.join(" · ") : "víc bodů pro všechny!";
     } catch (e) { /* tiše */ }
     render();
   }

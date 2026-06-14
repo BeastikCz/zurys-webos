@@ -40,10 +40,10 @@ def _minutes(conn) -> int:
 
 
 def happy_mult(conn) -> float:
-    """Aktuální Happy Hour násobič (1.0 = neaktivní). Volá economy.award_earned."""
+    """Aktuální Happy Hour násobič (1.0 = neaktivní). Volá economy.award_earned.
+    Aktivní = `happy_until` je v budoucnu – nastaví ho auto-start streamu NEBO ruční spuštění.
+    (Záměrně NEgatuje na livehappy_enabled, ať jde HH spustit ručně i s vyplým auto-režimem.)"""
     try:
-        if not _enabled(conn):
-            return 1.0
         until = get_setting(conn, "happy_until", "") or ""
         if not until:
             return 1.0
@@ -55,6 +55,41 @@ def happy_mult(conn) -> float:
     except Exception:
         pass
     return 1.0
+
+
+def _announce_async(mins: int, mult: float) -> None:
+    """Pošle oznámení do Kick chatu v BACKGROUND vlákně – synchronní Kick HTTP v request
+    threadu by zablokoval jediný worker (single-writer SQLite) = riziko výpadku."""
+    def _send():
+        try:
+            c = get_conn()
+            try:
+                kickbot.send_message(
+                    c, f"🔥 HAPPY HOUR! Příštích {mins} min jsou sedláci ×{mult:g} za sledování i chat — "
+                       f"koukej a piš na zurys.live! 🌾⚡", kind="live")
+            finally:
+                c.close()
+        except Exception:
+            traceback.print_exc()
+    threading.Thread(target=_send, name="webos-hh-announce", daemon=True).start()
+
+
+def start_now(conn) -> dict:
+    """RUČNÍ spuštění Happy Hour TEĎ (bez ohledu na stream): nastaví happy_until + oznámí v chatu."""
+    mins, mult = _minutes(conn), _mult(conn)
+    until = (datetime.now(timezone.utc) + timedelta(minutes=mins)).isoformat()
+    set_setting(conn, "happy_until", until)
+    set_setting(conn, "live_was_live", "1")   # ať to auto-daemon nezdvojí, když je zrovna live
+    conn.commit()
+    _announce_async(mins, mult)
+    return {"active_until": until, "minutes": mins, "mult": mult}
+
+
+def stop_now(conn) -> dict:
+    """Okamžitě ukončí běžící Happy Hour (vymaže happy_until). Auto-režim (enabled) nemění."""
+    set_setting(conn, "happy_until", "")
+    conn.commit()
+    return {"active_until": ""}
 
 
 def get_config(conn) -> dict:
