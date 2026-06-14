@@ -9,7 +9,7 @@ import sqlite3
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from ..deps import db_dep, require_user, require_can_gamble, add_points, try_debit
+from ..deps import db_dep, require_user, require_can_gamble, add_points, try_debit, check_wager_limit
 from ..db import now_iso
 from ..models import MinesStartIn, MinesRevealIn
 from .. import fairness
@@ -101,6 +101,7 @@ def start(data: MinesStartIn, user: sqlite3.Row = Depends(require_user),
         raise HTTPException(status_code=400, detail=f"Sázka musí být 1–{MAX_BET} sedláků.")
     if mines < MIN_MINES or mines > GRID - 1:
         raise HTTPException(status_code=400, detail=f"Počet bomb musí být {MIN_MINES}–24.")
+    check_wager_limit(conn, user, bet)               # responsible gaming: denní limit sázek
     if not try_debit(conn, user["id"], bet, f"Mines sázka ({mines} bomb)"):
         raise HTTPException(status_code=400, detail=f"Nemáš dost sedláků (sázka {bet}).")
     ss, sh, cs, nonce = _fair_consume(conn, user["id"])

@@ -22,7 +22,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from ..config import STAFF_ROLES
 from ..db import now_iso
 from ..deps import (db_dep, require_user, get_current_user, add_points, try_debit,
-                    record_audit, can_access, require_can_gamble)
+                    record_audit, can_access, require_can_gamble, check_wager_limit)
 from ..models import PredictionCreateIn, PredictionBetIn, PredictionResolveIn
 from ..ratelimit import rate_limit
 
@@ -167,6 +167,7 @@ def place_bet(pid: int, data: PredictionBetIn,
         raise HTTPException(status_code=400,
                             detail="Už jsi vsadil na jinou možnost – nelze sázet na obě strany.")
     # atomický escrow – nejde do mínusu ani při souběhu
+    check_wager_limit(conn, user, data.amount)       # responsible gaming: denní limit sázek
     if not try_debit(conn, user["id"], data.amount, f"Predikce #{pid} – sázka"):
         raise HTTPException(status_code=400,
                             detail=f"Nemáš dost bodů. Sázka {data.amount}, máš {user['points']}.")

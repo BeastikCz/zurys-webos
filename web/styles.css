@@ -985,6 +985,10 @@ footer.site-footer { border-top: 1px solid var(--border); padding: 22px 0; color
 .prestige-badge.pr-gold { color: #1a1200; background: linear-gradient(90deg,#ffe27a,#ffb300); border: 1px solid #ffce4d; }
 .prestige-badge.pr-legend { color: #fff; background: linear-gradient(90deg,#ff4d6d,#ff9d2e,#46e08a,#4db4ff,#b06bff); background-size: 200% 100%; border: 1px solid rgba(255,255,255,.3); animation: cos-shine 4s linear infinite; }
 
+/* ===== Denní limit sázek (responsible gaming) ===== */
+.wl-bar { height: 8px; border-radius: 6px; background: rgba(255,255,255,.08); overflow: hidden; }
+.wl-fill { height: 100%; background: var(--accent); transition: width .4s ease; }
+
 /* Zodpovědné sázení – self-exclusion tlačítka */
 .se-btns { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
 

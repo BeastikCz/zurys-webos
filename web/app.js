@@ -1725,11 +1725,43 @@ function pageProfile() {
     <div class="panel">
       <div class="section-title" style="margin-top:0">🔒 Zodpovědné sázení</div>
       ${selfExcludeBlock(u)}
+      <div id="myWagerLimit"></div>
     </div>`;
   loadProfTab("orders");
   loadMyBadges();
   loadMyBio();
   loadPrestige();
+  loadWagerLimit();
+}
+async function loadWagerLimit() {
+  const box = document.getElementById("myWagerLimit"); if (!box || !state.user) return;
+  try {
+    const s = await api("/wager-limit");
+    const has = s.limit > 0;
+    const pct = has ? Math.min(100, Math.round(s.wagered_today * 100 / s.limit)) : 0;
+    const bar = has
+      ? `<div class="wl-bar"><div class="wl-fill" style="width:${pct}%"></div></div><div class="faint" style="font-size:12.5px;margin-top:5px">Dnes prosázeno <b>${fmtPts(s.wagered_today)}</b> z <b>${fmtPts(s.limit)}</b> · zbývá ${fmtPts(s.remaining || 0)}</div>`
+      : `<div class="faint" style="font-size:12.5px">Dnes prosázeno <b>${fmtPts(s.wagered_today)}</b> · žádný denní limit.</div>`;
+    const pending = (s.pending !== null && s.pending !== undefined) ? `<div style="font-size:12px;color:#e0a857;margin-top:5px">⏳ Od zítřka: ${s.pending > 0 ? "limit " + fmtPts(s.pending) : "bez limitu"} (zvýšení/zrušení platí až další den)</div>` : "";
+    box.innerHTML = `<div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border)">
+      <div style="font-weight:800;margin-bottom:6px">💸 Denní limit sázek</div>
+      <p class="muted" style="font-size:12.5px;line-height:1.5;margin:0 0 10px">Strop kolik můžeš za den prosázet (Mines, predikce, duely, blackjack…). <b>Snížit jde hned</b>, zvýšit/zrušit až <b>další den</b> — ať to nejde obejít v zápalu hry.</p>
+      ${bar}${pending}
+      <div class="toolbar" style="margin-top:10px">
+        <input class="input input-sm" id="wlInput" type="number" min="0" placeholder="Limit (0 = bez limitu)" value="${s.limit || ""}" style="max-width:190px">
+        <button class="btn btn-sm btn-primary" data-action="wl-save">Uložit limit</button>
+      </div>
+    </div>`;
+  } catch (e) { box.innerHTML = ""; }
+}
+async function saveWagerLimit() {
+  const inp = document.getElementById("wlInput");
+  const v = Math.max(0, parseInt(inp && inp.value, 10) || 0);
+  try {
+    const r = await api("/wager-limit", { method: "POST", body: { limit: v } });
+    toast(r.applied === "now" ? (v ? `Denní limit ${fmtPts(v)} nastaven 🛡️` : "Limit zrušen") : "Změna se projeví až zítra ⏳", "success");
+    loadWagerLimit();
+  } catch (e) { toast(e.message, "error"); }
 }
 const FAV_GAMES = ["", "Mines", "Kolo štěstí", "Piškvorky", "Duely", "Blackjack", "Predikce", "Tomboly"];
 let _myProfileBio = { bio: "", fav_game: "" };
@@ -4377,6 +4409,7 @@ function handleAction(action, el) {
     case "bio-save": saveBio(); break;
     case "bio-cancel": loadMyBio(); break;
     case "prestige-buy": prestigeBuy(parseInt(el.dataset.cost, 10), parseInt(el.dataset.lvl, 10)); break;
+    case "wl-save": saveWagerLimit(); break;
     case "claim-quest": claimQuest(el.dataset.key); break;
     case "claim-partner": claimPartnerLink(el.dataset.id, el.dataset.url); break;
     case "cos-buy": buyCosmetic(el.dataset.key); break;

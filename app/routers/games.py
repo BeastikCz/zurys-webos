@@ -14,7 +14,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 
 from ..config import ROLE_ADMIN
 from ..db import now_iso, get_setting
-from ..deps import db_dep, require_user, add_points, try_debit, client_ip, to_public, require_can_gamble
+from ..deps import db_dep, require_user, add_points, try_debit, client_ip, to_public, require_can_gamble, check_wager_limit
 from ..economy import note_game_net, games_capped
 from ..models import GameCreateIn, GameMoveIn, DuelCreateIn
 from ..ratelimit import rate_limit
@@ -354,6 +354,7 @@ def create_game(data: GameCreateIn, user: sqlite3.Row = Depends(require_user),
     if openc >= 3:
         raise HTTPException(status_code=400, detail="Máš moc otevřených her (max 3). Zruš nějakou.")
     # atomický escrow – nejde do mínusu ani při souběhu
+    check_wager_limit(conn, user, data.stake)        # responsible gaming: denní limit sázek
     if not try_debit(conn, user["id"], data.stake, "Sázka – piškvorky (vklad)"):
         raise HTTPException(status_code=400,
                             detail=f"Nemáš dost bodů. Sázka {data.stake}, máš {user['points']}.")
@@ -389,6 +390,7 @@ def join_game(gid: int, request: Request, user: sqlite3.Row = Depends(require_us
         raise HTTPException(status_code=403,
                             detail="Nemůžeš hrát sám proti sobě (stejná IP/zařízení jako zakladatel).")
     # atomický escrow vkladu
+    check_wager_limit(conn, user, g["stake"])        # responsible gaming: denní limit sázek
     if not try_debit(conn, user["id"], g["stake"], "Sázka – piškvorky (vklad)"):
         raise HTTPException(status_code=400,
                             detail=f"Nemáš dost bodů. Sázka {g['stake']}, máš {user['points']}.")
@@ -588,6 +590,7 @@ def duel_create(data: DuelCreateIn, user: sqlite3.Row = Depends(require_user),
                          (user["id"],)).fetchone()["c"]
     if openc >= 3:
         raise HTTPException(status_code=400, detail="Máš moc otevřených výzev (max 3). Zruš nějakou.")
+    check_wager_limit(conn, user, data.stake)        # responsible gaming: denní limit sázek
     if not try_debit(conn, user["id"], data.stake, f"{_DUEL_LABEL[data.type]} – vklad"):
         raise HTTPException(status_code=400,
                             detail=f"Nemáš dost bodů. Sázka {data.stake}, máš {user['points']}.")
@@ -620,6 +623,7 @@ def duel_join(did: int, request: Request, user: sqlite3.Row = Depends(require_us
     if both_non_admin and _same_person(conn, d["p1_id"], user["id"]):
         raise HTTPException(status_code=403,
                             detail="Nemůžeš hrát sám proti sobě (stejná IP/zařízení jako vyzyvatel).")
+    check_wager_limit(conn, user, d["stake"])        # responsible gaming: denní limit sázek
     if not try_debit(conn, user["id"], d["stake"], f"{_DUEL_LABEL[d['type']]} – vklad"):
         raise HTTPException(status_code=400,
                             detail=f"Nemáš dost bodů. Sázka {d['stake']}, máš {user['points']}.")

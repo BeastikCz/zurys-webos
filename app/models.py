@@ -243,6 +243,11 @@ class ProfileBioIn(BaseModel):
     fav_game: str = Field(default="", max_length=24)
 
 
+class WagerLimitIn(BaseModel):
+    """Denní limit sázek (responsible gaming). 0 = bez limitu. Snížit lze hned, zvýšit až zítra."""
+    limit: int = Field(default=0, ge=0, le=100_000_000)
+
+
 class BanClusterIn(BaseModel):
     """Hromadný ban clusteru účtů (alt farma). Staff/admin se přeskočí."""
     user_ids: list[int] = Field(default_factory=list)

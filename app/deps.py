@@ -157,6 +157,36 @@ def require_can_gamble(row) -> None:
                         detail=f"Máš aktivní sebevyloučení ze sázek do {until[:16].replace('T', ' ')} 🔒 Do té doby nejde sázet.")
 
 
+def check_wager_limit(conn: sqlite3.Connection, user, amount: int) -> None:
+    """Responsible gaming – denní limit sázek (Tipsport-style). Volat PŘED debetem sázky na
+    KAŽDÉM herním endpointu (mines/predikce/duely/piškvorky/blackjack). Resetuje dnešní součet
+    na nový den (a aplikuje ODLOŽENÉ navýšení limitu), zkontroluje strop a započte tuto sázku.
+    Vyhodí 403, když by sázka překročila denní limit. 0/NULL limit = bez omezení."""
+    from .db import local_date
+    uid = user["id"]
+    today = local_date()
+    row = conn.execute(
+        "SELECT wager_limit, wager_limit_pending, wagered_today, wager_day FROM users WHERE id = ?",
+        (uid,)).fetchone()
+    if row is None:
+        return
+    limit = row["wager_limit"]
+    wagered = row["wagered_today"] or 0
+    if row["wager_day"] != today:                      # nový den → reset + aplikuj odložené navýšení
+        if row["wager_limit_pending"] is not None:
+            limit = row["wager_limit_pending"]
+        wagered = 0
+        conn.execute("UPDATE users SET wager_day = ?, wagered_today = 0, wager_limit = ?, "
+                     "wager_limit_pending = NULL WHERE id = ?", (today, limit, uid))
+    if limit and limit > 0 and wagered + amount > limit:
+        left = max(0, limit - wagered)
+        raise HTTPException(status_code=403,
+                            detail=f"Denní limit sázek {limit} sedláků – dnes zbývá {left}. 🛑 "
+                                   f"Pro dnešek dost, vrať se zítra.")
+    conn.execute("UPDATE users SET wagered_today = COALESCE(wagered_today, 0) + ? WHERE id = ?",
+                 (amount, uid))
+
+
 def to_public(row: sqlite3.Row, include_email: bool = False) -> dict:
     """Veřejná podoba uživatele (bez hesla)."""
     data = {

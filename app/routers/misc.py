@@ -11,7 +11,7 @@ from ..config import ORDER_PENDING, UNLIMITED_STOCK, ROLE_ADMIN
 from ..db import now_iso
 from ..deps import (db_dep, require_user, add_points, try_debit, record_audit, client_ip,
                     user_rank, tier_for_rank, self_excluded_until)
-from ..models import RedeemIn, TradeUrlIn, GiftIn, QuestClaimIn, CosmeticIn, FairSeedIn, SelfExcludeIn, ProfileBioIn
+from ..models import RedeemIn, TradeUrlIn, GiftIn, QuestClaimIn, CosmeticIn, FairSeedIn, SelfExcludeIn, ProfileBioIn, WagerLimitIn
 from ..services import product_public, role_allows
 from ..ratelimit import rate_limit
 from ..security import secure_weighted_choice
@@ -578,6 +578,48 @@ def prestige_buy(user: sqlite3.Row = Depends(require_user), conn: sqlite3.Connec
     fresh = conn.execute("SELECT points, prestige FROM users WHERE id=?", (user["id"],)).fetchone()
     return {"prestige": fresh["prestige"], "balance": fresh["points"], "spent": cost,
             "next_cost": _prestige_cost(fresh["prestige"]) if fresh["prestige"] < PRESTIGE_MAX else None}
+
+
+# ---------------- 🛡️ Denní limit sázek (responsible gaming) ----------------
+@router.get("/wager-limit")
+def wager_limit_status(user: sqlite3.Row = Depends(require_user), conn: sqlite3.Connection = Depends(db_dep)):
+    from ..db import local_date
+    today = local_date()
+    r = conn.execute(
+        "SELECT wager_limit, wager_limit_pending, wagered_today, wager_day FROM users WHERE id=?",
+        (user["id"],)).fetchone()
+    same_day = r and r["wager_day"] == today
+    eff_limit = (r["wager_limit"] if r else None)
+    if r and not same_day and r["wager_limit_pending"] is not None:
+        eff_limit = r["wager_limit_pending"]          # zítra se aplikuje odložené
+    wagered = (r["wagered_today"] if (r and same_day) else 0) or 0
+    return {
+        "limit": eff_limit or 0,
+        "wagered_today": wagered,
+        "remaining": (max(0, eff_limit - wagered) if eff_limit and eff_limit > 0 else None),
+        "pending": (r["wager_limit_pending"] if r else None),
+        "balance": user["points"],
+    }
+
+
+@router.post("/wager-limit")
+def set_wager_limit(data: WagerLimitIn, user: sqlite3.Row = Depends(require_user),
+                    conn: sqlite3.Connection = Depends(db_dep)):
+    """Nastaví denní limit sázek. SNÍŽENÍ/přidání = HNED, ZVÝŠENÍ/odebrání = až ZÍTRA
+    (responsible gaming – nejde si limit v tiltu okamžitě navýšit). 0 = bez limitu."""
+    cur = conn.execute("SELECT wager_limit FROM users WHERE id=?", (user["id"],)).fetchone()["wager_limit"]
+    inf = float("inf")
+    cur_eff = cur if (cur and cur > 0) else inf
+    new = max(0, data.limit)
+    new_eff = new if new > 0 else inf
+    if new_eff <= cur_eff:                              # stejně/víc restriktivní → hned
+        conn.execute("UPDATE users SET wager_limit=?, wager_limit_pending=NULL WHERE id=?",
+                     (new or None, user["id"]))
+        conn.commit()
+        return {"applied": "now", "limit": new, "pending": None}
+    conn.execute("UPDATE users SET wager_limit_pending=? WHERE id=?", (new, user["id"]))   # zítra
+    conn.commit()
+    return {"applied": "tomorrow", "limit": cur or 0, "pending": new}
 
 
 # ---------------- Exchange: poslání sedláků kamarádovi ----------------
