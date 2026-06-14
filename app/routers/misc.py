@@ -63,7 +63,7 @@ def leaderboard(limit: int = Query(50, ge=1, le=200),
                 conn: sqlite3.Connection = Depends(db_dep)):
     rows = conn.execute(
         "SELECT id, username, avatar_url, points, role, is_sub, is_vip, is_og, "
-        "cos_name, cos_frame, cos_banner FROM users "
+        "cos_name, cos_frame, cos_banner, prestige FROM users "
         "ORDER BY points DESC, username ASC LIMIT ?",
         (limit,),
     ).fetchall()
@@ -97,6 +97,7 @@ def leaderboard(limit: int = Query(50, ge=1, le=200),
             "cos": cosmetics.resolve(r),
             "delta": delta,
             "climber": False,
+            "prestige": (r["prestige"] if "prestige" in r.keys() else 0) or 0,
         })
     if best_id is not None and best_gain >= 3:            # „stoupá týдne" jen při reálném skoku (≥3 pozice)
         for row, r in zip(out, rows):
@@ -214,6 +215,7 @@ def public_profile(nick: str = Query("", max_length=64),
         "daily_streak": (u["daily_streak"] if "daily_streak" in u.keys() else 0) or 0,
         "bio": (u["bio"] if "bio" in u.keys() else "") or "",
         "fav_game": (u["fav_game"] if "fav_game" in u.keys() else "") or "",
+        "prestige": (u["prestige"] if "prestige" in u.keys() else 0) or 0,
     }
 
 
@@ -537,6 +539,45 @@ def set_bio(data: ProfileBioIn, user: sqlite3.Row = Depends(require_user),
                  (bio or None, fav or None, user["id"]))
     conn.commit()
     return {"bio": bio, "fav_game": fav}
+
+
+# ---------------- 🔥 Prestige (spal sedláky za permanentní status; anti-inflace sink) ----------------
+PRESTIGE_BASE = 100000   # cena 1. levelu; každý další = BASE × (level+1) → eskaluje
+PRESTIGE_MAX = 50
+
+
+def _prestige_cost(level: int) -> int:
+    return PRESTIGE_BASE * (level + 1)
+
+
+def _user_prestige(u) -> int:
+    try:
+        return (u["prestige"] if "prestige" in u.keys() else 0) or 0
+    except (KeyError, IndexError, TypeError):
+        return 0
+
+
+@router.get("/prestige")
+def prestige_status(user: sqlite3.Row = Depends(require_user)):
+    p = _user_prestige(user)
+    return {"prestige": p, "next_cost": _prestige_cost(p) if p < PRESTIGE_MAX else None,
+            "max": PRESTIGE_MAX, "balance": user["points"], "base": PRESTIGE_BASE}
+
+
+@router.post("/prestige/buy")
+def prestige_buy(user: sqlite3.Row = Depends(require_user), conn: sqlite3.Connection = Depends(db_dep)):
+    """Spálí sedláky za +1 prestige (NEvratné). Body opravdu zmizí z oběhu (sink)."""
+    p = _user_prestige(user)
+    if p >= PRESTIGE_MAX:
+        raise HTTPException(status_code=400, detail="Máš maximální prestige. 👑")
+    cost = _prestige_cost(p)
+    if not try_debit(conn, user["id"], cost, f"Prestige {p + 1} – spáleno 🔥"):
+        raise HTTPException(status_code=400, detail=f"Nemáš dost sedláků. Prestige {p + 1} stojí {cost}.")
+    conn.execute("UPDATE users SET prestige = prestige + 1 WHERE id = ?", (user["id"],))
+    conn.commit()
+    fresh = conn.execute("SELECT points, prestige FROM users WHERE id=?", (user["id"],)).fetchone()
+    return {"prestige": fresh["prestige"], "balance": fresh["points"], "spent": cost,
+            "next_cost": _prestige_cost(fresh["prestige"]) if fresh["prestige"] < PRESTIGE_MAX else None}
 
 
 # ---------------- Exchange: poslání sedláků kamarádovi ----------------

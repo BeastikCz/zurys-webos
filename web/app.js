@@ -1032,7 +1032,7 @@ function lbRow(r, isMe) {
   return `
     <div class="lb-row${isMe ? " me" : ""}${r.climber ? " climber" : ""}" style="--d:${Math.min(r.rank, 24) * 0.025}s">
       <span class="lb-rank">${r.rank}</span>${avatarHTML(r.username, r.avatar_url, "", cosF(r))}
-      <div class="lb-id"><a class="uname prof-link ${cosN(r)}" href="#/u/${encodeURIComponent(r.username)}">${esc(r.username)}${meTag}</a><span class="lb-sub">${lbBadges(r)}${tierChip(r.rank)}${fire}</span></div>
+      <div class="lb-id"><a class="uname prof-link ${cosN(r)}" href="#/u/${encodeURIComponent(r.username)}">${esc(r.username)}${meTag}</a> ${prestigeBadge(r.prestige)}<span class="lb-sub">${lbBadges(r)}${tierChip(r.rank)}${fire}</span></div>
       ${deltaTag(r.delta)}
       <span class="pts">${fmtPts(r.points)}</span>
     </div>`;
@@ -1228,7 +1228,7 @@ async function pageUserProfile(nick) {
       <div class="profile-hero">
         ${avatarHTML(p.username, p.avatar_url, "prof-av", cosF(p))}
         <div class="ph-info">
-          <h1><span class="${cosN(p)}">${esc(p.username)}</span> ${roleBadge(p.role)}</h1>
+          <h1><span class="${cosN(p)}">${esc(p.username)}</span> ${roleBadge(p.role)} ${prestigeBadge(p.prestige)}</h1>
           <div class="faint">${league ? "★ " + esc(league) + " · " : ""}#${p.rank} v leaderboardu · člen od ${since}</div>
           <div class="ph-badges">${subVipBadges(p) || ""}</div>
         </div>
@@ -1688,7 +1688,7 @@ function pageProfile() {
     <div class="panel">
       <div class="profile-head">
         ${avatarHTML(u.username, u.avatar_url, "", cosF(u))}
-        <div><div style="font-size:22px;font-weight:800"><span class="${cosN(u)}">${esc(u.username)}</span> ${roleBadge(u.role)} ${subVipBadges(u)}</div><div class="muted">${u.kick_username ? "🟢 " + esc(u.kick_username) : esc(u.email || "")}</div></div>
+        <div><div style="font-size:22px;font-weight:800"><span class="${cosN(u)}">${esc(u.username)}</span> ${roleBadge(u.role)} ${subVipBadges(u)} ${prestigeBadge(u.prestige)}</div><div class="muted">${u.kick_username ? "🟢 " + esc(u.kick_username) : esc(u.email || "")}</div></div>
         <div class="profile-points"><div class="v">${fmtPts(u.points)}</div><div class="faint">aktuální zůstatek</div></div>
       </div>
       <div class="prof-look-strip">
@@ -1721,6 +1721,7 @@ function pageProfile() {
         <button class="btn btn-primary" data-action="save-trade">💾 Uložit trade link</button>
       </div>
     </div>
+    <div id="myPrestige"></div>
     <div class="panel">
       <div class="section-title" style="margin-top:0">🔒 Zodpovědné sázení</div>
       ${selfExcludeBlock(u)}
@@ -1728,6 +1729,7 @@ function pageProfile() {
   loadProfTab("orders");
   loadMyBadges();
   loadMyBio();
+  loadPrestige();
 }
 const FAV_GAMES = ["", "Mines", "Kolo štěstí", "Piškvorky", "Duely", "Blackjack", "Predikce", "Tomboly"];
 let _myProfileBio = { bio: "", fav_game: "" };
@@ -1765,6 +1767,38 @@ async function saveBio() {
     _myProfileBio = { bio: r.bio || "", fav_game: r.fav_game || "" };
     toast("Bio uloženo ✓", "success");
     const box = document.getElementById("myBio"); if (box) box.innerHTML = profileBioHTML({ bio: r.bio, fav_game: r.fav_game }, true);
+  } catch (e) { toast(e.message, "error"); }
+}
+function prestigeBadge(n) {
+  n = n || 0;
+  if (n <= 0) return "";
+  const cls = n >= 6 ? "pr-legend" : n >= 3 ? "pr-gold" : "pr-bronze";
+  return `<span class="prestige-badge ${cls}" title="Prestige ${n} – spálené sedláky 🔥">⭐${n}</span>`;
+}
+async function loadPrestige() {
+  const box = document.getElementById("myPrestige"); if (!box || !state.user) return;
+  try {
+    const s = await api("/prestige");
+    const star = prestigeBadge(s.prestige) || `<span class="faint">zatím žádný</span>`;
+    const next = s.next_cost != null
+      ? `<button class="btn btn-danger" data-action="prestige-buy" data-cost="${s.next_cost}" data-lvl="${s.prestige + 1}">🔥 Koupit Prestige ${s.prestige + 1} za ${fmtPts(s.next_cost)}</button>`
+      : `<div class="ok" style="font-weight:800">👑 Máš maximální prestige!</div>`;
+    box.innerHTML = `<div class="panel">
+      <div class="section-title" style="margin-top:0">🔥 Prestige <span class="faint" style="font-size:12px;font-weight:400">— spal sedláky za permanentní status ⭐ (NEvratné)</span></div>
+      <div class="row-between" style="flex-wrap:wrap;gap:12px;margin:4px 0 12px"><div>Tvůj prestige: <b style="font-size:18px">${star}</b></div><div class="faint" style="font-size:13px">Zůstatek: <b>${fmtPts(s.balance)}</b></div></div>
+      <p class="muted" style="font-size:13px;line-height:1.55;margin:0 0 12px">Spálíš hromadu sedláků a získáš ⭐ u jména <b>navždy</b>. Body opravdu <b>zmizí z oběhu</b> (proti inflaci). Každý další level je dražší.</p>
+      ${next}
+    </div>`;
+  } catch (e) { box.innerHTML = ""; }
+}
+async function prestigeBuy(cost, lvl) {
+  if (!confirm(`Spálit ${fmtPts(cost)} sedláků za Prestige ${lvl}? 🔥\nJe to NEVRATNÉ — body zmizí z oběhu, dostaneš ⭐ navždy.`)) return;
+  try {
+    const r = await api("/prestige/buy", { method: "POST" });
+    if (state.user) { state.user.points = r.balance; state.user.prestige = r.prestige; renderHeader(); }
+    toast(`🔥 Prestige ${r.prestige}! Spáleno ${fmtPts(r.spent)} 🌾`, "success");
+    try { confettiBurst(); } catch (e) {}
+    loadPrestige();
   } catch (e) { toast(e.message, "error"); }
 }
 async function loadMyBadges() {
@@ -4342,6 +4376,7 @@ function handleAction(action, el) {
     case "bio-edit": editBio(); break;
     case "bio-save": saveBio(); break;
     case "bio-cancel": loadMyBio(); break;
+    case "prestige-buy": prestigeBuy(parseInt(el.dataset.cost, 10), parseInt(el.dataset.lvl, 10)); break;
     case "claim-quest": claimQuest(el.dataset.key); break;
     case "claim-partner": claimPartnerLink(el.dataset.id, el.dataset.url); break;
     case "cos-buy": buyCosmetic(el.dataset.key); break;
