@@ -270,6 +270,49 @@ def economy_health_endpoint(days: int = Query(14, ge=1, le=90),
     return econ_health.health(conn, days)
 
 
+_retention_cache = {"at": 0.0, "data": None}
+
+
+@router.get("/analytics/retention")
+def analytics_retention(conn: sqlite3.Connection = Depends(db_dep)):
+    """Retence: DAU/WAU/MAU (z sessions.last_seen), stickiness, noví vs vracející se,
+    a týden-na-týden retence (cohort z points_log). Read-only + cache 120 s."""
+    import time
+    nowm = time.monotonic()
+    if _retention_cache["data"] is not None and nowm - _retention_cache["at"] < 120:
+        return _retention_cache["data"]
+    now = datetime.now(timezone.utc)
+    t0 = now.replace(hour=0, minute=0, second=0, microsecond=0).isoformat()
+    d7 = (now - timedelta(days=7)).isoformat()
+    d14 = (now - timedelta(days=14)).isoformat()
+    d30 = (now - timedelta(days=30)).isoformat()
+
+    def one(sql, *p):
+        return conn.execute(sql, p).fetchone()[0]
+
+    dau = one("SELECT COUNT(DISTINCT user_id) FROM sessions WHERE last_seen >= ?", t0)
+    wau = one("SELECT COUNT(DISTINCT user_id) FROM sessions WHERE last_seen >= ?", d7)
+    mau = one("SELECT COUNT(DISTINCT user_id) FROM sessions WHERE last_seen >= ?", d30)
+    total = one("SELECT COUNT(*) FROM users")
+    # cohort retence: aktivní tento týden ∩ aktivní minulý týden / aktivní minulý týden
+    cur_w = {r[0] for r in conn.execute("SELECT DISTINCT user_id FROM points_log WHERE change!=0 AND created_at >= ?", (d7,))}
+    prev_w = {r[0] for r in conn.execute("SELECT DISTINCT user_id FROM points_log WHERE change!=0 AND created_at >= ? AND created_at < ?", (d14, d7))}
+    retained = len(cur_w & prev_w)
+    data = {
+        "dau": dau, "wau": wau, "mau": mau, "total_users": total,
+        "stickiness": round(dau * 100 / mau) if mau else 0,        # DAU/MAU %
+        "new_today": one("SELECT COUNT(*) FROM users WHERE created_at >= ?", t0),
+        "new_7d": one("SELECT COUNT(*) FROM users WHERE created_at >= ?", d7),
+        "new_30d": one("SELECT COUNT(*) FROM users WHERE created_at >= ?", d30),
+        "prev_week_active": len(prev_w),
+        "retained": retained,
+        "retention_pct": round(retained * 100 / len(prev_w)) if prev_w else 0,
+        "churned": len(prev_w) - retained,
+    }
+    _retention_cache.update(at=nowm, data=data)
+    return data
+
+
 @router.post("/economy/points-log/purge")
 def purge_points_log(data: PointsLogPurgeIn, request: Request,
                      conn: sqlite3.Connection = Depends(db_dep),

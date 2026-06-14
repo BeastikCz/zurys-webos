@@ -2491,13 +2491,34 @@ async function saveShopDiscount() {
     adminEconomy();
   } catch (e) { toast(e.message, "error"); }
 }
+function retentionHTML(r) {
+  if (!r) return "";
+  return `
+    <div class="panel" style="margin-bottom:16px">
+      <div class="section-title" style="margin-top:0">📊 Retence <span class="faint" style="font-size:12px;font-weight:400">— kdo se vrací (aktivní = nedávno na webu, dle sessions)</span></div>
+      <div class="stat-grid">
+        ${statBox(r.dau, "DAU (dnes)", "accent")}
+        ${statBox(r.wau, "WAU (7 dní)")}
+        ${statBox(r.mau, "MAU (30 dní)")}
+        ${statBox(r.stickiness + "%", "Stickiness DAU/MAU", r.stickiness >= 20 ? "accent" : "")}
+      </div>
+      <div class="stat-grid" style="margin-top:12px">
+        ${statBox("+" + r.new_today, "Noví dnes")}
+        ${statBox("+" + r.new_7d, "Noví za 7 dní")}
+        ${statBox(r.retention_pct + "%", "Týdenní retence", r.retention_pct >= 40 ? "accent" : (r.retention_pct < 20 ? "warn" : ""))}
+        ${statBox(r.churned, "Odpadlí (týden)", r.churned ? "warn" : "")}
+      </div>
+      <div class="faint" style="font-size:12px;margin-top:10px">Týdenní retence: z <b>${r.prev_week_active}</b> aktivních minulý týden se <b>${r.retained}</b> vrátilo i tento týden. Stickiness 20 %+ = zdravé · celkem účtů ${r.total_users}.</div>
+    </div>`;
+}
 async function adminEconomy() {
   const box = $("#adminContent");
   try {
-    const [e, lv, dash, rake, health, hh] = await Promise.all([api("/admin/economy"), api("/admin/economy/live"), api("/admin/economy/dashboard"), api("/admin/economy/games-rake"), api("/admin/economy/health?days=14").catch(() => null), api("/admin/shop-discount").catch(() => ({ pct: 0, live_only: false, active_now: 0 }))]);
+    const [e, lv, dash, rake, health, hh, ret] = await Promise.all([api("/admin/economy"), api("/admin/economy/live"), api("/admin/economy/dashboard"), api("/admin/economy/games-rake"), api("/admin/economy/health?days=14").catch(() => null), api("/admin/shop-discount").catch(() => ({ pct: 0, live_only: false, active_now: 0 })), api("/admin/analytics/retention").catch(() => null)]);
     const modeBtn = (m, label) => `<button class="btn btn-sm ${lv.mode === m ? "btn-primary" : "btn-ghost"}" data-action="eco-live-mode" data-mode="${m}">${label}</button>`;
     box.innerHTML = `
       ${economyDashboardHTML(dash)}
+      ${retentionHTML(ret)}
       ${economyHealthHTML(health)}
       ${coinIconCardHTML()}
       <div class="panel" style="margin-bottom:16px">
