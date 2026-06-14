@@ -165,11 +165,18 @@ def award_watch(conn: sqlite3.Connection, user) -> dict:
     # body za sledování JEN když stream běží (kick.com/<channel> live)
     if not live.is_live(conn):
         return {"awarded": 0, "offline": True}
+    threshold = (datetime.now(timezone.utc) - timedelta(seconds=WATCH_COOLDOWN_S)).isoformat()
+    # READ-brzda: když cooldown ZJEVNĚ neuplynul, vrať se BEZ jakéhokoli zápisu/commitu.
+    # Šetří write-lock+commit u častých „nadbytečných" heartbeatů (multi-tab, focus, burst).
+    # Atomicitu pořád drží podmíněná UPDATE níž – tahle READ jen ušetří práci v běžném případě.
+    _last = conn.execute("SELECT last_watch_at FROM activity_state WHERE user_id = ?",
+                         (user["id"],)).fetchone()
+    if _last and _last["last_watch_at"] and _last["last_watch_at"] >= threshold:
+        return {"awarded": 0, "cooldown": 1}   # read-only, žádný zápis
     _state(conn, user["id"])   # zajisti řádek activity_state
     # Atomický claim slotu: připíše JEN když od poslední odměny uplynul cooldown. Podmíněná
     # UPDATE (SQLite serializuje zápisy) zabrání dvojímu přičtení při souběžných heartbeatech
     # (např. dva otevřené taby) – druhý request už uvidí nový last_watch_at a rowcount=0.
-    threshold = (datetime.now(timezone.utc) - timedelta(seconds=WATCH_COOLDOWN_S)).isoformat()
     cur = conn.execute(
         "UPDATE activity_state SET last_watch_at = ? WHERE user_id = ? "
         "AND (last_watch_at IS NULL OR last_watch_at < ?)",

@@ -12,6 +12,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from ..deps import db_dep, require_user, require_can_gamble, add_points, try_debit, check_wager_limit
 from ..db import now_iso
 from ..models import MinesStartIn, MinesRevealIn
+from ..ratelimit import rate_limit
 from .. import fairness
 
 router = APIRouter(prefix="/mines", tags=["mines"])
@@ -93,6 +94,7 @@ def state(user: sqlite3.Row = Depends(require_user), conn: sqlite3.Connection = 
 @router.post("/start")
 def start(data: MinesStartIn, user: sqlite3.Row = Depends(require_user),
           conn: sqlite3.Connection = Depends(db_dep)):
+    rate_limit(f"mines:start:{user['id']}", 20, 60)   # anti-spam: max 20 her/min
     require_can_gamble(user)                 # sebevyloučení ze sázek
     if _active(conn, user["id"]):
         raise HTTPException(status_code=400, detail="Máš rozehranou hru – dohraj ji nebo cashni.")
@@ -120,6 +122,7 @@ def start(data: MinesStartIn, user: sqlite3.Row = Depends(require_user),
 @router.post("/reveal")
 def reveal(data: MinesRevealIn, user: sqlite3.Row = Depends(require_user),
            conn: sqlite3.Connection = Depends(db_dep)):
+    rate_limit(f"mines:reveal:{user['id']}", 60, 30)   # anti-spam: max 60 odkrytí / 30 s
     g = _active(conn, user["id"])
     if not g:
         raise HTTPException(status_code=400, detail="Nemáš rozehranou hru.")
