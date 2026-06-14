@@ -28,5 +28,5 @@ primary_region = "fra"   # Frankfurt = EU, nejblíž ČR i Kicku
   min_machines_running = 1      # pořád běží aspoň 1 instance
 
 [[vm]]
-  size = "shared-cpu-2x"       # 2 jádra – navýšeno 2026-06-08 (shared-cpu-1x burst CPU se při náporu škrtil)
-  memory = "1024mb"            # revert: size shared-cpu-1x + memory 512mb
+  size = "shared-cpu-4x"       # 4 jádra – navýšeno 2026-06-14 (nápor při streamu škrtil 2 jádra); revert na shared-cpu-2x
+  memory = "2048mb"            # revert: shared-cpu-2x + 1024mb

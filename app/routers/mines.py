@@ -19,9 +19,9 @@ router = APIRouter(prefix="/mines", tags=["mines"])
 
 GRID = 25            # 5×5
 MIN_MINES = 3        # minimálně 3 bomby
-MAX_BET = 5000
-MAX_PAYOUT = 100000  # strop výplaty na hru (ochrana ekonomiky před zázračným full-clearem)
-HOUSE_EDGE = 0.01    # 1 %
+MAX_BET = 1000       # nerf: menší výkyvy (bylo 5000)
+MAX_PAYOUT = 15000   # nerf: strop výhry na hru – zabije velké jackpoty (bylo 100000)
+HOUSE_EDGE = 0.08    # nerf: 8 % house edge – dlouhodobě jasně vyhrává house (bylo 1 %)
 
 
 def _mult(revealed_count: int, mines: int) -> float:
