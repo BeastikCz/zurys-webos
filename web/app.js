@@ -3368,6 +3368,7 @@ async function adminOrders() {
         <a class="btn btn-ghost btn-sm" href="/api/admin/export/orders.csv?status=${encodeURIComponent(adminState.orderFilter)}${pq}">📥 Export CSV</a>
         <button class="btn btn-danger btn-sm" data-action="orders-clear-fulfilled" title="Smazat všechny vyřízené objednávky">🗑 Smazat vyřízené</button>
       </div>
+      <div class="faint" style="font-size:12px;margin:2px 0 10px">🧹 Vyřízené objednávky starší <b>30 dní</b> se mažou samy (ať tabulka nebobtná). Body zůstávají v historii.</div>
       <div class="table-wrap"><table class="tbl"><thead><tr><th>#</th><th>Uživatel</th><th>Odměna</th><th>Body</th><th>Stav</th><th>Kdy</th><th></th></tr></thead><tbody>
       ${list.length ? list.map((o) => `<tr>
         <td class="faint">${o.id}</td>

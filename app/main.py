@@ -15,6 +15,7 @@ from .live_events import start_live_events_daemon
 from .partners_flash import start_partners_flash_daemon
 from .digest import start_digest_daemon
 from .achievements import start_achievements_daemon
+from .order_cleanup import start_order_cleanup_daemon
 from .config import WEB_DIR, UPLOAD_DIR, SESSION_COOKIE, STAFF_ROLES, TRUSTED_IPS
 from .db import init_db, get_conn, now_iso, get_setting, set_setting
 from .deps import client_ip
@@ -57,6 +58,8 @@ start_achievements_daemon()
 start_partners_flash_daemon()
 # Live události: při startu streamu zapne Happy Hour (×násobič na X min) + oznámí v chatu
 start_live_events_daemon()
+# Auto-úklid objednávek: maže vyřízené starší 30 dní (ať tabulka nebobtná) + alert na hromadu čekajících
+start_order_cleanup_daemon()
 
 # Jednorázově: přechod na desku 9×9 → vrať vklady u zbylých rozehraných (staré velikosti) her.
 # Flag v app_settings, ať to neběží při každém restartu (jinak by rušilo i nové 9×9 hry).
