@@ -197,6 +197,13 @@ class CommunityGoalIn(BaseModel):
     reward: Optional[int] = Field(default=None, ge=0, le=1_000_000)
 
 
+class SubGoalIn(BaseModel):
+    """Nastavení komunitního SUB cíle (posílají se jen měněná pole)."""
+    enabled: Optional[int] = Field(default=None, ge=0, le=1)
+    target: Optional[int] = Field(default=None, ge=1, le=1_000_000)
+    reward: Optional[int] = Field(default=None, ge=0, le=1_000_000)
+
+
 class CosmeticIn(BaseModel):
     """Koupě / nasazení kosmetiky – klíč položky z katalogu."""
     key: str = Field(min_length=1, max_length=40)

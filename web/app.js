@@ -356,6 +356,23 @@ async function loadCommunityGoal() {
   } catch (e) { box.innerHTML = ""; }
 }
 
+async function loadSubGoal() {
+  const box = document.getElementById("subGoal"); if (!box) return;
+  try {
+    const g = await api("/sub-goal");
+    if (!g.enabled) { box.innerHTML = ""; return; }
+    const pct = g.pct || 0;
+    box.innerHTML = `<div class="cgoal cgoal--sub${g.done ? " done" : ""}">
+      <div class="cgoal-top">
+        <span class="cgoal-title">🟣 Dnešní SUB cíl${g.done ? " — SPLNĚNO! 🎉" : ""}</span>
+        <span class="cgoal-rew">Odměna <b>+${fmtPts(g.reward)}</b> všem aktivním 🌾</span>
+      </div>
+      <div class="cgoal-bar"><span style="width:${pct}%"></span></div>
+      <div class="cgoal-sub">${g.progress} / ${g.target} subů · ${g.done ? "rozdáno všem dnešním divákům! 🎁" : "subněte / giftněte a naplňte to společně! 🟣"}</div>
+    </div>`;
+  } catch (e) { box.innerHTML = ""; }
+}
+
 let dropTimer = null;
 let cardTimer = null;
 let gameTimer = null, gameState = null, finishedGameId = null, lastBoardKey = "", currentGameId = null, gameClockTimer = null, gameClockBase = null;
@@ -1973,6 +1990,7 @@ function pageBonusy() {
   view.innerHTML = `
     <div class="page-head"><h1>🎁 Denní odměny</h1><p class="muted">Vyzvedni si streak a zatoč kolem štěstí – každý den nové sedláky! 🍀</p></div>
     <div id="chatGoal" style="margin-bottom:18px"></div>
+    <div id="subGoal" style="margin-bottom:18px"></div>
     <div class="bonus-grid">
       <div id="dailyCard"></div>
       <div id="wheelCard"></div>
@@ -1984,7 +2002,8 @@ function pageBonusy() {
   loadPartnerLinks();
   loadQuests();
   loadCommunityGoal();
-  dropTimer = setInterval(() => { if (!document.hidden) loadCommunityGoal(); }, 12000);
+  loadSubGoal();
+  dropTimer = setInterval(() => { if (!document.hidden) { loadCommunityGoal(); loadSubGoal(); } }, 12000);
 }
 
 /* ---------- Kolo štěstí (denní spin) ---------- */
@@ -3919,6 +3938,7 @@ const AUDIT_LABELS = {
   "rule.update": "⚙️ Pravidlo", "anticheat.block": "🛡️ AC blok",
   "ip.ban": "🚫 IP ban", "ip.unban": "✅ IP odban",
   "gift.approve": "🎁 Dar povolen", "gift.reject": "🎁 Dar zamítnut",
+  "subgoal.update": "🟣 SUB cíl", "cgoal.update": "💬 Chat cíl",
 };
 function auditLabel(action) { return AUDIT_LABELS[action] || action || "?"; }
 function auditTone(action) {
@@ -4392,6 +4412,39 @@ async function saveHappyHour(enable) {
     adminDrops();
   } catch (e) { toast(e.message, "error"); }
 }
+function subGoalCardHTML(g) {
+  const on = !!g.enabled;
+  return `<div class="panel" style="margin-bottom:18px;border-color:${on ? "var(--accent-2)" : "var(--border)"}">
+    <div class="row-between"><div class="section-title" style="margin:0">🟣 Komunitní SUB cíl</div>
+      <span class="badge ${on ? "badge-sub" : ""}">${g.done ? "✅ DNES SPLNĚNO" : (on ? "🟢 ZAPNUTO" : "⚫ vypnuto")}</span></div>
+    <p class="form-hint" style="margin:8px 0 12px">Kick suby (sub/resub +1, gift sub +počet) plní dnešní lištu. Po naplnění <b>všichni dnešní aktivní diváci</b> (sledovali nebo kecali) dostanou <b>+${fmtPts(g.reward)}</b> a bot to oznámí v chatu. Reset každý den. 🟣🌾<br>Teď: <b>${g.progress} / ${g.target}</b> subů.</p>
+    <div style="margin:0 0 12px;padding:9px 11px;background:rgba(145,71,255,.1);border:1px solid rgba(145,71,255,.35);border-radius:9px;font-size:12.5px">
+      🖥️ <b>OBS overlay</b> (živě synced s webem): <code style="user-select:all">${location.origin}/overlay/subgoal.html</code>
+      <button class="btn btn-ghost btn-sm" data-action="copy-url" data-url="${location.origin}/overlay/subgoal.html" style="margin-left:6px">📋 Kopírovat</button>
+      <div class="faint" style="margin-top:5px">Přidej v OBS jako <b>Browser Source</b> (např. 640×150, průhledné pozadí). Subne někdo → lišta se hne na webu i na streamu.</div>
+    </div>
+    <div class="field-row">
+      <div class="field"><label>Cíl (subů / den)</label><input class="input" id="sg_target" type="number" min="1" value="${g.target}"></div>
+      <div class="field"><label>Odměna všem (sedláků)</label><input class="input" id="sg_reward" type="number" min="0" value="${g.reward}"></div>
+    </div>
+    <div class="toolbar" style="margin-top:12px">
+      <button class="btn ${on ? "btn-danger" : "btn-primary"}" data-action="subgoal-toggle" data-on="${on ? 1 : 0}">${on ? "⏸️ Vypnout SUB cíl" : "▶️ Zapnout SUB cíl"}</button>
+      <button class="btn btn-sm" data-action="subgoal-save">💾 Uložit nastavení</button>
+    </div>
+  </div>`;
+}
+async function saveSubGoal(enable) {
+  const body = {
+    target: parseInt($("#sg_target").value || "20", 10),
+    reward: parseInt($("#sg_reward").value || "300", 10),
+  };
+  if (enable !== undefined) body.enabled = enable;
+  try {
+    await api("/admin/sub-goal", { method: "POST", body });
+    toast(enable === 1 ? "SUB cíl zapnut ▶️" : enable === 0 ? "SUB cíl vypnut ⏸️" : "Uloženo 💾", "success");
+    adminDrops();
+  } catch (e) { toast(e.message, "error"); }
+}
 function autoDropCardHTML(a) {
   const on = !!a.autodrop_enabled;
   const rng = (lo, hi) => (hi > lo ? `${lo}–${hi}` : `${lo}`);            // „20–40" / „30"
@@ -4443,8 +4496,8 @@ async function saveAutoDrop(enable) {
 async function adminDrops() {
   const box = $("#adminContent");
   try {
-    const [list, auto, happy] = await Promise.all([api("/admin/drops"), api("/admin/drops/auto"), api("/admin/live-happy")]);
-    box.innerHTML = happyHourCardHTML(happy) + autoDropCardHTML(auto) + `
+    const [list, auto, happy, sgoal] = await Promise.all([api("/admin/drops"), api("/admin/drops/auto"), api("/admin/live-happy"), api("/sub-goal")]);
+    box.innerHTML = happyHourCardHTML(happy) + subGoalCardHTML(sgoal) + autoDropCardHTML(auto) + `
       <div class="panel" style="margin-bottom:18px">
         <div class="section-title">🎁 Spustit drop (závod o kód)</div>
         <form class="form" data-submit="create-drop">
@@ -4564,6 +4617,7 @@ function handleAction(action, el) {
     case "prof-tab": loadProfTab(el.dataset.tab); break;
     case "save-trade": saveTradeUrl(); break;
     case "copy-trade": navigator.clipboard && navigator.clipboard.writeText(el.dataset.url).then(() => toast("Trade link zkopírován ✓", "success")); break;
+    case "copy-url": navigator.clipboard && navigator.clipboard.writeText(el.dataset.url).then(() => toast("Odkaz zkopírován ✓", "success")); break;
     case "close-modal": closeModal(); break;
     /* hry (piškvorky) */
     case "game-open": navigate("games/" + id); break;
@@ -4642,6 +4696,8 @@ function handleAction(action, el) {
     case "autodrop-toggle": saveAutoDrop(el.dataset.on === "1" ? 0 : 1); break;
     case "happy-save": saveHappyHour(); break;
     case "happy-toggle": saveHappyHour(el.dataset.on === "1" ? 0 : 1); break;
+    case "subgoal-save": saveSubGoal(); break;
+    case "subgoal-toggle": saveSubGoal(el.dataset.on === "1" ? 0 : 1); break;
     case "news-delete": deleteNote(id); break;
     case "rule-toggle": toggleRule(el.dataset.key, el.dataset.on !== "1"); break;
     case "ip-unban": unbanIp(el.dataset.ip); break;

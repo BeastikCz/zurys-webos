@@ -226,6 +226,13 @@ def community_goal_status(conn: sqlite3.Connection = Depends(db_dep)):
     return status(conn)
 
 
+@router.get("/sub-goal")
+def sub_goal_status(conn: sqlite3.Connection = Depends(db_dep)):
+    """Stav komunitního SUB cíle (veřejné – pro lištu na webu)."""
+    from ..subgoal import status
+    return status(conn)
+
+
 @router.get("/top-chatters")
 def top_chatters_ep(period: str = Query("day", max_length=8),
                     conn: sqlite3.Connection = Depends(db_dep)):

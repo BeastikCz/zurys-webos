@@ -24,7 +24,7 @@ _RULES = [
     ("drops",       "🎁", "Dropy",               "faucet",   ["drop #"]),
     ("codes",       "🎟️", "Redeem kódy",         "faucet",   ["redeem kód"]),
     ("quests",      "📋", "Úkoly",               "faucet",   ["úkol:"]),
-    ("kick",        "💜", "Kick eventy",         "faucet",   ["kick sub", "kick resub", "kick gift sub", "kick follow"]),
+    ("kick",        "💜", "Kick eventy",         "faucet",   ["kick sub", "kick resub", "kick gift sub", "kick follow", "sub cíl"]),
     ("partners",    "🤝", "Partneři",            "faucet",   ["partner:", "flash partner"]),
     ("import",      "📦", "Import / start",      "faucet",   ["import ze staré", "počáteční body od admina"]),
     ("shop",        "🛒", "Nákupy v shopu",      "sink",     ["nákup odměn", "nákup"]),

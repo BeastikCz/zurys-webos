@@ -21,7 +21,7 @@ from .. import kickbot, economy, ipban, ddos, iprep, live, steam, cs_skins, auto
 from .games import list_games_admin, cancel_game_admin, games_history, refund_game_admin, refund_duel_admin
 from ..models import (ProductIn, SkinLookupIn, SkinSearchIn, ImageUploadIn, UserRoleIn, UserFlagsIn, UserPointsIn, UserAdminMetaIn, OrderStatusIn, CodeGenIn,
                       BanIn, DropCreateIn, AutoDropIn, RuleIn, EconomyIn, IpBanIn, IpUnbanIn, BotToggleIn,
-                      LiveModeIn, LegacyImportIn, PatchNoteIn, CommunityGoalIn, ManualOrderIn, ManualOrderBulkIn,
+                      LiveModeIn, LegacyImportIn, PatchNoteIn, CommunityGoalIn, SubGoalIn, ManualOrderIn, ManualOrderBulkIn,
                       PointsLogPurgeIn, PartnerLinkIn, PartnerFlashConfigIn, GamesRakeIn, LiveHappyIn,
                       SelfExcludeIn, ShopDiscountIn, BanClusterIn)
 from ..services import product_public, shop_discount_pct
@@ -1368,6 +1368,24 @@ def set_community_goal(data: CommunityGoalIn, request: Request,
                  f"enabled={data.enabled} target={data.target} reward={data.reward}")
     conn.commit()
     from ..community_goal import status
+    return status(conn)
+
+
+@router.post("/sub-goal")
+def set_sub_goal(data: SubGoalIn, request: Request,
+                 conn: sqlite3.Connection = Depends(db_dep),
+                 admin: sqlite3.Row = Depends(require_admin)):
+    """Naladí komunitní SUB cíl (target / reward / zap-vyp). Admin only."""
+    if data.enabled is not None:
+        set_setting(conn, "subgoal_enabled", "1" if data.enabled else "0")
+    if data.target is not None:
+        set_setting(conn, "subgoal_target", str(data.target))
+    if data.reward is not None:
+        set_setting(conn, "subgoal_reward", str(data.reward))
+    record_audit(conn, admin, request, "subgoal.update", "",
+                 f"enabled={data.enabled} target={data.target} reward={data.reward}")
+    conn.commit()
+    from ..subgoal import status
     return status(conn)
 
 

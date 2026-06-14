@@ -17,7 +17,7 @@ import rsa
 
 from .db import now_iso
 from .deps import add_points
-from . import economy, kickcommands, services
+from . import economy, kickcommands, services, subgoal
 
 _KEY_URL = "https://api.kick.com/public/v1/public-key"
 _pub = None
@@ -152,6 +152,7 @@ def handle_event(conn, event_type: str, payload: dict) -> dict:
         exp = payload.get("expires_at")
         label = ("Kick sub 🟣" if is_new else "Kick resub 🔁") + (" (happy 2×)" if mult > 1 else "")
         _award_kick_user(conn, uname, pts, label, set_sub=True, sub_expires_at=exp, log_event=True)
+        subgoal.tick(conn, 1)                    # komunitní sub cíl: +1
         return {"ok": True, "type": event_type, "user": uname, "pts": pts, "mult": mult}
 
     if event_type == "channel.subscription.gifts":
@@ -167,6 +168,7 @@ def handle_event(conn, event_type: str, payload: dict) -> dict:
             gu = (g or {}).get("username")
             if gu:
                 _award_kick_user(conn, gu, 0, "Kick gift sub (příjemce)", set_sub=True, sub_expires_at=gexp, log_event=True)
+        subgoal.tick(conn, n)                    # komunitní sub cíl: +n (počet darovaných subů)
         return {"ok": True, "type": event_type, "gifter": gifter, "count": n, "pts": total}
 
     if event_type == "channel.followed":

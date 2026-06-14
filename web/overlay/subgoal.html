@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ZURYS — SUB cíl overlay</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { background: transparent; overflow: hidden; font-family: "Segoe UI", system-ui, Arial, sans-serif; }
+  #wrap { padding: 16px; }
+  #wrap.hidden { display: none; }
+  .card {
+    background: linear-gradient(135deg, rgba(30,18,48,.92), rgba(16,11,28,.92));
+    border: 2px solid #9147ff; border-radius: 18px; padding: 15px 20px; max-width: 640px;
+    box-shadow: 0 0 0 2px rgba(145,71,255,.25), 0 10px 40px rgba(0,0,0,.5), 0 0 42px rgba(145,71,255,.35);
+    color: #fff; transition: transform .2s ease, box-shadow .3s ease;
+  }
+  .card.done { border-color: #ffd23e; box-shadow: 0 0 0 2px rgba(255,210,62,.4), 0 0 64px rgba(255,210,62,.5); }
+  .card.bump { transform: scale(1.045); }
+  .top { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin-bottom: 10px; }
+  .title { font-size: 22px; font-weight: 900; letter-spacing: .4px; text-shadow: 0 2px 8px rgba(0,0,0,.65); }
+  .rew { font-size: 15px; font-weight: 700; color: #d8c4ff; text-shadow: 0 2px 6px rgba(0,0,0,.6); white-space: nowrap; }
+  .bar { height: 22px; border-radius: 12px; background: rgba(255,255,255,.12); overflow: hidden; box-shadow: inset 0 2px 6px rgba(0,0,0,.45); }
+  .fill { height: 100%; width: 0%; border-radius: 12px; background: linear-gradient(90deg, #9147ff, #c89bff);
+          box-shadow: 0 0 18px #9147ff; transition: width .8s cubic-bezier(.2,.8,.2,1); }
+  .card.done .fill { background: linear-gradient(90deg, #ffd23e, #ffe98a); box-shadow: 0 0 22px #ffd23e; }
+  .count { margin-top: 9px; font-size: 17px; font-weight: 800; text-shadow: 0 2px 6px rgba(0,0,0,.65); }
+  .count .now { color: #c89bff; }
+  .card.done .count .now { color: #ffe98a; }
+</style>
+</head>
+<body>
+<div id="wrap" class="hidden">
+  <div class="card" id="card">
+    <div class="top">
+      <span class="title" id="title">🟣 SUB CÍL</span>
+      <span class="rew" id="rew"></span>
+    </div>
+    <div class="bar"><div class="fill" id="fill"></div></div>
+    <div class="count" id="count"></div>
+  </div>
+</div>
+<script>
+  // Overlay čte stejné /api/sub-goal jako web → web i stream jsou vždy synced.
+  let last = -1;
+  async function poll() {
+    try {
+      const r = await fetch("/api/sub-goal", { cache: "no-store" });
+      const g = await r.json();
+      const wrap = document.getElementById("wrap");
+      if (!g.enabled) { wrap.classList.add("hidden"); last = -1; return; }
+      wrap.classList.remove("hidden");
+      const card = document.getElementById("card");
+      document.getElementById("fill").style.width = (g.pct || 0) + "%";
+      document.getElementById("rew").textContent = "Odměna +" + (g.reward || 0).toLocaleString("cs-CZ") + " všem 🌾";
+      document.getElementById("title").textContent = g.done ? "🟣 SUB CÍL — SPLNĚNO! 🎉" : "🟣 SUB CÍL";
+      document.getElementById("count").innerHTML = '<span class="now">' + g.progress + "</span> / " + g.target + " subů";
+      card.classList.toggle("done", !!g.done);
+      if (last >= 0 && g.progress > last) {          // přibyl sub → krátký „bump"
+        card.classList.add("bump");
+        setTimeout(function () { card.classList.remove("bump"); }, 220);
+      }
+      last = g.progress;
+    } catch (e) { /* tiše – příští poll to zkusí znovu */ }
+  }
+  poll();
+  setInterval(poll, 4000);
+</script>
+</body>
+</html>
