@@ -7,61 +7,90 @@
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   html, body { background: transparent; overflow: hidden; font-family: "Segoe UI", system-ui, Arial, sans-serif; }
-  #wrap { padding: 16px; }
+  :root { --g: #8df24a; --g2: #6fd92f; --gd: #4fae22; }
+  #wrap { padding: 18px; }
   #wrap.hidden { display: none; }
+
   .card {
-    background: linear-gradient(135deg, rgba(30,18,48,.92), rgba(16,11,28,.92));
-    border: 2px solid #9147ff; border-radius: 18px; padding: 15px 20px; max-width: 640px;
-    box-shadow: 0 0 0 2px rgba(145,71,255,.25), 0 10px 40px rgba(0,0,0,.5), 0 0 42px rgba(145,71,255,.35);
-    color: #fff; transition: transform .2s ease, box-shadow .3s ease;
+    position: relative; display: flex; flex-direction: column; gap: 16px;
+    max-width: 860px; padding: 26px 32px;
+    background: linear-gradient(180deg, rgba(8,12,6,.94), rgba(4,7,3,.96));
+    border: 2.5px solid var(--g); border-radius: 30px;
+    box-shadow: 0 0 0 1px rgba(141,242,74,.25), 0 0 40px rgba(141,242,74,.35), 0 18px 60px rgba(0,0,0,.6);
+    color: #fff;
   }
-  .card.done { border-color: #ffd23e; box-shadow: 0 0 0 2px rgba(255,210,62,.4), 0 0 64px rgba(255,210,62,.5); }
-  .card.bump { transform: scale(1.045); }
-  .top { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin-bottom: 10px; }
-  .title { font-size: 22px; font-weight: 900; letter-spacing: .4px; text-shadow: 0 2px 8px rgba(0,0,0,.65); }
-  .rew { font-size: 15px; font-weight: 700; color: #d8c4ff; text-shadow: 0 2px 6px rgba(0,0,0,.6); white-space: nowrap; }
-  .bar { height: 22px; border-radius: 12px; background: rgba(255,255,255,.12); overflow: hidden; box-shadow: inset 0 2px 6px rgba(0,0,0,.45); }
-  .fill { height: 100%; width: 0%; border-radius: 12px; background: linear-gradient(90deg, #9147ff, #c89bff);
-          box-shadow: 0 0 18px #9147ff; transition: width .8s cubic-bezier(.2,.8,.2,1); }
-  .card.done .fill { background: linear-gradient(90deg, #ffd23e, #ffe98a); box-shadow: 0 0 22px #ffd23e; }
-  .count { margin-top: 9px; font-size: 17px; font-weight: 800; text-shadow: 0 2px 6px rgba(0,0,0,.65); }
-  .count .now { color: #c89bff; }
-  .card.done .count .now { color: #ffe98a; }
+  .card.done { box-shadow: 0 0 0 1px rgba(141,242,74,.4), 0 0 64px rgba(141,242,74,.6), 0 18px 60px rgba(0,0,0,.6); }
+
+  .top { display: flex; align-items: center; gap: 22px; }
+  .mascot {
+    flex-shrink: 0; width: 104px; height: 104px; border-radius: 50%;
+    border: 3px solid var(--g); overflow: hidden; position: relative;
+    display: grid; place-items: center; font-size: 54px; background: rgba(141,242,74,.08);
+    box-shadow: 0 0 22px rgba(141,242,74,.45);
+  }
+  .mascot img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+  .head { min-width: 0; }
+  .ttl { font-size: 40px; font-weight: 900; line-height: 1.04; letter-spacing: .5px; text-transform: uppercase; text-shadow: 0 3px 14px rgba(0,0,0,.6); }
+  .ttl .g { color: var(--g); }
+  .rew { margin-top: 12px; font-size: 19px; font-weight: 800; letter-spacing: .4px; text-transform: uppercase; color: #cfd6c8; display: flex; align-items: center; gap: 9px; }
+  .rew b { color: var(--g); }
+
+  .bar { position: relative; height: 50px; border-radius: 16px; background: #15170f;
+    box-shadow: inset 0 3px 10px rgba(0,0,0,.7), inset 0 0 0 1px rgba(255,255,255,.05); overflow: hidden; }
+  .fill { height: 100%; width: 0%; border-radius: 16px; transition: width .8s cubic-bezier(.2,.8,.2,1);
+    background-image: repeating-linear-gradient(45deg, var(--g) 0, var(--g) 16px, var(--g2) 16px, var(--g2) 32px);
+    background-size: 45px 45px; animation: slide 1s linear infinite; box-shadow: 0 0 22px rgba(141,242,74,.6); }
+  @keyframes slide { to { background-position: 45px 0; } }
+  .barnum { position: absolute; right: 22px; top: 50%; transform: translateY(-50%); z-index: 2;
+    font-size: 27px; font-weight: 900; font-variant-numeric: tabular-nums; text-shadow: 0 2px 8px rgba(0,0,0,.8); }
+  .barnum .now { color: var(--g); }
+
+  .foot { display: flex; align-items: center; gap: 12px; padding-top: 15px; border-top: 1px solid rgba(255,255,255,.1);
+    font-size: 18px; font-weight: 800; letter-spacing: .3px; text-transform: uppercase; color: #b9c2af; }
+  .foot .heart { color: var(--g); font-size: 20px; }
+  .foot .now { color: var(--g); }
+  .foot .sep { color: #5c6650; }
 </style>
 </head>
 <body>
 <div id="wrap" class="hidden">
   <div class="card" id="card">
     <div class="top">
-      <span class="title" id="title">🟣 SUB CÍL</span>
-      <span class="rew" id="rew"></span>
+      <div class="mascot">🧑‍🌾<img id="mascotImg" src="/sedlak.png" alt="" onerror="this.style.display='none'"></div>
+      <div class="head">
+        <div class="ttl" id="ttl">Dnešní <span class="g">SUB cíl</span></div>
+        <div class="rew">🎁 Odměna <b id="rew">+0</b> sedláků všem aktivním 🌾</div>
+      </div>
     </div>
-    <div class="bar"><div class="fill" id="fill"></div></div>
-    <div class="count" id="count"></div>
+    <div class="bar"><div class="fill" id="fill"></div><div class="barnum"><span class="now" id="num">0</span> / <span id="tgt">0</span></div></div>
+    <div class="foot"><span class="heart">♥</span> <span class="now" id="num2">0</span>&nbsp;/&nbsp;<span id="tgt2">0</span> subů <span class="sep">·</span> <span id="msg">subněte a naplňte to společně!</span></div>
   </div>
 </div>
 <script>
-  // Overlay čte stejné /api/sub-goal jako web → web i stream jsou vždy synced.
+  // Čte stejné /api/sub-goal jako web → web i stream synced.
   let last = -1;
-  async function poll() {
-    try {
-      const r = await fetch("/api/sub-goal", { cache: "no-store" });
-      const g = await r.json();
-      const wrap = document.getElementById("wrap");
+  function poll() {
+    fetch("/api/sub-goal", { cache: "no-store" }).then(function (r) { return r.json(); }).then(function (g) {
+      var wrap = document.getElementById("wrap");
       if (!g.enabled) { wrap.classList.add("hidden"); last = -1; return; }
       wrap.classList.remove("hidden");
-      const card = document.getElementById("card");
+      var card = document.getElementById("card");
       document.getElementById("fill").style.width = (g.pct || 0) + "%";
-      document.getElementById("rew").textContent = "Odměna +" + (g.reward || 0).toLocaleString("cs-CZ") + " všem 🌾";
-      document.getElementById("title").textContent = g.done ? "🟣 SUB CÍL — SPLNĚNO! 🎉" : "🟣 SUB CÍL";
-      document.getElementById("count").innerHTML = '<span class="now">' + g.progress + "</span> / " + g.target + " subů";
+      document.getElementById("rew").textContent = "+" + (g.reward || 0).toLocaleString("cs-CZ");
+      document.getElementById("num").textContent = g.progress;
+      document.getElementById("num2").textContent = g.progress;
+      document.getElementById("tgt").textContent = g.target;
+      document.getElementById("tgt2").textContent = g.target;
+      document.getElementById("ttl").innerHTML = g.done
+        ? 'Dnešní <span class="g">SUB cíl</span> — <span class="g">SPLNĚNO!</span> 🎉'
+        : 'Dnešní <span class="g">SUB cíl</span>';
+      document.getElementById("msg").textContent = g.done
+        ? "rozdáno všem dnešním divákům! 🎁"
+        : "subněte / giftněte a naplňte to společně!";
       card.classList.toggle("done", !!g.done);
-      if (last >= 0 && g.progress > last) {          // přibyl sub → krátký „bump"
-        card.classList.add("bump");
-        setTimeout(function () { card.classList.remove("bump"); }, 220);
-      }
+      if (last >= 0 && g.progress > last) { card.style.transform = "scale(1.02)"; setTimeout(function () { card.style.transform = ""; }, 220); }
       last = g.progress;
-    } catch (e) { /* tiše – příští poll to zkusí znovu */ }
+    }).catch(function () {});
   }
   poll();
   setInterval(poll, 4000);
