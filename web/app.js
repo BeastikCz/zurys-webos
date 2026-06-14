@@ -1371,9 +1371,18 @@ async function pageExchange() {
   } catch (e) { $("#exWrap").innerHTML = `<div class="empty">${esc(e.message)}</div>`; }
 }
 function giftCardHTML() {
+  if (!state.user) return `<div class="panel"><div class="section-title" style="margin-top:0">🎁 Poslat sedláky kamarádovi</div><p class="muted" style="font-size:13.5px;margin:6px 0 0">Pro darování se <a href="#" data-action="connect" style="color:var(--accent)">připoj přes Kick</a>.</p></div>`;
   return `<div class="panel">
     <div class="section-title" style="margin-top:0">🎁 Poslat sedláky kamarádovi</div>
-    <p class="muted" style="font-size:13.5px;margin:6px 0 0">⛔ Darování sedláků je <b>dočasně mimo provoz</b>. 🔧</p>
+    <p class="faint" style="font-size:12.5px;margin:4px 0 12px">Pošli část svých sedláků jinému divákovi. <b>Nelze vzít zpět.</b></p>
+    <form data-submit="gift">
+      <div class="field"><label>Komu (Kick nick)</label><input class="input" id="giftUser" placeholder="např. kamarad123" autocomplete="off"></div>
+      <div class="field"><label>Kolik sedláků</label><input class="input" id="giftAmount" type="number" min="1" placeholder="např. 500"></div>
+      <button class="btn btn-primary btn-block" type="submit">🎁 Poslat sedláky</button>
+    </form>
+    <div style="margin-top:14px;padding:11px 13px;border-radius:10px;background:rgba(225,65,65,.12);border:1px solid rgba(225,65,65,.45)">
+      <p style="font-size:12.5px;line-height:1.55;margin:0;color:#ff8a8a">⚠️ <b>Zneužití darování</b> — alt farma, přelévání bodů mezi účty, prodej za reálné peníze, jakékoliv obcházení — <b>a darování bez povolení Admina se trestá TVRDĚ 🔨</b>. Převody mezi účty hlídáme (funnel detektor). Buď v pohodě a daruj kámošům fér. 🌾</p>
+    </div>
   </div>`;
 }
 function redeemCardHTML() {
