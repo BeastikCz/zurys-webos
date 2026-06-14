@@ -1576,6 +1576,90 @@ def security_gifts(limit: int = Query(100, ge=1, le=300),
     return {"rows": out, "total": total}
 
 
+# ---------------- Žádosti o dar (Exchange) – schvalování adminem ----------------
+_GIFT_REQ_BASE = (
+    "SELECT g.*, f.username AS from_name, t.username AS to_name, "
+    "f.banned AS from_banned, t.banned AS to_banned, f.points AS from_points "
+    "FROM gift_requests g JOIN users f ON f.id = g.from_user_id JOIN users t ON t.id = g.to_user_id ")
+
+
+@router.get("/gift-requests")
+def gift_requests_list(conn: sqlite3.Connection = Depends(db_dep)):
+    """Čekající žádosti o dar (escrow) + posledních 20 vyřízených. Admin je Povolí / Zamítne.
+    U čekajících přidá příznak `shared` (stejná IP/zařízení) ať admin pozná pokus o funnel."""
+    from .misc import _shared_identity  # lazy – vyhne se případnému import-cyklu
+
+    def _row(r, flags):
+        d = {"id": r["id"], "amount": r["amount"], "status": r["status"],
+             "from": r["from_name"], "to": r["to_name"], "note": r["note"],
+             "from_id": r["from_user_id"], "to_id": r["to_user_id"],
+             "from_banned": bool(r["from_banned"]), "to_banned": bool(r["to_banned"]),
+             "from_points": r["from_points"], "created_at": r["created_at"],
+             "decided_at": r["decided_at"], "decided_by": r["decided_by"]}
+        if flags:
+            d["shared"] = _shared_identity(conn, r["from_user_id"], r["to_user_id"])
+        return d
+
+    pending = conn.execute(_GIFT_REQ_BASE + "WHERE g.status='pending' ORDER BY g.id ASC").fetchall()
+    recent = conn.execute(_GIFT_REQ_BASE + "WHERE g.status!='pending' ORDER BY g.id DESC LIMIT 20").fetchall()
+    return {"pending": [_row(r, True) for r in pending],
+            "recent": [_row(r, False) for r in recent],
+            "pending_count": len(pending)}
+
+
+@router.post("/gift-requests/{rid}/approve")
+def gift_request_approve(rid: int, request: Request,
+                         conn: sqlite3.Connection = Depends(db_dep),
+                         user: sqlite3.Row = Depends(require_admin)):
+    """Povolí dar: připíše body příjemci (odesílateli odešly už při žádosti = escrow)."""
+    g = conn.execute("SELECT * FROM gift_requests WHERE id = ?", (rid,)).fetchone()
+    if not g:
+        raise HTTPException(status_code=404, detail="Žádost o dar neexistuje.")
+    if g["status"] != "pending":
+        raise HTTPException(status_code=400, detail=f"Žádost už je vyřízená ({g['status']}).")
+    frm = conn.execute("SELECT username FROM users WHERE id = ?", (g["from_user_id"],)).fetchone()
+    rcp = conn.execute("SELECT username FROM users WHERE id = ?", (g["to_user_id"],)).fetchone()
+    if not frm or not rcp:
+        raise HTTPException(status_code=400, detail="Účet odesílatele nebo příjemce už neexistuje.")
+    add_points(conn, g["to_user_id"], g["amount"], f"Dar od {frm['username']} 🎁")
+    # escrow řádek přejmenujeme na KANONICKÝ tvar → funnel detektor i přehled darů ho teď započítají
+    if g["escrow_log_id"]:
+        conn.execute("UPDATE points_log SET reason = ? WHERE id = ?",
+                     (f"Dar pro {rcp['username']} 🎁", g["escrow_log_id"]))
+    conn.execute("UPDATE gift_requests SET status='approved', decided_at=?, decided_by=? WHERE id=?",
+                 (now_iso(), user["username"], rid))
+    record_audit(conn, user, request, "gift.approve",
+                 target=rcp["username"], details=f"+{g['amount']} PTS od {frm['username']}")
+    conn.commit()
+    return {"ok": True, "status": "approved", "amount": g["amount"],
+            "from": frm["username"], "to": rcp["username"]}
+
+
+@router.post("/gift-requests/{rid}/reject")
+def gift_request_reject(rid: int, request: Request,
+                        conn: sqlite3.Connection = Depends(db_dep),
+                        user: sqlite3.Row = Depends(require_admin)):
+    """Zamítne dar: vrátí body odesílateli (escrow zpět). Příjemce nedostane nic."""
+    g = conn.execute("SELECT * FROM gift_requests WHERE id = ?", (rid,)).fetchone()
+    if not g:
+        raise HTTPException(status_code=404, detail="Žádost o dar neexistuje.")
+    if g["status"] != "pending":
+        raise HTTPException(status_code=400, detail=f"Žádost už je vyřízená ({g['status']}).")
+    rcp = conn.execute("SELECT username FROM users WHERE id = ?", (g["to_user_id"],)).fetchone()
+    add_points(conn, g["from_user_id"], g["amount"], "Vrácení daru (zamítnuto adminem) 🎁")
+    if g["escrow_log_id"]:
+        rcp_name = rcp["username"] if rcp else "?"
+        conn.execute("UPDATE points_log SET reason = ? WHERE id = ?",
+                     (f"Dar → {rcp_name} ZAMÍTNUTO adminem 🎁", g["escrow_log_id"]))
+    conn.execute("UPDATE gift_requests SET status='rejected', decided_at=?, decided_by=? WHERE id=?",
+                 (now_iso(), user["username"], rid))
+    target = rcp["username"] if rcp else str(g["to_user_id"])
+    record_audit(conn, user, request, "gift.reject", target=target,
+                 details=f"vráceno {g['amount']} PTS odesílateli")
+    conn.commit()
+    return {"ok": True, "status": "rejected", "amount": g["amount"]}
+
+
 @router.get("/security/points-feed")
 def security_points_feed(q: str = Query("", max_length=64), flow: str = Query("", max_length=4),
                          min_amount: int = Query(0, ge=0), reason: str = Query("", max_length=40),

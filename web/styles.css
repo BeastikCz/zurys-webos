@@ -258,6 +258,7 @@ main { padding: 0 0 80px; min-height: calc(100vh - var(--header-h)); overflow-x:
 .sec-pill { background: var(--surface-2); color: var(--text); border: 1px solid var(--border); border-radius: 999px; padding: 9px 17px; font-weight: 700; font-size: 13.5px; cursor: pointer; transition: .12s; }
 .sec-pill:hover { border-color: var(--accent); }
 .sec-pill.active { background: var(--accent); color: #1a1200; border-color: transparent; }
+.req-badge { display: inline-block; min-width: 18px; padding: 1px 6px; margin-left: 4px; border-radius: 999px; background: #e14141; color: #fff; font-size: 11.5px; font-weight: 800; line-height: 1.4; text-align: center; vertical-align: middle; }
 .sec-pane { display: none; }
 .sec-pane.active { display: block; }
 

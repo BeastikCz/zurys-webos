@@ -1374,15 +1374,13 @@ function giftCardHTML() {
   if (!state.user) return `<div class="panel"><div class="section-title" style="margin-top:0">🎁 Poslat sedláky kamarádovi</div><p class="muted" style="font-size:13.5px;margin:6px 0 0">Pro darování se <a href="#" data-action="connect" style="color:var(--accent)">připoj přes Kick</a>.</p></div>`;
   return `<div class="panel">
     <div class="section-title" style="margin-top:0">🎁 Poslat sedláky kamarádovi</div>
-    <p class="faint" style="font-size:12.5px;margin:4px 0 12px">Pošli část svých sedláků jinému divákovi. <b>Nelze vzít zpět.</b></p>
+    <p class="faint" style="font-size:12.5px;margin:4px 0 12px">Pošli část svých sedláků jinému divákovi. Každý dar <b>schvaluje admin</b> — body se ti zatím zablokují a při zamítnutí vrátí. 🛡️</p>
     <form data-submit="gift">
       <div class="field"><label>Komu (Kick nick)</label><input class="input" id="giftUser" placeholder="např. kamarad123" autocomplete="off"></div>
       <div class="field"><label>Kolik sedláků</label><input class="input" id="giftAmount" type="number" min="1" placeholder="např. 500"></div>
+      <div class="field"><label>Důvod <span class="faint" style="font-weight:400">(nepovinné — admin to uvidí)</span></label><input class="input" id="giftNote" maxlength="120" placeholder="např. dík za pomoc, prohraná sázka…" autocomplete="off"></div>
       <button class="btn btn-primary btn-block" type="submit">🎁 Poslat sedláky</button>
     </form>
-    <div style="margin-top:14px;padding:11px 13px;border-radius:10px;background:rgba(225,65,65,.12);border:1px solid rgba(225,65,65,.45)">
-      <p style="font-size:12.5px;line-height:1.55;margin:0;color:#ff8a8a">⚠️ <b>Zneužití darování</b> — alt farma, přelévání bodů mezi účty, jakékoliv obcházení — <b>a darování bez povolení Admina se trestá TVRDĚ 🔨</b>. Převody mezi účty hlídáme (funnel detektor). Buď v pohodě a daruj kámošům fér. 🌾</p>
-    </div>
   </div>`;
 }
 function redeemCardHTML() {
@@ -1400,14 +1398,15 @@ function redeemCardHTML() {
 async function doGift() {
   const username = ($("#giftUser")?.value || "").trim().replace(/^@/, "");
   const amount = parseInt($("#giftAmount")?.value || "0", 10);
+  const note = ($("#giftNote")?.value || "").trim();
   if (username.length < 2) { toast("Zadej příjemce (Kick nick).", "error"); return; }
   if (!amount || amount < 1) { toast("Zadej kolik sedláků poslat.", "error"); return; }
   if (state.user && amount > state.user.points) { toast("Tolik sedláků nemáš.", "error"); return; }
-  if (!confirm(`Poslat ${amount} sedláků uživateli ${username}? Nelze vzít zpět.`)) return;
+  if (!confirm(`Poslat žádost o dar ${amount} sedláků uživateli ${username}?\n\nBody se ti zablokují, než to admin schválí. Při zamítnutí se vrátí.`)) return;
   try {
-    const r = await api("/exchange/gift", { method: "POST", body: { username, amount } });
+    const r = await api("/exchange/gift", { method: "POST", body: { username, amount, note } });
     if (state.user) state.user.points = r.balance;
-    toast(r.message, "success");
+    toast(r.message, r.pending ? "info" : "success");
     renderHeader();
     pageExchange();
   } catch (e) { toast(e.message, "error"); }
@@ -3869,6 +3868,7 @@ const AUDIT_LABELS = {
   "raffle.draw": "🎟️ Losování", "drop.create": "🎁 Drop +", "drop.end": "🎁 Drop konec",
   "rule.update": "⚙️ Pravidlo", "anticheat.block": "🛡️ AC blok",
   "ip.ban": "🚫 IP ban", "ip.unban": "✅ IP odban",
+  "gift.approve": "🎁 Dar povolen", "gift.reject": "🎁 Dar zamítnut",
 };
 function auditLabel(action) { return AUDIT_LABELS[action] || action || "?"; }
 function auditTone(action) {
@@ -3960,7 +3960,7 @@ async function adminSecurity() {
     const pfQS = `q=${encodeURIComponent(adminState.pfQuery)}&flow=${adminState.pfFlow}`
       + `&min_amount=${adminState.pfMin}&reason=${encodeURIComponent(adminState.pfReason)}`
       + `&limit=${adminState.pfLimit}&offset=${adminState.pfOffset}`;
-    const [ac, sessions, logins, rules, audit, ipbans, traffic, gifts, pf, funnel] = await Promise.all([
+    const [ac, sessions, logins, rules, audit, ipbans, traffic, gifts, pf, funnel, giftReqs] = await Promise.all([
       api("/admin/security/anticheat"),
       api("/admin/security/sessions"),
       api("/admin/security/logins?" + loginsQS),
@@ -3971,6 +3971,7 @@ async function adminSecurity() {
       api("/admin/security/gifts?limit=100"),
       api("/admin/security/points-feed?" + pfQS),
       api("/admin/security/funnel"),
+      api("/admin/gift-requests"),
     ]);
 
     const rf = ac.rapid_farming || [], ra = ac.redeem_abuse || [];
@@ -4082,8 +4083,9 @@ async function adminSecurity() {
       <td><button class="btn btn-ghost btn-sm" data-action="ip-unban" data-ip="${esc(a.ip)}">Odblokovat</button></td>
     </tr>`).join("");
 
+    const giftPending = (giftReqs && giftReqs.pending_count) || 0;
     const SEC_TABS = [["anticheat", "🚨 Anticheat"], ["points", "💸 Pohyby bodů"], ["logins", "🔐 Přihlášení & provoz"], ["audit", "🧾 Audit & dary"]];
-    const pills = `<div class="sec-tabs">${SEC_TABS.map(([k, l]) => `<button class="sec-pill${adminState.secTab === k ? " active" : ""}" data-action="sec-tab" data-tab="${k}">${l}</button>`).join("")}</div>`;
+    const pills = `<div class="sec-tabs">${SEC_TABS.map(([k, l]) => `<button class="sec-pill${adminState.secTab === k ? " active" : ""}" data-action="sec-tab" data-tab="${k}">${l}${k === "audit" && giftPending ? ` <span class="req-badge">${giftPending}</span>` : ""}</button>`).join("")}</div>`;
     const pfHtml = `
       <div class="row-between" style="margin:4px 0 12px;flex-wrap:wrap;gap:8px">
         <div class="section-title" style="margin:0">💸 Pohyby bodů <span class="faint" style="font-size:12px;font-weight:400">— každý +/− sedlák, nic neunikne</span></div>
@@ -4114,6 +4116,41 @@ async function adminSecurity() {
         ${adminState.pfOffset + pf.rows.length < pf.total ? `<button class="btn btn-ghost btn-sm" data-action="pf-page" data-dir="next">Další →</button>` : ""}
         <span class="faint" style="margin-left:auto;font-size:12px">${pf.total ? adminState.pfOffset + 1 : 0}–${adminState.pfOffset + pf.rows.length} z ${pf.total}</span>
       </div>`;
+
+    // --- Žádosti o dar (schvalování) ---
+    const grPending = (giftReqs && giftReqs.pending) || [], grRecent = (giftReqs && giftReqs.recent) || [];
+    let giftReqHtml = `<div class="section-title" style="margin-top:6px">🎁 Žádosti o dar <span class="faint" style="font-size:12px;font-weight:400">— čekají na tvé schválení; body jsou u odesílatele zatím zablokované</span></div>`;
+    if (!grPending.length) {
+      giftReqHtml += `<div class="panel ok">✅ Žádné čekající žádosti o dar.</div>`;
+    } else {
+      giftReqHtml += grPending.map((g) => `
+        <div class="panel ${g.shared ? "bad" : "gold"}" style="margin-bottom:10px">
+          <div class="row-between" style="flex-wrap:wrap;gap:8px">
+            <div><b>${uLink(g.from)}</b>${g.from_banned ? ` <span class="badge badge-admin">BAN</span>` : ""} <span style="opacity:.7">→</span> <b>${uLink(g.to)}</b>${g.to_banned ? ` <span class="badge badge-admin">BAN</span>` : ""}
+              <span class="badge badge-vip" style="margin-left:6px">${fmtPts(g.amount)}</span></div>
+            <span class="faint" style="font-size:12px">${timeAgo(g.created_at)}</span>
+          </div>
+          ${g.note ? `<div class="muted" style="font-size:13px;margin:8px 0 0;font-style:italic">💬 „${esc(g.note)}"</div>` : `<div class="faint" style="font-size:12px;margin:8px 0 0">💬 bez důvodu</div>`}
+          ${g.shared ? `<div class="muted" style="font-size:12.5px;margin:8px 0 0;color:#ff8a8a">🚩 <b>Stejná IP / zařízení</b> — možný pokus o přelévání bodů (funnel). Zvaž zamítnutí.</div>` : ""}
+          <div class="toolbar" style="margin-top:10px">
+            <button class="btn btn-primary btn-sm" data-action="gift-approve" data-id="${g.id}" data-label="${esc(g.from)}→${esc(g.to)} ${fmtPts(g.amount)}">✅ Povolit</button>
+            <button class="btn btn-danger btn-sm" data-action="gift-reject" data-id="${g.id}" data-label="${esc(g.from)}→${esc(g.to)}">✖ Zamítnout (vrátit)</button>
+            <span class="faint" style="font-size:12px;margin-left:auto">zůstatek odesílatele: ${fmtPts(g.from_points)}</span>
+          </div>
+        </div>`).join("");
+    }
+    if (grRecent.length) {
+      giftReqHtml += `<div class="muted" style="font-size:12.5px;margin:12px 0 6px">Posledně vyřízené:</div>
+      <div class="table-wrap"><table class="tbl"><thead><tr><th>Od</th><th>Komu</th><th>Sedláků</th><th>Stav</th><th>Admin</th><th>Kdy</th></tr></thead><tbody>
+      ${grRecent.map((g) => `<tr>
+        <td>${uLink(g.from)}</td><td>${uLink(g.to)}</td>
+        <td><b>${fmtPts(g.amount)}</b></td>
+        <td>${g.status === "approved" ? `<span style="color:#46d369">✅ povoleno</span>` : `<span style="color:#ff7a7a">✖ zamítnuto</span>`}</td>
+        <td class="faint">${esc(g.decided_by || "—")}</td>
+        <td class="faint">${timeAgo(g.decided_at || g.created_at)}</td>
+      </tr>`).join("")}
+      </tbody></table></div>`;
+    }
 
     box.innerHTML = `
       <div class="toolbar"><a class="btn btn-ghost btn-sm" href="/api/admin/backup">💾 Stáhnout zálohu DB</a><span class="faint" style="font-size:12px">Doporučeno zálohovat pravidelně.</span></div>
@@ -4207,6 +4244,7 @@ async function adminSecurity() {
       </div>
 
       <div class="sec-pane${adminState.secTab === "audit" ? " active" : ""}" data-pane="audit">
+      ${giftReqHtml}
       <div class="section-title" style="margin-top:26px">🧾 Audit log (akce adminů) <span class="faint" style="font-size:13px">– celkem ${audit.total}</span></div>
       <div class="toolbar">
         <select id="auditAction" class="input input-sm" style="max-width:180px">
@@ -4258,6 +4296,18 @@ async function banUser(id, ban) {
     }
     loadAdminStats();
     if (adminState.tab === "security") adminSecurity(); else adminUsers();
+  } catch (e) { toast(e.message, "error"); }
+}
+
+async function giftDecide(id, approve, label) {
+  const verb = approve ? "POVOLIT" : "ZAMÍTNOUT";
+  const tail = approve ? "\n\nBody se přesunou příjemci." : "\n\nBody se vrátí odesílateli, příjemce nedostane nic.";
+  if (!confirm(`${verb} dar ${label || ""}?${tail}`)) return;
+  try {
+    const r = await api(`/admin/gift-requests/${id}/${approve ? "approve" : "reject"}`, { method: "POST" });
+    toast(approve ? `✅ Dar povolen — ${fmtPts(r.amount)} přesunuto.` : `✖ Dar zamítnut — ${fmtPts(r.amount)} vráceno odesílateli.`, approve ? "success" : "info");
+    loadAdminStats();
+    adminSecurity();
   } catch (e) { toast(e.message, "error"); }
 }
 
@@ -4430,6 +4480,8 @@ function handleAction(action, el) {
     case "dm-send": dmSend(el.dataset.mode, el.dataset.id); break;
     case "shop-disc-save": saveShopDiscount(); break;
     case "ban-cluster": banCluster(el.dataset.ids, el.dataset.label); break;
+    case "gift-approve": giftDecide(el.dataset.id, true, el.dataset.label); break;
+    case "gift-reject": giftDecide(el.dataset.id, false, el.dataset.label); break;
     case "fair-rotate": fairRotate(); break;
     case "fair-verify": fairVerify(); break;
     case "self-excl": selfExclude(el.dataset.dur); break;

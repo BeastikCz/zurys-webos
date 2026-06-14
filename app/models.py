@@ -287,6 +287,7 @@ class RedeemIn(BaseModel):
 class GiftIn(BaseModel):
     username: str = Field(min_length=2, max_length=64)
     amount: int = Field(ge=1, le=10_000_000)
+    note: str = Field(default="", max_length=120)   # nepovinný důvod od odesílatele
 
 
 # --- Admin: produkty ---

@@ -541,6 +541,20 @@ CREATE TABLE IF NOT EXISTS mines_games (
     ended_at    TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_mines_user ON mines_games(user_id, status);
+
+CREATE TABLE IF NOT EXISTS gift_requests (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    from_user_id  INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    to_user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    amount        INTEGER NOT NULL,
+    status        TEXT NOT NULL DEFAULT 'pending',   -- pending | approved | rejected
+    note          TEXT,                              -- důvod od odesílatele (nepovinný)
+    escrow_log_id INTEGER,                            -- řádek v points_log s blokací u odesílatele
+    created_at    TEXT NOT NULL,
+    decided_at    TEXT,
+    decided_by    TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_gift_requests_status ON gift_requests(status, id);
 """
 
 
@@ -602,6 +616,9 @@ _MIGRATIONS = [
     ("mines_games", "client_seed", "TEXT"),
     ("mines_games", "nonce", "INTEGER"),
     ("mines_games", "ended_at", "TEXT"),
+    # gift_requests: tabulka už na prod vznikla bez sloupce `note` (CREATE IF NOT EXISTS = no-op),
+    # tady ho dorovnáme. Nullable – nepovinný důvod od odesílatele.
+    ("gift_requests", "note", "TEXT"),
 ]
 
 

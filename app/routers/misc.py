@@ -672,14 +672,28 @@ def gift_points(data: GiftIn, request: Request,
     if user["role"] != ROLE_ADMIN and rcp["role"] != ROLE_ADMIN and _shared_identity(conn, user["id"], rcp["id"]):
         raise HTTPException(status_code=403,
                             detail="Nelze poslat účtu ze stejné sítě/zařízení (ochrana proti farmení).")
-    # atomický odečet – nejde do mínusu ani při souběhu
-    if not try_debit(conn, user["id"], data.amount, f"Dar pro {rcp['username']} 🎁"):
+    # Dar = ŽÁDOST, kterou schvaluje admin. Odesílateli se body HNED zablokují (escrow), aby je
+    # mezitím nemohl utratit dvakrát; admin pak dar POVOLÍ (přesun příjemci) nebo ZAMÍTNE (vrácení).
+    # Escrow řádek v points_log má NEUTRÁLNÍ důvod – nepasuje na 'Dar pro %', takže funnel detektor
+    # ani přehled darů ho nepočítají, dokud admin nepovolí (tehdy se přejmenuje na kanonický tvar).
+    amt = data.amount
+    cur = conn.execute(
+        "UPDATE users SET points = points - ? WHERE id = ? AND points >= ?", (amt, user["id"], amt))
+    if cur.rowcount == 0:
         raise HTTPException(status_code=400, detail=f"Nemáš dost sedláků (máš {user['points']}).")
-    add_points(conn, rcp["id"], data.amount, f"Dar od {user['username']} 🎁")
+    log_cur = conn.execute(
+        "INSERT INTO points_log (user_id, change, reason, created_at) VALUES (?, ?, ?, ?)",
+        (user["id"], -amt, f"Dar → {rcp['username']} (čeká na schválení) 🎁", now_iso()))
+    note = (data.note or "").strip()
+    conn.execute(
+        "INSERT INTO gift_requests (from_user_id, to_user_id, amount, status, note, escrow_log_id, created_at) "
+        "VALUES (?, ?, ?, 'pending', ?, ?, ?)",
+        (user["id"], rcp["id"], amt, note, log_cur.lastrowid, now_iso()))
     conn.commit()
     fresh = conn.execute("SELECT points FROM users WHERE id = ?", (user["id"],)).fetchone()["points"]
-    return {"ok": True, "balance": fresh, "recipient": rcp["username"], "amount": data.amount,
-            "message": f"🎁 Posláno {data.amount} sedláků uživateli {rcp['username']}!"}
+    return {"ok": True, "balance": fresh, "recipient": rcp["username"], "amount": amt, "pending": True,
+            "message": f"🎁 Žádost o dar {amt} sedláků pro {rcp['username']} čeká na schválení adminem. "
+                       f"Body máš zatím zablokované — když admin zamítne, vrátí se ti zpět."}
 
 
 # ---------------- Denní bonus – 7denní streak ----------------
