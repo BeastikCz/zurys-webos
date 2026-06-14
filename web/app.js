@@ -113,14 +113,18 @@ function uLink(name) {
 function roleBadge(role) {
   const map = { admin: ["badge-admin", "🛡️", "Admin"], broadcaster: ["badge-admin", "👑", "Broadcaster"], mod: ["badge-vip-role", "🔨", "Moderátor"], vip: ["badge-vip-role", "💎", "VIP"], sub: ["badge-sub-role", "💜", "Sub"], user: ["badge-user-role", "👤", "Divák"] };
   const [cls, icon, label] = map[role] || map.user;
-  return `<span class="badge badge-role badge-emote ${cls}" title="${label}" aria-label="${label}">${icon}</span>`;
+  // Admin = výrazně (ikona + text ADMIN + glow), ať na něj dávají bacha. Ostatní = jen emote + tooltip.
+  if (role === "admin") {
+    return `<span class="badge badge-role badge-admin-loud" data-tip="Admin" aria-label="Admin">${icon} ADMIN</span>`;
+  }
+  return `<span class="badge badge-role badge-emote ${cls}" data-tip="${label}" aria-label="${label}">${icon}</span>`;
 }
 // Odznáčky SUB / VIP / OG (Kick status – display only, nezávislé na roli). Můžou být i víc naráz.
 function subVipBadges(u) {
   let s = "";
-  if (u && u.is_og) s += `<span class="badge badge-role badge-emote badge-admin" title="OG" aria-label="OG">🏅</span> `;
-  if (u && u.is_sub) s += `<span class="badge badge-role badge-emote badge-sub-role" title="Sub" aria-label="Sub">💜</span> `;
-  if (u && u.is_vip) s += `<span class="badge badge-role badge-emote badge-vip-role" title="VIP" aria-label="VIP">💎</span> `;
+  if (u && u.is_og) s += `<span class="badge badge-role badge-emote badge-admin" data-tip="OG" aria-label="OG">🏅</span> `;
+  if (u && u.is_sub) s += `<span class="badge badge-role badge-emote badge-sub-role" data-tip="Sub" aria-label="Sub">💜</span> `;
+  if (u && u.is_vip) s += `<span class="badge badge-role badge-emote badge-vip-role" data-tip="VIP" aria-label="VIP">💎</span> `;
   return s;
 }
 // Pro leaderboard: staff dostane svůj badge + sub/vip; běžný divák jen sub/vip (jinak „Divák").
