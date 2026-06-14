@@ -138,6 +138,7 @@ const ADMIN_SECTIONS = {
   overview: [], stats: ["broadcaster"], products: ["mod", "broadcaster"], users: ["mod", "broadcaster"], subs: [], orders: ["mod", "broadcaster"],
   raffles: ["broadcaster"], codes: ["broadcaster"], drops: ["broadcaster"], games: ["mod", "broadcaster"], bot: ["broadcaster"],
   predictions: ["mod", "broadcaster"], economy: ["broadcaster"], news: ["broadcaster"], security: [],
+  modnabor: ["broadcaster"],
 };
 function isStaff(u) { return !!u && ["admin", "broadcaster", "mod"].includes(u.role); }
 function canSection(u, sec) { return !!u && (u.role === "admin" || (ADMIN_SECTIONS[sec] || []).includes(u.role)); }
@@ -231,6 +232,7 @@ function render() {
     predikce: pagePredikce, games: pageGames, novinky: pageNews, bonusy: pageBonusy,
     kosmetika: pageCosmetics, bj: pageBjRoom, zpravy: pageMessages, fair: pageFair, mines: pageMines,
     connect: pageConnect, login: pageConnect, register: pageConnect, u: pageUserProfile,
+    "mod-nabor": pageModApply,
   };
   (pages[r.name] || pageShop)(r.param);
   window.scrollTo({ top: 0, behavior: "instant" in window ? "instant" : "auto" });
@@ -2284,6 +2286,7 @@ async function pageAdmin() {
     ["overview", "📊 Přehled"], ["products", "🎁 Odměny"], ["users", "👥 Uživatelé"], ["subs", "💜 Suby"], ["orders", "📦 Objednávky"],
     ["raffles", "🎟️ Tomboly"], ["predictions", "🎯 Predikce"], ["codes", "🎫 Kódy"], ["drops", "🎁 Dropy"], ["games", "🎮 Hry"],
     ["bot", "🤖 Kick bot"], ["economy", "⚙️ Ekonomika"], ["news", "📣 Novinky"], ["security", "🛡️ Bezpečnost"],
+    ["modnabor", "🛡️ Nábor modů"],
   ].filter(([k]) => canSection(state.user, k));
   if (!tabs.some(([k]) => k === adminState.tab)) adminState.tab = tabs.length ? tabs[0][0] : null;
   const lbl = state.user.role === "admin" ? "Admin panel"
@@ -2567,6 +2570,7 @@ function renderAdminTab(tab) {
   else if (tab === "economy") adminEconomy();
   else if (tab === "news") adminNews();
   else if (tab === "security") adminSecurity();
+  else if (tab === "modnabor") adminModApps();
 }
 
 /* --- Admin: Ekonomika (pasivní výdělek) --- */
@@ -3939,6 +3943,7 @@ const AUDIT_LABELS = {
   "ip.ban": "🚫 IP ban", "ip.unban": "✅ IP odban",
   "gift.approve": "🎁 Dar povolen", "gift.reject": "🎁 Dar zamítnut",
   "subgoal.update": "🟣 SUB cíl", "cgoal.update": "💬 Chat cíl",
+  "modapp.accept": "🛡️ Mod přijat", "modapp.reject": "🛡️ Mod zamítnut", "modapp.toggle": "🛡️ Nábor",
 };
 function auditLabel(action) { return AUDIT_LABELS[action] || action || "?"; }
 function auditTone(action) {
@@ -4381,6 +4386,124 @@ async function giftDecide(id, approve, label) {
   } catch (e) { toast(e.message, "error"); }
 }
 
+/* --- Nábor moderátorů: přihláška (divák) + admin review --- */
+async function pageModApply() {
+  const view = $("#view");
+  view.innerHTML = `<div class="page-head"><h1>🛡️ Nábor moderátorů</h1><p class="muted">Chceš pomáhat držet chat v pohodě? Vyplň přihlášku — je napojená na tvůj účet, takže nemusíš nic dokazovat.</p></div><div id="modApplyBox"></div>`;
+  const box = $("#modApplyBox");
+  if (!state.user) { box.innerHTML = `<div class="panel"><div class="empty"><div class="big">🔒</div>Pro přihlášku se <a href="#" data-action="connect" style="color:var(--accent)">připoj přes Kick</a>.</div></div>`; return; }
+  box.innerHTML = skeletonCards(1);
+  try {
+    const s = await api("/mod-apply/status");
+    if (s.is_staff) { box.innerHTML = `<div class="panel ok">✅ Už jsi člen týmu. 🛡️</div>`; return; }
+    if (!s.open) { box.innerHTML = `<div class="panel"><div class="empty"><div class="big">🔒</div>Nábor moderátorů je teď zavřený. Mrkni zas příště!</div></div>`; return; }
+    if (s.applied && s.status === "pending") { box.innerHTML = `<div class="panel ok">⏳ Přihlášku už máš odeslanou — čeká na vyřízení. Ozveme se ti přes 🔔.</div>`; return; }
+    if (s.applied && s.status === "accepted") { box.innerHTML = `<div class="panel ok">✅ Tvoje přihláška byla přijata! 🎉 Vítej v týmu.</div>`; return; }
+    box.innerHTML = modApplyFormHTML(s.applied && s.status === "rejected");
+  } catch (e) { box.innerHTML = `<div class="empty">${esc(e.message)}</div>`; }
+}
+function modApplyFormHTML(reapply) {
+  const ta = (id, label, ph) => `<div class="field"><label>${label}</label><textarea class="input" id="${id}" rows="2" maxlength="2000" placeholder="${ph}"></textarea></div>`;
+  return `<div class="panel">
+    ${reapply ? `<div class="muted" style="margin-bottom:12px">Předchozí přihláška nebyla vybrána — klidně to zkus znovu. 🌾</div>` : ""}
+    <form data-submit="mod-apply">
+      <div class="field-row">
+        <div class="field"><label>Věk</label><input class="input" id="ma_age" maxlength="10" placeholder="např. 18"></div>
+        <div class="field"><label>Discord *</label><input class="input" id="ma_discord" maxlength="64" placeholder="tvuj_nick"></div>
+        <div class="field"><label>Pásmo / odkud</label><input class="input" id="ma_tz" maxlength="64" placeholder="ČR / CET"></div>
+      </div>
+      <div class="field-row">
+        <div class="field"><label>Hodin týdně</label><input class="input" id="ma_hours" maxlength="40" placeholder="např. 10h"></div>
+        <div class="field"><label>Kdy bývᚹš online?</label><input class="input" id="ma_avail" maxlength="200" placeholder="večery, víkendy…"></div>
+      </div>
+      <div class="field"><label>Jak dlouho sleduješ stream?</label><input class="input" id="ma_watch" maxlength="100" placeholder="např. půl roku"></div>
+      ${ta("ma_exp", "Moderoval jsi už někde? Kde, jak dlouho?", "Nech prázdné, pokud ne")}
+      ${ta("ma_motivation", "Proč chceš moderovat zrovna pro Zurys? *", "Pár vět (povinné)")}
+      <div class="section-title" style="margin-top:18px;font-size:15px">🧩 Modelové situace</div>
+      ${ta("ma_spam", "Někdo v chatu spamuje a uráží ostatní. Co uděláš?", "")}
+      ${ta("ma_reward", "Divák tvrdí že nedostal odměnu z webu a je agresivní. Jak to vyřešíš?", "")}
+      ${ta("ma_ban", "Někdo se vrátí na novém účtu po banu. Co teď?", "")}
+      ${ta("ma_note", "Cokoliv chceš dodat (nepovinné)", "")}
+      <button class="btn btn-primary btn-block" type="submit" style="margin-top:10px">🛡️ Odeslat přihlášku</button>
+    </form>
+  </div>`;
+}
+async function doModApply() {
+  const g = (id) => ($("#" + id)?.value || "").trim();
+  const body = {
+    age: g("ma_age"), discord: g("ma_discord"), timezone: g("ma_tz"),
+    hours_week: g("ma_hours"), availability: g("ma_avail"), watch_time: g("ma_watch"),
+    experience: g("ma_exp"), motivation: g("ma_motivation"),
+    scenario_spam: g("ma_spam"), scenario_reward: g("ma_reward"), scenario_banevasion: g("ma_ban"),
+    note: g("ma_note"),
+  };
+  if (body.discord.length < 2) { toast("Zadej Discord.", "error"); return; }
+  if (body.motivation.length < 10) { toast("Napiš pár vět proč chceš moderovat.", "error"); return; }
+  try {
+    const r = await api("/mod-apply", { method: "POST", body });
+    toast(r.message, "success");
+    pageModApply();
+  } catch (e) { toast(e.message, "error"); }
+}
+async function adminModApps() {
+  const box = $("#adminContent");
+  try {
+    const d = await api("/admin/mod-applications");
+    const card = (a, pending) => {
+      const s = a.stats || {}, ans = a.answers || {};
+      const flags = `${s.banned ? `<span class="badge badge-admin">BAN</span> ` : ""}${s.is_sub ? `<span class="badge badge-sub">SUB</span> ` : ""}`;
+      const qa = [
+        ["Věk", ans.age], ["Discord", ans.discord], ["Pásmo", ans.timezone],
+        ["Hodin/týden", ans.hours_week], ["Online", ans.availability], ["Sleduje", ans.watch_time],
+        ["Zkušenosti", ans.experience], ["Motivace", ans.motivation],
+        ["💬 Spam situace", ans.scenario_spam], ["💬 Odměna situace", ans.scenario_reward],
+        ["💬 Ban evasion", ans.scenario_banevasion], ["Dodatek", ans.note],
+      ].filter(([, v]) => v && String(v).trim());
+      return `<div class="panel" style="margin-bottom:14px">
+        <div class="row-between" style="flex-wrap:wrap;gap:8px">
+          <div><b>${uLink(a.username)}</b> ${flags}<span class="faint" style="font-size:12px">· ${timeAgo(a.created_at)}</span></div>
+          ${pending ? "" : `<span class="badge ${a.status === "accepted" ? "badge-sub" : "badge-admin"}">${a.status === "accepted" ? "✅ přijat" : "✖ zamítnut"}${a.decided_by ? ` · ${esc(a.decided_by)}` : ""}</span>`}
+        </div>
+        <div class="ma-stats">🌾 ${fmtPts(s.points || 0)} · 📅 ${s.age_days != null ? s.age_days + " dní" : "?"} účet · 💬 ${s.chat_msgs || 0} zpráv · role <b>${esc(s.role || "user")}</b>${s.kick ? ` · kick:${esc(s.kick)}` : ""}</div>
+        <div class="ma-qa">${qa.map(([q, v]) => `<div><span class="ma-q">${q}:</span> ${esc(String(v))}</div>`).join("")}</div>
+        ${pending ? `<div class="toolbar" style="margin-top:12px">
+          <label class="ma-setmod"><input type="checkbox" id="setmod_${a.id}" checked> rovnou dát roli mod</label>
+          <button class="btn btn-primary btn-sm" data-action="modapp-accept" data-id="${a.id}" data-name="${esc(a.username)}">✅ Přijmout</button>
+          <button class="btn btn-danger btn-sm" data-action="modapp-reject" data-id="${a.id}" data-name="${esc(a.username)}">✖ Zamítnout</button>
+        </div>` : ""}
+      </div>`;
+    };
+    box.innerHTML = `
+      <div class="row-between" style="margin-bottom:12px;flex-wrap:wrap;gap:10px">
+        <div class="section-title" style="margin:0">🛡️ Nábor moderátorů ${d.pending_count ? `<span class="badge badge-admin">${d.pending_count}</span>` : ""}</div>
+        <div class="toolbar">
+          <span class="badge ${d.open ? "badge-sub" : ""}">${d.open ? "🟢 nábor otevřený" : "🔒 zavřený"}</span>
+          <button class="btn btn-ghost btn-sm" data-action="modapp-toggle">${d.open ? "Zavřít nábor" : "Otevřít nábor"}</button>
+        </div>
+      </div>
+      <div class="faint" style="font-size:12.5px;margin-bottom:16px">Odkaz pro diváky (hoď do Kick chatu): <code style="user-select:all;color:var(--accent)">${location.origin}/#/mod-nabor</code></div>
+      ${d.pending.length ? d.pending.map((a) => card(a, true)).join("") : `<div class="panel ok">✅ Žádné čekající přihlášky.</div>`}
+      ${d.recent.length ? `<div class="section-title" style="margin-top:24px">Vyřízené</div>${d.recent.map((a) => card(a, false)).join("")}` : ""}`;
+  } catch (e) { box.innerHTML = `<div class="empty">${esc(e.message)}</div>`; }
+}
+async function modAppDecide(id, accept, name) {
+  const setmod = accept ? (($("#setmod_" + id) || {}).checked !== false) : false;
+  const verb = accept ? "PŘIJMOUT" : "ZAMÍTNOUT";
+  if (!confirm(`${verb} přihlášku od ${name}?${accept && setmod ? "\n\nRovnou dostane roli MOD." : ""}`)) return;
+  try {
+    await api(`/admin/mod-applications/${id}/decide`, { method: "POST", body: { action: accept ? "accept" : "reject", set_mod: setmod } });
+    toast(accept ? `✅ ${name} přijat${setmod ? " + role mod" : ""}.` : `✖ Zamítnuto.`, accept ? "success" : "info");
+    loadAdminStats(); adminModApps();
+  } catch (e) { toast(e.message, "error"); }
+}
+async function modAppToggle() {
+  try {
+    const r = await api("/admin/mod-applications/toggle", { method: "POST" });
+    toast(r.open ? "Nábor otevřen 🟢" : "Nábor zavřen 🔒", "info");
+    adminModApps();
+  } catch (e) { toast(e.message, "error"); }
+}
+
 /* --- Admin: Dropy (závod o kód) --- */
 function happyHourCardHTML(h) {
   const on = !!h.livehappy_enabled;
@@ -4648,6 +4771,9 @@ function handleAction(action, el) {
     case "notif-go": closeNotifs(); if (el.dataset.link) location.hash = el.dataset.link; break;
     /* admin */
     case "admin-tab": renderAdminTab(el.dataset.tab); break;
+    case "modapp-accept": modAppDecide(el.dataset.id, true, el.dataset.name); break;
+    case "modapp-reject": modAppDecide(el.dataset.id, false, el.dataset.name); break;
+    case "modapp-toggle": modAppToggle(); break;
     case "product-new": productForm(null); break;
     case "product-edit": { const p = adminState.products.find((x) => x.id === id); productForm(p); break; }
     case "product-delete": deleteProduct(id); break;
@@ -4805,7 +4931,7 @@ document.addEventListener("submit", (e) => {
   const form = e.target.closest("[data-submit]");
   if (!form) return;
   e.preventDefault();
-  const map = { "kick-connect": doKickConnect, redeem: doRedeem, "claim-drop": doClaimDrop, "save-product": saveProduct, "user-search": () => { adminState.userQuery = $("#userSearch").value.trim(); adminUsers(); }, "gen-code": genCodes, "create-drop": createDrop, "bot-send": botSend, "bot-sim-chat": botSimChat, "game-create": createGame, "ip-ban": banIp, "pred-create": createPrediction, "gift": doGift, "news-create": createNote };
+  const map = { "kick-connect": doKickConnect, redeem: doRedeem, "claim-drop": doClaimDrop, "save-product": saveProduct, "user-search": () => { adminState.userQuery = $("#userSearch").value.trim(); adminUsers(); }, "gen-code": genCodes, "create-drop": createDrop, "bot-send": botSend, "bot-sim-chat": botSimChat, "game-create": createGame, "ip-ban": banIp, "pred-create": createPrediction, "gift": doGift, "news-create": createNote, "mod-apply": doModApply };
   const fn = map[form.dataset.submit]; if (fn) fn();
 });
 

@@ -774,6 +774,14 @@ footer.site-footer { border-top: 1px solid var(--border); padding: 22px 0; color
 .notif-body { color: var(--muted); font-size: 12.5px; margin-top: 2px; line-height: 1.45; }
 .notif-time { color: var(--faint); font-size: 11.5px; margin-top: 4px; }
 
+/* ---------- 🛡️ Nábor moderátorů (přihlášky) ---------- */
+.ma-stats { margin: 9px 0; font-size: 12.5px; color: var(--text-dim); background: rgba(255,255,255,.04); border: 1px solid var(--border); border-radius: 9px; padding: 7px 11px; }
+.ma-qa { display: flex; flex-direction: column; gap: 6px; font-size: 13px; line-height: 1.45; }
+.ma-qa > div { color: var(--text); }
+.ma-q { color: var(--text-dim); font-weight: 700; }
+.ma-setmod { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--text-dim); margin-right: auto; cursor: pointer; }
+.ma-setmod input { accent-color: var(--accent); }
+
 /* ---------- 🃏 Casino blackjack stůl (felt) ---------- */
 .bj-felt { position: relative; overflow: hidden; margin-bottom: 12px; padding: 18px 14px 26px;
   border: 3px solid var(--gold); border-radius: 18px 18px 90px 90px / 18px 18px 48px 48px;

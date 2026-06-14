@@ -204,6 +204,28 @@ class SubGoalIn(BaseModel):
     reward: Optional[int] = Field(default=None, ge=0, le=1_000_000)
 
 
+class ModApplyIn(BaseModel):
+    """Přihláška na moderátora (vyplní přihlášený divák)."""
+    age: str = Field(default="", max_length=10)
+    discord: str = Field(min_length=2, max_length=64)
+    timezone: str = Field(default="", max_length=64)
+    experience: str = Field(default="", max_length=1500)
+    hours_week: str = Field(default="", max_length=40)
+    availability: str = Field(default="", max_length=200)
+    motivation: str = Field(min_length=10, max_length=2000)
+    watch_time: str = Field(default="", max_length=100)
+    scenario_spam: str = Field(default="", max_length=2000)
+    scenario_reward: str = Field(default="", max_length=2000)
+    scenario_banevasion: str = Field(default="", max_length=2000)
+    note: str = Field(default="", max_length=1000)
+
+
+class ModAppDecideIn(BaseModel):
+    """Rozhodnutí admina o přihlášce na moda."""
+    action: str = Field(pattern="^(accept|reject)$")
+    set_mod: bool = False   # při accept rovnou nastavit roli 'mod'
+
+
 class CosmeticIn(BaseModel):
     """Koupě / nasazení kosmetiky – klíč položky z katalogu."""
     key: str = Field(min_length=1, max_length=40)

@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ZURYS — Happy Hour overlay</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { background: transparent; overflow: hidden; font-family: "Segoe UI", system-ui, Arial, sans-serif; }
+  #wrap { padding: 16px; }
+  #wrap.hidden { display: none; }
+  .card {
+    display: flex; align-items: center; gap: 16px; max-width: 460px;
+    background: linear-gradient(135deg, rgba(48,30,8,.92), rgba(28,18,6,.92));
+    border: 2px solid #ff9d2e; border-radius: 18px; padding: 14px 20px;
+    box-shadow: 0 0 0 2px rgba(255,157,46,.22), 0 10px 40px rgba(0,0,0,.5), 0 0 46px rgba(255,157,46,.4);
+    color: #fff; animation: glow 2.2s ease-in-out infinite;
+  }
+  @keyframes glow {
+    0%,100% { box-shadow: 0 0 0 2px rgba(255,157,46,.22), 0 10px 40px rgba(0,0,0,.5), 0 0 40px rgba(255,157,46,.35); }
+    50%     { box-shadow: 0 0 0 2px rgba(255,157,46,.38), 0 10px 40px rgba(0,0,0,.5), 0 0 62px rgba(255,157,46,.6); }
+  }
+  .flame { font-size: 40px; line-height: 1; animation: bob 1.4s ease-in-out infinite; }
+  @keyframes bob { 0%,100% { transform: translateY(0) rotate(-4deg); } 50% { transform: translateY(-3px) rotate(4deg); } }
+  .mid { display: flex; flex-direction: column; }
+  .ttl { font-size: 19px; font-weight: 900; letter-spacing: .5px; text-shadow: 0 2px 8px rgba(0,0,0,.6); }
+  .ttl b { color: #ffd23e; }
+  .sub { font-size: 13px; color: #ffcf9a; font-weight: 700; margin-top: 1px; }
+  .clock {
+    margin-left: auto; font-variant-numeric: tabular-nums; font-weight: 900; font-size: 34px;
+    color: #ffd23e; text-shadow: 0 2px 10px rgba(255,157,46,.6); letter-spacing: 1px; min-width: 96px; text-align: right;
+  }
+  .clock small { display: block; font-size: 10px; color: #ffcf9a; font-weight: 700; letter-spacing: 1.5px; text-align: right; }
+</style>
+</head>
+<body>
+<div id="wrap" class="hidden">
+  <div class="card">
+    <div class="flame">🔥</div>
+    <div class="mid">
+      <div class="ttl">HAPPY HOUR <b id="mult">×2</b></div>
+      <div class="sub" id="subtxt">víc sedláků za sledování, chat i subs!</div>
+    </div>
+    <div class="clock"><span id="time">00:00</span><small>zbývá</small></div>
+  </div>
+</div>
+<script>
+  // Čte stejný /api/happy-hour jako web → synced. Odpočet tiká lokálně po 1 s, re-sync po 5 s.
+  let left = 0, active = false;
+  function fmt(s) {
+    s = Math.max(0, s | 0);
+    const m = (s / 60) | 0, ss = s % 60;
+    return (m < 10 ? "0" : "") + m + ":" + (ss < 10 ? "0" : "") + ss;
+  }
+  function render() {
+    const wrap = document.getElementById("wrap");
+    if (!active || left <= 0) { wrap.classList.add("hidden"); return; }
+    wrap.classList.remove("hidden");
+    document.getElementById("time").textContent = fmt(left);
+  }
+  async function sync() {
+    try {
+      const r = await fetch("/api/happy-hour", { cache: "no-store" });
+      const g = await r.json();
+      active = !!g.active;
+      left = g.seconds_left || 0;
+      const mult = g.mult || 2;
+      const ms = "×" + (Number.isInteger(mult) ? mult : mult.toFixed(1));
+      document.getElementById("mult").textContent = ms;
+      document.getElementById("subtxt").textContent = ms + " sedláků za sledování, chat i subs!";
+    } catch (e) { /* tiše */ }
+    render();
+  }
+  sync();
+  setInterval(sync, 5000);                       // re-sync se serverem
+  setInterval(function () { if (active && left > 0) { left--; render(); } }, 1000);  // lokální tik
+</script>
+</body>
+</html>

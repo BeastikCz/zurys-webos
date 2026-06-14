@@ -567,6 +567,17 @@ CREATE TABLE IF NOT EXISTS notifications (
     created_at  TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_notif_user ON notifications(user_id, read, id);
+
+CREATE TABLE IF NOT EXISTS mod_applications (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    answers     TEXT NOT NULL,                   -- JSON {pole: odpověď}
+    status      TEXT NOT NULL DEFAULT 'pending', -- pending | accepted | rejected
+    created_at  TEXT NOT NULL,
+    decided_at  TEXT,
+    decided_by  TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_modapp_status ON mod_applications(status, id);
 """
 
 

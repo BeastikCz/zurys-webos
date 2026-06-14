@@ -1,4 +1,5 @@
 """Leaderboard, redeem kódů a profil (objednávky + historie bodů)."""
+import json
 import re
 import sqlite3
 from datetime import datetime, timedelta, timezone
@@ -8,10 +9,11 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from ..anticheat import (check_or_block, is_new_account, new_account_redeem_pts,
                           NEW_ACCOUNT_MAX_REDEEM_PTS, GIFT_MIN_AGE_HOURS)
 from ..config import ORDER_PENDING, UNLIMITED_STOCK, ROLE_ADMIN
-from ..db import now_iso
+from ..db import now_iso, get_setting
 from ..deps import (db_dep, require_user, add_points, try_debit, record_audit, client_ip,
                     user_rank, tier_for_rank, self_excluded_until)
-from ..models import RedeemIn, TradeUrlIn, GiftIn, QuestClaimIn, CosmeticIn, FairSeedIn, SelfExcludeIn, ProfileBioIn, WagerLimitIn
+from ..models import (RedeemIn, TradeUrlIn, GiftIn, QuestClaimIn, CosmeticIn, FairSeedIn, SelfExcludeIn,
+                      ProfileBioIn, WagerLimitIn, ModApplyIn)
 from ..services import product_public, role_allows
 from ..ratelimit import rate_limit
 from ..security import secure_weighted_choice
@@ -231,6 +233,59 @@ def sub_goal_status(conn: sqlite3.Connection = Depends(db_dep)):
     """Stav komunitního SUB cíle (veřejné – pro lištu na webu)."""
     from ..subgoal import status
     return status(conn)
+
+
+@router.get("/happy-hour")
+def happy_hour_status(conn: sqlite3.Connection = Depends(db_dep)):
+    """Stav Happy Hour (veřejné – pro overlay/lištu): běží? násobič, konec, kolik vteřin zbývá."""
+    from .. import live_events
+    cfg = live_events.get_config(conn)
+    until = cfg.get("active_until") or ""
+    active, seconds_left = False, 0
+    if cfg.get("livehappy_enabled") and until:
+        try:
+            t = datetime.fromisoformat(until)
+            if t.tzinfo is None:
+                t = t.replace(tzinfo=timezone.utc)
+            delta = (t - datetime.now(timezone.utc)).total_seconds()
+            if delta > 0:
+                active, seconds_left = True, int(delta)
+        except Exception:
+            pass
+    return {"active": active, "mult": cfg.get("livehappy_mult", 1),
+            "active_until": until, "seconds_left": seconds_left}
+
+
+# ---------------- Nábor moderátorů (přihláška) ----------------
+@router.get("/mod-apply/status")
+def mod_apply_status(user: sqlite3.Row = Depends(require_user),
+                     conn: sqlite3.Connection = Depends(db_dep)):
+    """Je nábor otevřený + má už uživatel přihlášku? (pro stránku formuláře)."""
+    is_open = get_setting(conn, "modapp_open", "1") == "1"
+    row = conn.execute(
+        "SELECT status FROM mod_applications WHERE user_id = ? ORDER BY id DESC LIMIT 1",
+        (user["id"],)).fetchone()
+    return {"open": is_open, "applied": bool(row), "status": row["status"] if row else None,
+            "is_staff": user["role"] in ("mod", "admin", "broadcaster")}
+
+
+@router.post("/mod-apply")
+def mod_apply_submit(data: ModApplyIn, user: sqlite3.Row = Depends(require_user),
+                     conn: sqlite3.Connection = Depends(db_dep)):
+    """Odešle přihlášku na moderátora. Jedna čekající na uživatele."""
+    if get_setting(conn, "modapp_open", "1") != "1":
+        raise HTTPException(status_code=403, detail="Nábor moderátorů je právě zavřený. 🔒")
+    if user["role"] in ("mod", "admin", "broadcaster"):
+        raise HTTPException(status_code=400, detail="Už jsi člen týmu. 🙂")
+    if conn.execute("SELECT id FROM mod_applications WHERE user_id = ? AND status = 'pending' LIMIT 1",
+                    (user["id"],)).fetchone():
+        raise HTTPException(status_code=400, detail="Přihlášku už máš odeslanou – čeká na vyřízení. ⏳")
+    rate_limit(f"modapply:{user['id']}", 3, 3600)   # anti-spam
+    conn.execute(
+        "INSERT INTO mod_applications (user_id, answers, status, created_at) VALUES (?, ?, 'pending', ?)",
+        (user["id"], json.dumps(data.model_dump(), ensure_ascii=False), now_iso()))
+    conn.commit()
+    return {"ok": True, "message": "🛡️ Přihláška odeslána! Ozveme se ti přes zvoneček. Díky! 🌾"}
 
 
 @router.get("/top-chatters")

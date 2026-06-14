@@ -2,6 +2,7 @@
 import csv
 import base64
 import io
+import json
 import ipaddress
 import secrets
 import sqlite3
@@ -21,7 +22,7 @@ from .. import kickbot, economy, ipban, ddos, iprep, live, steam, cs_skins, auto
 from .games import list_games_admin, cancel_game_admin, games_history, refund_game_admin, refund_duel_admin
 from ..models import (ProductIn, SkinLookupIn, SkinSearchIn, ImageUploadIn, UserRoleIn, UserFlagsIn, UserPointsIn, UserAdminMetaIn, OrderStatusIn, CodeGenIn,
                       BanIn, DropCreateIn, AutoDropIn, RuleIn, EconomyIn, IpBanIn, IpUnbanIn, BotToggleIn,
-                      LiveModeIn, LegacyImportIn, PatchNoteIn, CommunityGoalIn, SubGoalIn, ManualOrderIn, ManualOrderBulkIn,
+                      LiveModeIn, LegacyImportIn, PatchNoteIn, CommunityGoalIn, SubGoalIn, ModAppDecideIn, ManualOrderIn, ManualOrderBulkIn,
                       PointsLogPurgeIn, PartnerLinkIn, PartnerFlashConfigIn, GamesRakeIn, LiveHappyIn,
                       SelfExcludeIn, ShopDiscountIn, BanClusterIn)
 from ..services import product_public, shop_discount_pct
@@ -1387,6 +1388,83 @@ def set_sub_goal(data: SubGoalIn, request: Request,
     conn.commit()
     from ..subgoal import status
     return status(conn)
+
+
+# ---------------- Nábor moderátorů (přihlášky) ----------------
+def _modapp_stats(conn, uid: int) -> dict:
+    """Reálné staty uchazeče z účtu – aby admin poznal aktivního diváka od náhody."""
+    u = conn.execute(
+        "SELECT points, created_at, is_sub, banned, role, kick_username FROM users WHERE id = ?",
+        (uid,)).fetchone()
+    if not u:
+        return {}
+    chat = conn.execute("SELECT COUNT(*) c FROM points_log WHERE user_id = ? AND reason = 'Aktivita v chatu'",
+                        (uid,)).fetchone()["c"]
+    age_days = None
+    try:
+        t = datetime.fromisoformat(u["created_at"])
+        if t.tzinfo is None:
+            t = t.replace(tzinfo=timezone.utc)
+        age_days = int((datetime.now(timezone.utc) - t).total_seconds() // 86400)
+    except Exception:
+        pass
+    return {"points": u["points"], "age_days": age_days, "is_sub": bool(u["is_sub"]),
+            "banned": bool(u["banned"]), "role": u["role"], "kick": u["kick_username"], "chat_msgs": chat}
+
+
+@router.get("/mod-applications")
+def mod_applications_list(conn: sqlite3.Connection = Depends(db_dep)):
+    """Přihlášky na moderátory: čekající + posledních 20 vyřízených + staty uchazečů."""
+    def _row(r):
+        return {"id": r["id"], "user_id": r["user_id"], "username": r["username"],
+                "answers": json.loads(r["answers"] or "{}"), "status": r["status"],
+                "created_at": r["created_at"], "decided_at": r["decided_at"], "decided_by": r["decided_by"],
+                "stats": _modapp_stats(conn, r["user_id"])}
+    base = ("SELECT a.*, u.username FROM mod_applications a JOIN users u ON u.id = a.user_id ")
+    pending = conn.execute(base + "WHERE a.status = 'pending' ORDER BY a.id ASC").fetchall()
+    recent = conn.execute(base + "WHERE a.status != 'pending' ORDER BY a.id DESC LIMIT 20").fetchall()
+    return {"pending": [_row(r) for r in pending], "recent": [_row(r) for r in recent],
+            "pending_count": len(pending), "open": get_setting(conn, "modapp_open", "1") == "1"}
+
+
+@router.post("/mod-applications/{aid}/decide")
+def mod_application_decide(aid: int, data: ModAppDecideIn, request: Request,
+                          conn: sqlite3.Connection = Depends(db_dep),
+                          admin: sqlite3.Row = Depends(require_admin)):
+    """Přijme / zamítne přihlášku. Při accept volitelně rovnou nastaví roli 'mod'. Notifikuje uchazeče."""
+    a = conn.execute("SELECT * FROM mod_applications WHERE id = ?", (aid,)).fetchone()
+    if not a:
+        raise HTTPException(status_code=404, detail="Přihláška neexistuje.")
+    if a["status"] != "pending":
+        raise HTTPException(status_code=400, detail=f"Přihláška už je vyřízená ({a['status']}).")
+    accepted = data.action == "accept"
+    if accepted and data.set_mod:
+        # roli 'mod' jen když je teď user/sub (nikdy nedemotovat admina/broadcastera)
+        conn.execute("UPDATE users SET role = 'mod' WHERE id = ? AND role IN ('user', 'sub')", (a["user_id"],))
+    conn.execute("UPDATE mod_applications SET status = ?, decided_at = ?, decided_by = ? WHERE id = ?",
+                 ("accepted" if accepted else "rejected", now_iso(), admin["username"], aid))
+    record_audit(conn, admin, request, "modapp.accept" if accepted else "modapp.reject",
+                 target=str(a["user_id"]), details="set_mod" if (accepted and data.set_mod) else "")
+    if accepted:
+        notify(conn, a["user_id"], "🛡️", "Přijat do týmu modů!",
+               "Tvoje přihláška na moderátora byla schválena. Vítej v týmu! 🎉", "#/profile")
+    else:
+        notify(conn, a["user_id"], "📋", "Přihláška na moda",
+               "Tvoje přihláška na moderátora tentokrát nebyla vybrána. Díky za zájem! 🌾")
+    conn.commit()
+    return {"ok": True, "status": "accepted" if accepted else "rejected", "set_mod": accepted and data.set_mod}
+
+
+@router.post("/mod-applications/toggle")
+def mod_applications_toggle(request: Request,
+                           conn: sqlite3.Connection = Depends(db_dep),
+                           admin: sqlite3.Row = Depends(require_admin)):
+    """Otevře / zavře nábor moderátorů."""
+    now_open = get_setting(conn, "modapp_open", "1") == "1"
+    set_setting(conn, "modapp_open", "0" if now_open else "1")
+    record_audit(conn, admin, request, "modapp.toggle", "", "closed" if now_open else "open")
+    conn.commit()
+    return {"open": not now_open}
 
 
 @router.post("/chat-reset")
