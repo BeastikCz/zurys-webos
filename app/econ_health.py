@@ -28,11 +28,13 @@ _RULES = [
     ("partners",    "🤝", "Partneři",            "faucet",   ["partner:", "flash partner"]),
     ("import",      "📦", "Import / start",      "faucet",   ["import ze staré", "počáteční body od admina"]),
     ("shop",        "🛒", "Nákupy v shopu",      "sink",     ["nákup odměn", "nákup"]),
+    ("prestige",    "🔥", "Prestige (spáleno)",  "sink",     ["prestige"]),
     ("predictions", "🎯", "Predikce",            "transfer", ["predikce"]),
     ("blackjack",   "🃏", "Blackjack",           "transfer", ["blackjack"]),
+    ("mines",       "💣", "Mines",               "transfer", ["mines"]),
     ("games",       "🎲", "Hry (PvP)",           "transfer", ["piškvor", "duel", "remíz", "coinflip",
                                                               "kostky", "kámen-nůžky", "hra #", "vklad"]),
-    ("gifts",       "🎀", "Dary mezi diváky",    "transfer", ["dar pro", "dar od"]),
+    ("gifts",       "🎀", "Dary mezi diváky",    "transfer", ["dar pro", "dar od", "dar →", "vrácení daru"]),
 ]
 _OTHER = ("other", "❓", "Ostatní / ruční", "other")
 

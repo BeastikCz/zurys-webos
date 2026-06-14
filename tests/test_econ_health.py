@@ -71,14 +71,19 @@ def test_categorize_known_reasons():
     # sink
     assert categorize("Nákup odměn (2 ks)")[0] == "shop"
     assert categorize("Nákup odměn (2 ks)")[3] == "sink"
+    assert categorize("Prestige 3 – spáleno 🔥")[0] == "prestige"
+    assert categorize("Prestige 3 – spáleno 🔥")[3] == "sink"
     # transfer (net ~0)
     assert categorize("Predikce #5 – sázka")[0] == "predictions"
     assert categorize("Predikce #5 – výhra")[0] == "predictions"
     assert categorize("Coinflip duel – vklad")[0] == "games"
     assert categorize("Výhra v piškvorkách #3")[0] == "games"
     assert categorize("Blackjack stůl – sázka 🃏")[0] == "blackjack"
+    assert categorize("Mines sázka (3 bomb)")[0] == "mines"
+    assert categorize("Mines cashout (×2.5)")[0] == "mines"
     assert categorize("Dar pro Honza 🎁")[0] == "gifts"
     assert categorize("Dar od Honza 🎁")[3] == "transfer"
+    assert categorize("Dar → Honza (čeká na schválení) 🎁")[0] == "gifts"
     # neznámý / freeform ruční admin důvod → other
     assert categorize("náhodný ruční důvod od admina")[0] == "other"
 
