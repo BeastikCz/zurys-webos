@@ -1467,6 +1467,39 @@ def mod_applications_toggle(request: Request,
     return {"open": not now_open}
 
 
+# ---------------- Mines historie (admin přehled) ----------------
+@router.get("/mines-history")
+def admin_mines_history(q: str = Query("", max_length=64), limit: int = Query(50, ge=1, le=200),
+                        conn: sqlite3.Connection = Depends(db_dep)):
+    """Historie Mines: house staty + feed (kdo hrál / vyhrál / prohrál) + top hráči dle net."""
+    st = conn.execute(
+        "SELECT COUNT(*) g, COALESCE(SUM(bet),0) w, COALESCE(SUM(payout),0) p, COUNT(DISTINCT user_id) players "
+        "FROM mines_games WHERE status IN ('busted','cashed')").fetchone()
+    stats = {"games": st["g"], "wagered": st["w"], "paid": st["p"],
+             "house_net": st["w"] - st["p"], "players": st["players"]}
+    where, params = "m.status IN ('busted','cashed')", []
+    if q.strip():
+        where += " AND u.username LIKE ?"
+        params.append(f"%{q.strip()}%")
+    rows = conn.execute(
+        f"SELECT m.id, u.username, m.bet, m.mines, m.payout, m.status, m.revealed, m.created_at "
+        f"FROM mines_games m JOIN users u ON u.id = m.user_id WHERE {where} ORDER BY m.id DESC LIMIT ?",
+        params + [limit]).fetchall()
+    feed = [{"id": r["id"], "username": r["username"], "bet": r["bet"], "mines": r["mines"],
+             "payout": r["payout"], "net": r["payout"] - r["bet"], "status": r["status"],
+             "safe": len(json.loads(r["revealed"] or "[]")), "created_at": r["created_at"]} for r in rows]
+    agg = conn.execute(
+        "SELECT u.username, COUNT(*) g, COALESCE(SUM(m.payout),0) - COALESCE(SUM(m.bet),0) net, "
+        "SUM(CASE WHEN m.status='busted' THEN 1 ELSE 0 END) busts "
+        "FROM mines_games m JOIN users u ON u.id = m.user_id WHERE m.status IN ('busted','cashed') "
+        "GROUP BY m.user_id").fetchall()
+    players = [{"username": r["username"], "games": r["g"], "net": r["net"],
+                "bust_rate": round(r["busts"] * 100 / r["g"]) if r["g"] else 0} for r in agg]
+    winners = sorted((p for p in players if p["net"] > 0), key=lambda x: -x["net"])[:8]
+    losers = sorted((p for p in players if p["net"] < 0), key=lambda x: x["net"])[:8]
+    return {"stats": stats, "feed": feed, "winners": winners, "losers": losers}
+
+
 @router.post("/chat-reset")
 def chat_reset(request: Request,
                conn: sqlite3.Connection = Depends(db_dep),

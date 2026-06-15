@@ -3596,7 +3596,9 @@ async function adminGames() {
       ${right}
     </div>`;
   }).join("") : `<div class="empty">Zatím žádná historie.</div>`;
-  box.innerHTML = `<div class="row-between" style="margin-bottom:6px">
+  box.innerHTML = `<div class="section-title" style="margin:0 0 8px">💣 Mines — historie & house</div>
+    <div id="minesHistBox">${skeletonCards(1)}</div>
+    <div class="row-between" style="margin:26px 0 6px">
       <div class="section-title" style="margin:0">🎮 Probíhající hry (${active.length})</div>
       <button class="btn btn-ghost btn-sm" data-action="games-refresh">🔄 Obnovit</button>
     </div>
@@ -3605,6 +3607,47 @@ async function adminGames() {
     <div class="section-title" style="margin:24px 0 6px">📜 Historie her (gomoku + duely)</div>
     <p class="muted" style="font-size:13px;margin-bottom:14px">Kdo s kým hrál a kdo vyhrál. <b>↩️ Refund</b> u dohrané hry vrátí oběma vklad a stornuje výhru — třeba když to rozbil deploy/bug. (Vítěz může jít do mínusu, když už výhru utratil.)</p>
     <div class="lb-list">${histRows}</div>`;
+  loadMinesHistory();
+}
+let _minesHistQ = "";
+async function loadMinesHistory(q) {
+  if (q !== undefined) _minesHistQ = q;
+  const box = document.getElementById("minesHistBox"); if (!box) return;
+  try {
+    const d = await api("/admin/mines-history?limit=60&q=" + encodeURIComponent(_minesHistQ));
+    const s = d.stats, col = (n) => n > 0 ? "#46d369" : n < 0 ? "#ff7a7a" : "var(--text-dim)";
+    const sign = (n) => (n > 0 ? "+" : n < 0 ? "−" : "") + fmtPts(Math.abs(n));
+    const plr = (p) => `<div class="lb-row" style="padding:6px 0"><span class="hof-name">${uLink(p.username)}</span><span class="faint" style="font-size:12px">${p.games}× · bust ${p.bust_rate}%</span><span class="hof-metric" style="color:${col(p.net)}">${sign(p.net)}</span></div>`;
+    box.innerHTML = `
+      <div class="stat-grid" style="margin-bottom:14px">
+        ${statBox(s.games, "Her celkem")}
+        ${statBox(s.players, "Hráčů")}
+        ${statBox(fmtPts(s.wagered), "Vsazeno")}
+        ${statBox(("+" + fmtPts(s.house_net)), "House zisk", s.house_net >= 0 ? "accent" : "warn")}
+      </div>
+      <div class="hof-grid" style="margin-bottom:16px">
+        <div class="panel hof-card"><div class="hof-head">🤑 Nejvíc vydělali</div><div class="hof-list">${d.winners.length ? d.winners.map(plr).join("") : `<div class="faint" style="font-size:13px">Nikdo v plusu.</div>`}</div></div>
+        <div class="panel hof-card"><div class="hof-head">😭 Nejvíc prohráli</div><div class="hof-list">${d.losers.length ? d.losers.map(plr).join("") : `<div class="faint" style="font-size:13px">Nikdo v mínusu.</div>`}</div></div>
+      </div>
+      <div class="toolbar" style="margin-bottom:8px">
+        <input id="minesHistQ" class="input input-sm" placeholder="Filtr: nick" value="${esc(_minesHistQ)}" style="max-width:180px">
+        <button class="btn btn-sm" data-action="mines-hist-filter">Filtrovat</button>
+        ${_minesHistQ ? `<button class="btn btn-ghost btn-sm" data-action="mines-hist-reset">Reset</button>` : ""}
+        <span class="faint" style="margin-left:auto;font-size:12px">${d.feed.length} posledních her</span>
+      </div>
+      <div class="table-wrap"><table class="tbl"><thead><tr><th>#</th><th>Hráč</th><th>Sázka</th><th>💣</th><th>Odkryto</th><th>Výsledek</th><th>Net</th><th>Kdy</th></tr></thead><tbody>
+        ${d.feed.length ? d.feed.map((g) => `<tr>
+          <td class="faint">${g.id}</td>
+          <td>${uLink(g.username)}</td>
+          <td>${fmtPts(g.bet)}</td>
+          <td>${g.mines}</td>
+          <td class="faint">${g.safe}</td>
+          <td>${g.status === "cashed" ? `<span class="tag-done">💰 cashout</span>` : `<span style="color:#ff7a7a">💥 bust</span>`}</td>
+          <td><b style="color:${col(g.net)}">${sign(g.net)}</b></td>
+          <td class="faint">${timeAgo(g.created_at)}</td>
+        </tr>`).join("") : `<tr><td colspan="8"><div class="empty">Žádné hry.</div></td></tr>`}
+      </tbody></table></div>`;
+  } catch (e) { box.innerHTML = `<div class="empty">${esc(e.message)}</div>`; }
 }
 async function cancelGameAdmin(id) {
   if (!confirm("Ukončit tuhle hru? Oběma hráčům se vrátí vklad.")) return;
@@ -4916,6 +4959,8 @@ function handleAction(action, el) {
     case "game-refund": refundGame(el.dataset.kind, parseInt(el.dataset.id, 10)); break;
     case "topchat-pay": payTopchatter(); break;
     case "games-refresh": adminGames(); break;
+    case "mines-hist-filter": loadMinesHistory(($("#minesHistQ").value || "").trim()); break;
+    case "mines-hist-reset": loadMinesHistory(""); break;
     case "subs-refresh": adminSubs(); break;
     case "raffle-draw": drawRaffle(id); break;
     case "raffle-undo": undoRaffleDraw(id); break;
