@@ -260,6 +260,65 @@ def happy_hour_status(conn: sqlite3.Connection = Depends(db_dep)):
             "sub_2x": sub_points_mult(conn) >= 2}                   # 2× body za subs?
 
 
+# ---------------- Osobní herní staty ----------------
+@router.get("/me/game-stats")
+def my_game_stats(user: sqlite3.Row = Depends(require_user),
+                  conn: sqlite3.Connection = Depends(db_dep)):
+    """Souhrn hráče napříč hrami: vsazeno / vyhráno / net / win rate / nej výhra / počet her."""
+    uid = user["id"]
+
+    # Mines
+    m = conn.execute(
+        "SELECT COUNT(*) g, COALESCE(SUM(bet),0) w, COALESCE(SUM(payout),0) p, COALESCE(MAX(payout),0) mx, "
+        "SUM(CASE WHEN status='cashed' THEN 1 ELSE 0 END) cashed "
+        "FROM mines_games WHERE user_id=? AND status IN ('busted','cashed')", (uid,)).fetchone()
+    mines = {"games": m["g"], "wagered": m["w"], "won": m["p"], "net": m["p"] - m["w"],
+             "biggest": m["mx"], "win_rate": round(m["cashed"] * 100 / m["g"]) if m["g"] else 0}
+
+    # PvP – coinflip/dice/rps duely + piškvorky (stake = vklad každého; vítěz net +stake, poražený -stake)
+    pvp = {"games": 0, "won": 0, "lost": 0, "wagered": 0, "net": 0, "biggest": 0}
+    for tbl in ("duels", "games"):
+        for r in conn.execute(
+                f"SELECT p1_id, p2_id, stake, winner FROM {tbl} "
+                f"WHERE (p1_id=? OR p2_id=?) AND status='finished' AND winner IN (0,1,2)", (uid, uid)):
+            side = 1 if r["p1_id"] == uid else 2
+            pvp["games"] += 1
+            pvp["wagered"] += r["stake"]
+            if r["winner"] == side:
+                pvp["won"] += 1; pvp["net"] += r["stake"]; pvp["biggest"] = max(pvp["biggest"], r["stake"])
+            elif r["winner"] in (1, 2):
+                pvp["lost"] += 1; pvp["net"] -= r["stake"]
+            # winner == 0 → remíza, net 0
+    pvp["win_rate"] = round(pvp["won"] * 100 / (pvp["won"] + pvp["lost"])) if (pvp["won"] + pvp["lost"]) else 0
+
+    # Blackjack – solo + živý stůl
+    bj = conn.execute(
+        "SELECT COUNT(*) g, COALESCE(SUM(bet),0) w, COALESCE(SUM(payout),0) p, COALESCE(MAX(payout),0) mx "
+        "FROM blackjack_games WHERE user_id=? AND status='done'", (uid,)).fetchone()
+    bjs = conn.execute(
+        "SELECT COUNT(*) g, COALESCE(SUM(bet),0) w, COALESCE(SUM(payout),0) p "
+        "FROM bj_seats WHERE user_id=? AND state='resolved'", (uid,)).fetchone()
+    bg, bw, bp = bj["g"] + bjs["g"], bj["w"] + bjs["w"], bj["p"] + bjs["p"]
+    blackjack = {"games": bg, "wagered": bw, "won": bp, "net": bp - bw, "biggest": bj["mx"]}
+
+    # Predikce – jen z vyhodnocených (payout dosazen)
+    pr = conn.execute(
+        "SELECT COUNT(*) g, COALESCE(SUM(pb.amount),0) w, COALESCE(SUM(pb.payout),0) p, COALESCE(MAX(pb.payout),0) mx "
+        "FROM prediction_bets pb JOIN predictions p ON p.id=pb.prediction_id "
+        "WHERE pb.user_id=? AND p.status='resolved'", (uid,)).fetchone()
+    predictions = {"games": pr["g"], "wagered": pr["w"], "won": pr["p"], "net": pr["p"] - pr["w"], "biggest": pr["mx"]}
+
+    cats = [mines, pvp, blackjack, predictions]
+    overall = {
+        "games": sum(c["games"] for c in cats),
+        "wagered": sum(c["wagered"] for c in cats),
+        "won": sum(c["won"] for c in cats),
+        "net": sum(c["net"] for c in cats),
+        "biggest": max(c["biggest"] for c in cats),
+    }
+    return {"overall": overall, "mines": mines, "pvp": pvp, "blackjack": blackjack, "predictions": predictions}
+
+
 # ---------------- Nábor moderátorů (přihláška) ----------------
 @router.get("/mod-apply/status")
 def mod_apply_status(user: sqlite3.Row = Depends(require_user),

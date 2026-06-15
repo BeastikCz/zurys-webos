@@ -232,7 +232,7 @@ function render() {
     predikce: pagePredikce, games: pageGames, novinky: pageNews, bonusy: pageBonusy,
     kosmetika: pageCosmetics, bj: pageBjRoom, zpravy: pageMessages, fair: pageFair, mines: pageMines,
     connect: pageConnect, login: pageConnect, register: pageConnect, u: pageUserProfile,
-    "mod-nabor": pageModApply,
+    "mod-nabor": pageModApply, staty: pageGameStats,
   };
   (pages[r.name] || pageShop)(r.param);
   window.scrollTo({ top: 0, behavior: "instant" in window ? "instant" : "auto" });
@@ -4504,6 +4504,51 @@ async function modAppToggle() {
   } catch (e) { toast(e.message, "error"); }
 }
 
+/* --- Osobní herní staty --- */
+async function pageGameStats() {
+  const view = $("#view");
+  view.innerHTML = `<div class="page-head"><h1>📊 Moje herní staty</h1><p class="muted">Tvoje čísla napříč hrami — vsazeno, vyhráno, win rate, největší výhra.</p></div><div id="gsBox"></div>`;
+  const box = $("#gsBox");
+  if (!state.user) { box.innerHTML = `<div class="panel"><div class="empty"><div class="big">🔒</div>Pro staty se <a href="#" data-action="connect" style="color:var(--accent)">připoj přes Kick</a>.</div></div>`; return; }
+  box.innerHTML = skeletonCards(2);
+  const col = (n) => n > 0 ? "#46d369" : n < 0 ? "#ff7a7a" : "var(--text-dim)";
+  const sign = (n) => (n > 0 ? "+" : n < 0 ? "−" : "") + fmtPts(Math.abs(n));
+  const stat = (label, val, c) => `<div class="gs-stat"><div class="gs-v" style="color:${c || "var(--text)"}">${val}</div><div class="gs-l">${label}</div></div>`;
+  const card = (icon, name, g, opts = {}) => {
+    if (!g.games) return `<div class="panel gs-card"><div class="gs-head">${icon} ${name}</div><div class="faint" style="font-size:13px;margin-top:6px">Zatím žádné hry.</div></div>`;
+    return `<div class="panel gs-card">
+      <div class="gs-head">${icon} ${name} <span class="faint" style="font-size:12.5px;font-weight:400">· ${g.games}× her</span></div>
+      <div class="gs-grid">
+        ${stat("Net", sign(g.net), col(g.net))}
+        ${stat("Vsazeno", fmtPts(g.wagered))}
+        ${stat("Vyhráno", fmtPts(g.won))}
+        ${opts.winRate ? stat("Win rate", g.win_rate + " %") : ""}
+        ${opts.wl ? stat("Výhry / prohry", g.won + " / " + g.lost) : ""}
+        ${stat("Nej výhra", fmtPts(g.biggest))}
+      </div></div>`;
+  };
+  try {
+    const s = await api("/me/game-stats");
+    const o = s.overall;
+    box.innerHTML = `
+      <div class="panel gs-overall">
+        <div class="gs-head" style="font-size:18px">🏆 Celkem${o.games ? ` <span class="faint" style="font-size:13px;font-weight:400">· ${o.games}× her</span>` : ""}</div>
+        ${o.games ? `<div class="gs-bignet" style="color:${col(o.net)}">${sign(o.net)} 🌾</div>
+        <div class="gs-grid">
+          ${stat("Vsazeno celkem", fmtPts(o.wagered))}
+          ${stat("Vyhráno celkem", fmtPts(o.won))}
+          ${stat("Největší výhra", fmtPts(o.biggest))}
+        </div>` : `<div class="empty" style="padding:18px 0"><div class="big">🎲</div>Zatím jsi nehrál. Skoč na <a href="#/games" style="color:var(--accent)">Hry</a>!</div>`}
+      </div>
+      <div class="gs-cards">
+        ${card("💣", "Mines", s.mines, { winRate: true })}
+        ${card("🎲", "PvP — coinflip / piškvorky", s.pvp, { winRate: true, wl: true })}
+        ${card("🃏", "Blackjack", s.blackjack)}
+        ${card("🎯", "Predikce", s.predictions)}
+      </div>`;
+  } catch (e) { box.innerHTML = `<div class="empty">${esc(e.message)}</div>`; }
+}
+
 /* --- Admin: Dropy (závod o kód) --- */
 function happyHourCardHTML(h) {
   const on = !!h.livehappy_enabled;
@@ -5160,7 +5205,7 @@ async function pageGames() {
   if (param === "duely") { navigate("games"); return; }   // duely jsou teď inline na Herně
   if (param) { gameView(parseInt(param, 10)); return; }   // číslo = konkrétní piškvorková hra
   $("#view").innerHTML = `
-    <div class="page-head"><h1>🎮 Herna</h1></div>
+    <div class="page-head" style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap"><h1>🎮 Herna</h1><a class="btn btn-ghost btn-sm" href="#/staty">📊 Moje herní staty</a></div>
     ${gambleBlockBanner()}
     <div class="panel" style="margin-bottom:18px;display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap">
       <div><b style="font-size:17px">💣 Mines</b> <span class="faint">— odkrývej pole, vyhni se bombám, cashni kdykoliv. Provably-fair, single-player.</span></div>
