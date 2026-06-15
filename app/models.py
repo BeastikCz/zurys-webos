@@ -266,6 +266,12 @@ class MinesRevealIn(BaseModel):
     tile: int = Field(ge=0, le=24)
 
 
+class MinesBanIn(BaseModel):
+    """Admin: zabaň/odbaň uživatele JEN ve hře Mines (zbytek webu mu zůstává)."""
+    username: str = Field(min_length=1, max_length=64)
+    banned: bool = True
+
+
 class ProfileBioIn(BaseModel):
     """Bio na profilu + vypíchnutá oblíbená hra (showcase)."""
     bio: str = Field(default="", max_length=160)

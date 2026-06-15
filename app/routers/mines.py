@@ -10,7 +10,7 @@ import sqlite3
 from fastapi import APIRouter, Depends, HTTPException
 
 from ..deps import db_dep, require_user, require_can_gamble, add_points, try_debit, check_wager_limit
-from ..db import now_iso
+from ..db import now_iso, get_setting
 from ..models import MinesStartIn, MinesRevealIn
 from ..ratelimit import rate_limit
 from .. import fairness
@@ -22,6 +22,18 @@ MIN_MINES = 4        # minimálně 4 bomby (nerf: bylo 3)
 MAX_BET = 1000       # menší výkyvy (bylo 5000)
 MAX_PAYOUT = 10000   # nerf: strop výhry na hru (bylo 15000 / původně 100000)
 HOUSE_EDGE = 0.12    # nerf: 12 % house edge – house vyhrává ještě víc (bylo 8 % / původně 1 %)
+
+
+def _mines_banned(conn, uid: int) -> bool:
+    """True když má uživatel od adminů zákaz hraní Mines (seznam uid v app_settings).
+    Cílený ban jen na Mines – zbytek webu (ostatní hry, shop, …) mu zůstává otevřený."""
+    raw = get_setting(conn, "mines_ban_uids", "")
+    if not raw:
+        return False
+    try:
+        return uid in set(json.loads(raw))
+    except (ValueError, TypeError):
+        return False
 
 
 def _mult(revealed_count: int, mines: int) -> float:
@@ -96,6 +108,8 @@ def start(data: MinesStartIn, user: sqlite3.Row = Depends(require_user),
           conn: sqlite3.Connection = Depends(db_dep)):
     rate_limit(f"mines:start:{user['id']}", 120, 60)   # strop jen proti botům (~2 hry/s); pro hráče neviditelné
     require_can_gamble(user)                 # sebevyloučení ze sázek
+    if _mines_banned(conn, user["id"]):      # cílený admin ban jen na Mines
+        raise HTTPException(status_code=403, detail="Máš od adminů zákaz hraní Mines. Zbytek webu ti funguje normálně.")
     if _active(conn, user["id"]):
         raise HTTPException(status_code=400, detail="Máš rozehranou hru – dohraj ji nebo cashni.")
     bet, mines = data.bet, data.mines

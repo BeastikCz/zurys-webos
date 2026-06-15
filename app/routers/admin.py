@@ -24,7 +24,7 @@ from ..models import (ProductIn, SkinLookupIn, SkinSearchIn, ImageUploadIn, User
                       BanIn, DropCreateIn, AutoDropIn, RuleIn, EconomyIn, IpBanIn, IpUnbanIn, BotToggleIn,
                       LiveModeIn, LegacyImportIn, PatchNoteIn, CommunityGoalIn, SubGoalIn, ModAppDecideIn, ManualOrderIn, ManualOrderBulkIn,
                       PointsLogPurgeIn, PartnerLinkIn, PartnerFlashConfigIn, GamesRakeIn, LiveHappyIn,
-                      SelfExcludeIn, ShopDiscountIn, BanClusterIn)
+                      SelfExcludeIn, ShopDiscountIn, BanClusterIn, MinesBanIn)
 from ..services import product_public, shop_discount_pct
 from ..security import new_code, secure_choice
 
@@ -1498,6 +1498,47 @@ def admin_mines_history(q: str = Query("", max_length=64), limit: int = Query(50
     winners = sorted((p for p in players if p["net"] > 0), key=lambda x: -x["net"])[:8]
     losers = sorted((p for p in players if p["net"] < 0), key=lambda x: x["net"])[:8]
     return {"stats": stats, "feed": feed, "winners": winners, "losers": losers}
+
+
+def _mines_ban_ids(conn) -> set:
+    raw = get_setting(conn, "mines_ban_uids", "")
+    try:
+        return set(json.loads(raw)) if raw else set()
+    except (ValueError, TypeError):
+        return set()
+
+
+@router.get("/mines-bans")
+def admin_mines_bans(conn: sqlite3.Connection = Depends(db_dep)):
+    """Kdo má zákaz hraní Mines (cílený ban – zbytek webu jim funguje)."""
+    ids = _mines_ban_ids(conn)
+    if not ids:
+        return {"banned": []}
+    qm = ",".join("?" * len(ids))
+    rows = conn.execute(f"SELECT id, username FROM users WHERE id IN ({qm})", list(ids)).fetchall()
+    return {"banned": [{"id": r["id"], "username": r["username"]} for r in rows]}
+
+
+@router.post("/mines-ban")
+def admin_mines_ban(data: MinesBanIn, request: Request,
+                    conn: sqlite3.Connection = Depends(db_dep),
+                    admin: sqlite3.Row = Depends(require_admin)):
+    """Zabaní/odbaní uživatele JEN ve hře Mines (zbytek webu mu zůstává otevřený).
+    Seznam zabanovaných uid drží app_settings['mines_ban_uids']."""
+    key = data.username.strip().lstrip("@")
+    u = conn.execute("SELECT id, username FROM users WHERE username = ? OR kick_username = ?",
+                     (key, key.lower())).fetchone()
+    if not u:
+        raise HTTPException(status_code=404, detail=f"Uživatel '{data.username}' nenalezen.")
+    ids = _mines_ban_ids(conn)
+    if data.banned:
+        ids.add(u["id"])
+    else:
+        ids.discard(u["id"])
+    set_setting(conn, "mines_ban_uids", json.dumps(sorted(ids)))
+    record_audit(conn, admin, request, "mines.ban" if data.banned else "mines.unban", u["username"])
+    conn.commit()
+    return {"ok": True, "username": u["username"], "banned": bool(data.banned), "total_banned": len(ids)}
 
 
 @router.post("/chat-reset")
