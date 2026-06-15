@@ -77,11 +77,19 @@ def _pred_public(conn, p, me_id: Optional[int]) -> dict:
             "mult": round(total / pool, 2) if pool > 0 else None,
             "is_winner": p["winner_option_id"] == o["id"],
         })
+    creator = None
+    cb = p["created_by"] if "created_by" in p.keys() else None
+    if cb:
+        cu = conn.execute("SELECT username, role FROM users WHERE id = ?", (cb,)).fetchone()
+        if cu:
+            creator = {"username": cu["username"], "role": cu["role"]}
+
     return {
         "id": p["id"], "question": p["question"], "game": p["game"], "status": p["status"],
         "total_pool": total, "options": options, "my_bet": my_bet,
         "winner_option_id": p["winner_option_id"], "created_at": p["created_at"],
         "lock_at": (p["lock_at"] if "lock_at" in p.keys() else None),
+        "creator": creator,
     }
 
 

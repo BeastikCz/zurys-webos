@@ -90,6 +90,35 @@ def test_reresolve_moves_payout_to_correct_winner(client):
         conn.close()
 
 
+def test_prediction_exposes_creator(client):
+    # staff (broadcaster) vytvoří predikci → create i veřejný výpis ji vrátí s autorem
+    conn = get_conn()
+    try:
+        suf = secrets.token_hex(4)
+        uname = f"caster_{suf}"
+        uid = conn.execute(
+            "INSERT INTO users (kick_username, username, role, points, created_at) VALUES (?,?,?,0,?)",
+            (uname, uname, "broadcaster", now_iso())).lastrowid
+        token = secrets.token_hex(24)
+        conn.execute("INSERT INTO sessions (token, user_id, created_at, expires_at) VALUES (?,?,?,?)",
+                     (token, uid, now_iso(), (datetime.now(timezone.utc) + timedelta(days=1)).isoformat()))
+        conn.commit()
+    finally:
+        conn.close()
+
+    r = client.post("/api/predictions",
+                    json={"question": "Vyhrajeme zápas?", "options": ["Ano", "Ne"], "game": "CS2", "lock_seconds": 0},
+                    headers=_hdr(token))
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["creator"] and body["creator"]["username"] == uname
+    assert body["creator"]["role"] == "broadcaster"
+
+    lst = client.get("/api/predictions").json()
+    mine = [p for p in lst["active"] if p["id"] == body["id"]]
+    assert mine and mine[0]["creator"]["username"] == uname, "autor musí být i ve veřejném výpisu"
+
+
 def test_reresolve_rejects_unresolved(client):
     conn = get_conn()
     try:

@@ -754,6 +754,14 @@ async function loadPredictions() {
 function predBarHTML(pct) {
   return `<div style="height:8px;border-radius:6px;background:rgba(255,255,255,.08);overflow:hidden;margin:8px 0 5px"><div class="pred-fill" style="height:100%;width:${pct}%;background:var(--accent-2);transition:width .5s ease"></div></div>`;
 }
+function predRoleTag(role) {
+  return role === "broadcaster" ? " 🎙️" : role === "admin" ? " 🛡️" : role === "mod" ? " 🛠️" : "";
+}
+function predBy(p) {
+  if (!p.creator) return "";
+  const when = p.created_at ? ` · ${timeAgo(p.created_at)}` : "";
+  return ` · 👤 vytvořil <b>${esc(p.creator.username)}</b>${predRoleTag(p.creator.role)}${when}`;
+}
 function predCardHTML(p) {
   const locked = p.status === "locked";
   const mine = p.my_bet;
@@ -772,7 +780,7 @@ function predCardHTML(p) {
   const badge = locked ? `<span class="badge badge-admin">🔒 Uzamčeno</span>` : `<span class="badge badge-sub">🟢 Otevřeno</span>`;
   return `<div class="panel pred-card" data-pred="${p.id}" data-status="${p.status}" data-myopt="${mine ? mine.option_id : 0}" data-myamt="${mine ? mine.amount : 0}" style="margin-bottom:16px">
     <div class="row-between" style="margin-bottom:3px"><b style="font-size:17px">🎯 ${esc(p.question)}</b>${badge}</div>
-    <div class="faint" style="font-size:12.5px;margin-bottom:12px">${esc(p.game)} · celkový bank <b class="pred-bank">${fmtPts(p.total_pool)}</b></div>
+    <div class="faint" style="font-size:12.5px;margin-bottom:12px">${esc(p.game)} · celkový bank <b class="pred-bank">${fmtPts(p.total_pool)}</b>${predBy(p)}</div>
     ${!locked && p.lock_at ? `<div class="pred-countdown" data-lockat="${esc(p.lock_at)}" style="font-size:14px;font-weight:800;color:var(--accent-2);margin:-4px 0 12px">⏳ …</div>` : ""}
     ${state.user && !locked
       ? `<div class="field" style="margin-bottom:12px"><label>Sázka (sedláci) — pak klikni na možnost</label><input class="input" id="predAmt-${p.id}" type="number" min="1" placeholder="např. 100" style="max-width:220px"></div>`
@@ -794,7 +802,7 @@ function predRecentHTML(p) {
   }
   return `<div class="panel" style="margin-bottom:10px;padding:13px 16px">
     <div class="row-between"><b>🎯 ${esc(p.question)}</b>${outcome}</div>
-    <div class="faint" style="font-size:13px;margin-top:4px">${cancelled ? "❌ Zrušeno (vklady vráceny)" : `✅ Výsledek: <b style="color:var(--accent-2)">${winner ? esc(winner.label) : "?"}</b> · bank ${fmtPts(p.total_pool)}`}</div>
+    <div class="faint" style="font-size:13px;margin-top:4px">${cancelled ? "❌ Zrušeno (vklady vráceny)" : `✅ Výsledek: <b style="color:var(--accent-2)">${winner ? esc(winner.label) : "?"}</b> · bank ${fmtPts(p.total_pool)}`}${predBy(p)}</div>
   </div>`;
 }
 async function predBet(pid, oid) {
@@ -3878,7 +3886,7 @@ function adminPredRowHTML(p) {
   return `<div class="panel apred-card" data-pred="${p.id}" data-status="${p.status}" style="margin-bottom:12px">
     <div class="row-between"><b>🎯 ${esc(p.question)}</b>${badge}</div>
     <div style="margin:8px 0;display:flex;gap:6px;flex-wrap:wrap">${opts}</div>
-    <div class="faint" style="font-size:12px">Celkový bank: <span class="apred-bank">${fmtPts(p.total_pool)}</span></div>
+    <div class="faint" style="font-size:12px">Celkový bank: <span class="apred-bank">${fmtPts(p.total_pool)}</span>${predBy(p)}</div>
     ${controls}
   </div>`;
 }
