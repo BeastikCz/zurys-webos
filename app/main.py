@@ -8,7 +8,7 @@ from fastapi import FastAPI, Request, Depends, HTTPException
 from fastapi.responses import JSONResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
-from . import ipban, ddos, alerts, maintenance, navaja_import
+from . import ipban, ddos, alerts, maintenance, navaja_import, awp_import
 from .backup import start_backup_daemon
 from .autodrop import start_autodrop_daemon
 from .live_events import start_live_events_daemon
@@ -140,6 +140,17 @@ try:
         print(f"[navaja] uprava {_a['key']}: {_a['nick']} +{_a['added']}/-{_a['removed']}")
 finally:
     _nv.close()
+
+# Jednorázově: import ručně dodaných tiketů do tomboly AWP | Printstream (giveaway log).
+# Idempotentní (flag awp_import_v1) + plně vratné (awp_import.undo). „Všichni" vynecháno. Viz modul.
+_aw = get_conn()
+try:
+    _ares = awp_import.run(_aw)
+    if _ares.get("tickets_added"):
+        print(f"[awp] import: +{_ares['tickets_added']} tiketu, "
+              f"{_ares['accounts_created']} novych uctu (produkt #{_ares['product_id']})")
+finally:
+    _aw.close()
 
 # Jednorázově: hry dány mimo provoz → vrať zamčené vklady (otevřené+rozehrané piškvorky, otevřené duely).
 # Revert (až hry zase pojedou): GAMES_OFF=False níže + smaž flag 'games_off_refund_v1'.
