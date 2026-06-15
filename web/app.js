@@ -5281,10 +5281,10 @@ async function pageGames() {
 }
 
 /* ---------------- 💣 Mines (provably-fair, single-player) ---------------- */
-let _minesBet = 100, _minesMines = 3;
+let _minesBet = 100, _minesMines = 4;
 async function pageMines() {
   if (!state.user) { navigate("connect"); return; }
-  $("#view").innerHTML = `<div class="page-head"><h1>💣 Mines</h1><p class="muted">Odkrývej pole, vyhni se bombám, cashni kdykoliv. Provably-fair · mřížka 5×5 · max sázka 5000.</p></div>${gambleBlockBanner()}<div id="minesWrap">${skeletonCards(1)}</div>`;
+  $("#view").innerHTML = `<div class="page-head"><h1>💣 Mines</h1><p class="muted">Odkrývej pole, vyhni se bombám, cashni kdykoliv. Provably-fair · mřížka 5×5 · max sázka 1000.</p></div>${gambleBlockBanner()}<div id="minesWrap">${skeletonCards(1)}</div>`;
   try { renderMines(await api("/mines/state")); }
   catch (e) { const w = $("#minesWrap"); if (w) w.innerHTML = `<div class="empty">${esc(e.message)}</div>`; }
 }
@@ -5320,16 +5320,16 @@ function renderMines(d) {
         ? `<div class="panel ok" style="margin-bottom:14px">💰 Vyhráls <b>${fmtPts(g.payout)}</b>! (×${g.mult.toFixed(2)})</div>`
         : `<div class="panel bad" style="margin-bottom:14px">💥 Bomba! Přišels o sázku ${fmtPts(g.bet)}. Příště líp! 🌾</div>`;
     }
-    const opts = Array.from({ length: 22 }, (_, i) => i + 3).map((n) => `<option value="${n}" ${n === _minesMines ? "selected" : ""}>${n} 💣</option>`).join("");
+    const opts = Array.from({ length: 21 }, (_, i) => i + 4).map((n) => `<option value="${n}" ${n === _minesMines ? "selected" : ""}>${n} 💣</option>`).join("");
     box.innerHTML = `
       ${banner}
       <div class="panel mines-setup">
         <div class="mines-setup-row">
-          <label>Sázka<input class="input" id="minesBet" type="number" min="1" max="${d.max_bet || 5000}" value="${_minesBet}"></label>
+          <label>Sázka<input class="input" id="minesBet" type="number" min="1" max="${d.max_bet || 1000}" value="${_minesBet}"></label>
           <label>Počet bomb<select class="input" id="minesMines">${opts}</select></label>
           <button class="btn btn-accent" data-action="mines-start">▶ Spustit hru</button>
         </div>
-        <div class="faint" style="font-size:12px;margin-top:8px">Zůstatek: <b>${fmtPts(d.balance)}</b> · víc bomb = vyšší násobič, ale větší riziko. Max výhra 100 000.</div>
+        <div class="faint" style="font-size:12px;margin-top:8px">Zůstatek: <b>${fmtPts(d.balance)}</b> · víc bomb = vyšší násobič, ale větší riziko. Min 4 bomby · max výhra 10 000.</div>
       </div>
       ${ended ? grid("ended") : `<div class="mines-grid preview">${Array.from({ length: 25 }, () => `<button class="mines-tile hidden" disabled></button>`).join("")}</div>`}
       ${ended ? `<div style="text-align:center;margin-top:14px"><button class="btn btn-ghost" data-action="mines-new">🔄 Nová hra</button></div>` : ""}`;
@@ -5337,8 +5337,8 @@ function renderMines(d) {
 }
 async function minesStart() {
   const betEl = document.getElementById("minesBet"), mEl = document.getElementById("minesMines");
-  _minesBet = Math.max(1, Math.min(5000, parseInt(betEl && betEl.value, 10) || 0));
-  _minesMines = Math.max(3, Math.min(24, parseInt(mEl && mEl.value, 10) || 3));
+  _minesBet = Math.max(1, Math.min(1000, parseInt(betEl && betEl.value, 10) || 0));
+  _minesMines = Math.max(4, Math.min(24, parseInt(mEl && mEl.value, 10) || 4));
   if (_minesBet < 1) { toast("Zadej sázku.", "error"); return; }
   try {
     const d = await api("/mines/start", { method: "POST", body: { bet: _minesBet, mines: _minesMines } });

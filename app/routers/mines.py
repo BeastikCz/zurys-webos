@@ -18,10 +18,10 @@ from .. import fairness
 router = APIRouter(prefix="/mines", tags=["mines"])
 
 GRID = 25            # 5×5
-MIN_MINES = 3        # minimálně 3 bomby
-MAX_BET = 1000       # nerf: menší výkyvy (bylo 5000)
-MAX_PAYOUT = 15000   # nerf: strop výhry na hru – zabije velké jackpoty (bylo 100000)
-HOUSE_EDGE = 0.08    # nerf: 8 % house edge – dlouhodobě jasně vyhrává house (bylo 1 %)
+MIN_MINES = 4        # minimálně 4 bomby (nerf: bylo 3)
+MAX_BET = 1000       # menší výkyvy (bylo 5000)
+MAX_PAYOUT = 10000   # nerf: strop výhry na hru (bylo 15000 / původně 100000)
+HOUSE_EDGE = 0.12    # nerf: 12 % house edge – house vyhrává ještě víc (bylo 8 % / původně 1 %)
 
 
 def _mult(revealed_count: int, mines: int) -> float:
