@@ -232,7 +232,7 @@ function render() {
     predikce: pagePredikce, games: pageGames, novinky: pageNews, bonusy: pageBonusy,
     kosmetika: pageCosmetics, bj: pageBjRoom, zpravy: pageMessages, fair: pageFair, mines: pageMines,
     connect: pageConnect, login: pageConnect, register: pageConnect, u: pageUserProfile,
-    "mod-nabor": pageModApply, staty: pageGameStats,
+    "mod-nabor": pageModApply, staty: pageGameStats, "sin-slavy": pageHallOfFame,
   };
   (pages[r.name] || pageShop)(r.param);
   window.scrollTo({ top: 0, behavior: "instant" in window ? "instant" : "auto" });
@@ -1079,7 +1079,7 @@ function animateCounts(root) {
 }
 async function pageLeaderboard() {
   const view = $("#view");
-  view.innerHTML = `<div class="page-head"><h1>🏆 Leaderboard</h1><p class="muted">Síň slávy – nejlepší sběrači sedláků.</p></div><div id="lb">${skeletonCards(1)}</div>`;
+  view.innerHTML = `<div class="page-head" style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap"><div><h1>🏆 Leaderboard</h1><p class="muted">Nejlepší sběrači sedláků.</p></div><a class="btn btn-ghost btn-sm" href="#/sin-slavy">📣 Síň slávy</a></div><div id="lb">${skeletonCards(1)}</div>`;
   try {
     const rows = await api("/leaderboard?limit=100");
     const myName = state.user && state.user.username;
@@ -1768,7 +1768,7 @@ function pageProfile() {
     <div class="panel">
       <div class="profile-head">
         ${avatarHTML(u.username, u.avatar_url, "", cosF(u))}
-        <div><div style="font-size:22px;font-weight:800"><span class="${cosN(u)}">${esc(u.username)}</span> ${roleBadge(u.role)} ${subVipBadges(u)} ${prestigeBadge(u.prestige)}</div><div class="muted">${u.kick_username ? "🟢 " + esc(u.kick_username) : esc(u.email || "")}</div></div>
+        <div><div style="font-size:22px;font-weight:800"><span class="${cosN(u)}">${esc(u.username)}</span> ${roleBadge(u.role)} ${subVipBadges(u)} ${prestigeBadge(u.prestige)}</div><div class="muted">${u.kick_username ? "🟢 " + esc(u.kick_username) : esc(u.email || "")}</div><div class="muted" style="font-size:12.5px;margin-top:3px">🎂 V komunitě <b style="color:var(--text)">${memberSince(u.created_at)}</b>${loyaltyBadge(u.created_at)}</div></div>
         <div class="profile-points"><div class="v">${fmtPts(u.points)}</div><div class="faint">aktuální zůstatek</div></div>
       </div>
       <div class="prof-look-strip">
@@ -4546,6 +4546,50 @@ async function pageGameStats() {
         ${card("🃏", "Blackjack", s.blackjack)}
         ${card("🎯", "Predikce", s.predictions)}
       </div>`;
+  } catch (e) { box.innerHTML = `<div class="empty">${esc(e.message)}</div>`; }
+}
+
+/* --- Síň slávy (veřejní top podporovatelé) --- */
+function memberSince(iso) {
+  try {
+    const days = Math.floor((Date.now() - Date.parse(iso)) / 86400000);
+    if (days < 31) return days + " dní";
+    if (days < 365) return Math.floor(days / 30) + " měs";
+    const y = Math.floor(days / 365), m = Math.floor((days % 365) / 30);
+    return y + " r" + (m ? " " + m + " m" : "");
+  } catch (e) { return ""; }
+}
+function loyaltyBadge(iso) {
+  const days = Math.floor((Date.now() - Date.parse(iso)) / 86400000);
+  if (isNaN(days)) return "";
+  if (days >= 365) return ` <span class="loy-badge loy-gold">🥇 Veterán</span>`;
+  if (days >= 180) return ` <span class="loy-badge loy-silver">🥈 Stálice</span>`;
+  if (days >= 30) return ` <span class="loy-badge loy-bronze">🥉 Člen</span>`;
+  return ` <span class="loy-badge loy-new">🌱 Nováček</span>`;
+}
+async function pageHallOfFame() {
+  const view = $("#view");
+  view.innerHTML = `<div class="page-head"><h1>📣 Síň slávy</h1><p class="muted">Lidi co táhnou komunitu — věrnost, podpora, aktivita. Díky vám! 🌾</p></div><div id="hofBox"></div>`;
+  const box = $("#hofBox");
+  box.innerHTML = skeletonCards(2);
+  try {
+    const d = await api("/hall-of-fame");
+    const row = (u, i, mfn) => `<div class="hof-row">
+      <span class="hof-rank${i < 3 ? " g" + (i + 1) : ""}">${i + 1}</span>
+      ${avatarHTML(u.username, u.avatar_url, "hof-av")}
+      <span class="hof-name">${uLink(u.username)} ${roleBadge(u.role)}</span>
+      <span class="hof-metric">${mfn(u)}</span>
+    </div>`;
+  const board = (icon, title, hint, list, mfn) => `<div class="panel hof-card">
+      <div class="hof-head">${icon} ${title} <span class="faint" style="font-size:12px;font-weight:400">— ${hint}</span></div>
+      <div class="hof-list">${list.length ? list.map((u, i) => row(u, i, mfn)).join("") : `<div class="faint" style="font-size:13px;padding:6px 0">Zatím nikdo.</div>`}</div>
+    </div>`;
+    box.innerHTML = `<div class="hof-grid">
+      ${board("🏆", "Nejvěrnější", "nejdéle v komunitě", d.loyal, (u) => "🎂 " + memberSince(u.created_at))}
+      ${board("💜", "Subscribeři", "naši subové", d.subs, () => "💜 sub")}
+      ${board("🎁", "Nejštědřejší", "nejvíc gift subů", d.gifters, (u) => "🎁 " + fmtPts(u.metric || 0))}
+      ${board("🔥", "Nejaktivnější", "nejvíc v chatu", d.active, (u) => "💬 " + (u.metric || 0))}
+    </div>`;
   } catch (e) { box.innerHTML = `<div class="empty">${esc(e.message)}</div>`; }
 }
 

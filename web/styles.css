@@ -795,6 +795,27 @@ footer.site-footer { border-top: 1px solid var(--border); padding: 22px 0; color
 .gs-l { font-size: 11.5px; color: var(--text-dim); margin-top: 2px; }
 @media (max-width: 620px) { .gs-cards { grid-template-columns: 1fr; } .gs-bignet { font-size: 38px; } }
 
+/* ---------- 📣 Síň slávy + loyalty odznaky ---------- */
+.hof-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
+.hof-card { margin: 0; }
+.hof-head { font-weight: 800; font-size: 15.5px; margin-bottom: 4px; }
+.hof-list { display: flex; flex-direction: column; }
+.hof-row { display: flex; align-items: center; gap: 11px; padding: 8px 0; border-bottom: 1px solid var(--border); }
+.hof-row:last-child { border: none; }
+.hof-rank { width: 24px; height: 24px; flex-shrink: 0; border-radius: 7px; display: grid; place-items: center; font-weight: 900; font-size: 12px; background: rgba(255,255,255,.06); }
+.hof-rank.g1 { background: linear-gradient(135deg,#ffe08a,#e8a52e); color: #1a1200; }
+.hof-rank.g2 { background: linear-gradient(135deg,#e8ecf5,#aeb6c7); color: #1a1200; }
+.hof-rank.g3 { background: linear-gradient(135deg,#f0b486,#c87a43); color: #1a1200; }
+.hof-av { width: 30px !important; height: 30px !important; font-size: 12px !important; flex-shrink: 0; }
+.hof-name { flex: 1; min-width: 0; font-weight: 700; font-size: 13.5px; overflow: hidden; text-overflow: ellipsis; }
+.hof-metric { font-weight: 800; font-size: 12.5px; color: var(--text-dim); white-space: nowrap; }
+.loy-badge { display: inline-block; font-size: 11px; font-weight: 800; padding: 1px 8px; border-radius: 999px; vertical-align: middle; }
+.loy-new { background: rgba(70,224,138,.15); color: #6ef0a0; }
+.loy-bronze { background: rgba(224,147,79,.16); color: #e0934f; }
+.loy-silver { background: rgba(205,211,221,.16); color: #cdd3dd; }
+.loy-gold { background: rgba(255,211,77,.16); color: #ffd34d; }
+@media (max-width: 620px) { .hof-grid { grid-template-columns: 1fr; } }
+
 /* ---------- 🃏 Casino blackjack stůl (felt) ---------- */
 .bj-felt { position: relative; overflow: hidden; margin-bottom: 12px; padding: 18px 14px 26px;
   border: 3px solid var(--gold); border-radius: 18px 18px 90px 90px / 18px 18px 48px 48px;

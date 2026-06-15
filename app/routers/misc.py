@@ -319,6 +319,27 @@ def my_game_stats(user: sqlite3.Row = Depends(require_user),
     return {"overall": overall, "mines": mines, "pvp": pvp, "blackjack": blackjack, "predictions": predictions}
 
 
+# ---------------- Síň slávy (veřejní top podporovatelé) ----------------
+@router.get("/hall-of-fame")
+def hall_of_fame(conn: sqlite3.Connection = Depends(db_dep)):
+    """Veřejné žebříčky uznání (status bez gamblingu): nejvěrnější / subs / nejštědřejší / nejaktivnější."""
+    def q(sql, params=()):
+        return [dict(r) for r in conn.execute(sql, params)]
+    loyal = q("SELECT username, avatar_url, role, created_at FROM users "
+              "WHERE banned=0 AND username IS NOT NULL AND kick_username IS NOT NULL "
+              "ORDER BY created_at ASC LIMIT 10")
+    subs = q("SELECT username, avatar_url, role, created_at FROM users "
+             "WHERE banned=0 AND is_sub=1 ORDER BY created_at ASC LIMIT 10")
+    gifters = q("SELECT u.username, u.avatar_url, u.role, SUM(l.change) AS metric "
+                "FROM points_log l JOIN users u ON u.id=l.user_id "
+                "WHERE l.reason LIKE 'Kick gift sub %' AND l.reason NOT LIKE '%příjemce%' AND u.banned=0 "
+                "GROUP BY u.id ORDER BY metric DESC LIMIT 10")
+    active = q("SELECT u.username, u.avatar_url, u.role, COUNT(*) AS metric "
+               "FROM points_log l JOIN users u ON u.id=l.user_id "
+               "WHERE l.reason='Aktivita v chatu' AND u.banned=0 GROUP BY u.id ORDER BY metric DESC LIMIT 10")
+    return {"loyal": loyal, "subs": subs, "gifters": gifters, "active": active}
+
+
 # ---------------- Nábor moderátorů (přihláška) ----------------
 @router.get("/mod-apply/status")
 def mod_apply_status(user: sqlite3.Row = Depends(require_user),

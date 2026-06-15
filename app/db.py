@@ -578,6 +578,13 @@ CREATE TABLE IF NOT EXISTS mod_applications (
     decided_by  TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_modapp_status ON mod_applications(status, id);
+
+CREATE TABLE IF NOT EXISTS anniversary_awards (
+    user_id        INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    milestone_days INTEGER NOT NULL,        -- který milník (30/90/180/365…) už byl vyplacen
+    awarded_at     TEXT NOT NULL,
+    PRIMARY KEY (user_id, milestone_days)
+);
 """
 
 
