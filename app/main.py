@@ -363,6 +363,13 @@ async def maintenance_guard(request: Request, call_next):
             content={"detail": "Probíhá údržba. Web se brzy vrátí. 🛠️"},
             headers={"X-Maintenance": "1", "Retry-After": "300"},
         )
+    # Statické assety (JS/CSS/fonty/mapy) pouštíme i během údržby. Jsou neškodné –
+    # SPA stejně nefunguje bez API (vrací 503) a návštěvník dál vidí údržbu na "/".
+    # Hlavní důvod: kdyby /app.js vracelo údržbové HTML, Cloudflare si ho zacachuje
+    # pod URL assetu (.js → veřejná cache) a po vypnutí údržby servíruje HTML místo
+    # JS → rozbitý web. Servírujeme tedy skutečný soubor (cache pak drží správný obsah).
+    if path.endswith((".js", ".css", ".woff", ".woff2", ".ttf", ".map")):
+        return await call_next(request)
     return HTMLResponse(content=maintenance.page_html(), status_code=200,
                         headers={"X-Maintenance": "1"})
 

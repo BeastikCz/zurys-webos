@@ -33,3 +33,19 @@ def test_regular_api_blocked_during_maintenance(client, maint_on):
     """Kontrola, že údržba opravdu drží: běžné API je 503."""
     r = client.get("/api/shop/products")
     assert r.status_code == 503, f"běžné API mělo být 503, je {r.status_code}"
+
+
+def test_static_assets_bypass_maintenance(client, maint_on):
+    """JS/CSS musí projít i během údržby. Jinak by /app.js vracelo údržbové HTML,
+    Cloudflare si ho zacachuje pod URL assetu (.js) a po vypnutí údržby servíruje
+    HTML místo JS → rozbitý web. (Návštěvník dál vidí údržbu na '/'.)"""
+    for path in ("/app.js", "/styles.css"):
+        r = client.get(path)
+        assert r.status_code == 200, f"{path} mělo projít (200), je {r.status_code}"
+        assert "X-Maintenance" not in r.headers, f"{path} nesmí být údržbová HTML stránka"
+        assert "text/html" not in r.headers.get("content-type", ""), f"{path} nesmí být HTML"
+
+
+def test_root_still_shows_maintenance(client, maint_on):
+    """Pojistka: SPA shell na '/' návštěvníkovi dál ukazuje údržbu (X-Maintenance)."""
+    assert client.get("/").headers.get("X-Maintenance") == "1"
