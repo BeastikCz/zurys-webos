@@ -43,6 +43,15 @@ TICKETS = [
 ]
 
 
+# Dodatečné ruční úpravy tiketů PO prvním importu. Každá má unikátní klíč → aplikuje
+# se právě jednou (idempotentní). delta > 0 = přidat, delta < 0 = odebrat (od nejnovějších).
+# Každá je vratná přes flag `awp_adj_<klíč>` (drží vložená ID). Další úprava = nový řádek + deploy.
+ADJUSTMENTS = [
+    # (klíč, nick, delta)
+    ("interaty-minus2-20260615", "Interaty", -2),
+]
+
+
 def find_awp(conn: sqlite3.Connection):
     """ID tomboly AWP | Printstream (dle názvu, ať nezávisíme na natvrdo zadaném id)."""
     row = conn.execute(
@@ -143,3 +152,61 @@ def undo(conn: sqlite3.Connection) -> dict:
     set_setting(conn, FLAG, "")  # umožní případné opětovné spuštění
     conn.commit()
     return {"entries_deleted": deleted_entries, "ghosts_deleted": deleted_users}
+
+
+def apply_adjustments(conn: sqlite3.Connection) -> list:
+    """Aplikuje dosud neprovedené položky z ADJUSTMENTS. Idempotentní + vratné."""
+    pid = find_awp(conn)
+    if not pid:
+        return []
+    done = []
+    ts = now_iso()
+    for key, nick, delta in ADJUSTMENTS:
+        flag = "awp_adj_" + key
+        if get_setting(conn, flag, "") or not delta:
+            continue
+        created_users: list = []
+        uid = _get_or_create_user(conn, nick, ts, created_users)
+        if uid is None:
+            continue
+        entry_ids: list = []
+        removed = 0
+        if delta > 0:
+            for _ in range(delta):
+                cur = conn.execute(
+                    "INSERT INTO raffle_entries (product_id, user_id, created_at) VALUES (?, ?, ?)",
+                    (pid, uid, ts),
+                )
+                entry_ids.append(cur.lastrowid)
+        else:  # delta < 0 → odeber od nejnovějších
+            ids = [r["id"] for r in conn.execute(
+                "SELECT id FROM raffle_entries WHERE product_id = ? AND user_id = ? "
+                "ORDER BY id DESC LIMIT ?", (pid, uid, -delta)
+            ).fetchall()]
+            if ids:
+                q = ",".join("?" * len(ids))
+                removed = conn.execute(f"DELETE FROM raffle_entries WHERE id IN ({q})", ids).rowcount
+        set_setting(conn, flag, json.dumps({
+            "nick": nick, "delta": delta, "entry_ids": entry_ids,
+            "removed": removed, "created_users": created_users, "ts": ts,
+        }))
+        conn.commit()
+        done.append({"key": key, "nick": nick, "delta": delta,
+                     "added": len(entry_ids), "removed": removed})
+    return done
+
+
+def undo_adjustment(conn: sqlite3.Connection, key: str) -> dict:
+    """Vrátí jednu úpravu zpět (smaže tikety, které PŘIDALa). Odebrané (delta<0) neobnovuje."""
+    flag = "awp_adj_" + key
+    raw = get_setting(conn, flag, "")
+    if not raw:
+        return {"skipped": "not applied"}
+    entry_ids = json.loads(raw).get("entry_ids", [])
+    deleted = 0
+    if entry_ids:
+        q = ",".join("?" * len(entry_ids))
+        deleted = conn.execute(f"DELETE FROM raffle_entries WHERE id IN ({q})", entry_ids).rowcount
+    set_setting(conn, flag, "")
+    conn.commit()
+    return {"entries_deleted": deleted}

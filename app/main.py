@@ -149,6 +149,8 @@ try:
     if _ares.get("tickets_added"):
         print(f"[awp] import: +{_ares['tickets_added']} tiketu, "
               f"{_ares['accounts_created']} novych uctu (produkt #{_ares['product_id']})")
+    for _a in awp_import.apply_adjustments(_aw):
+        print(f"[awp] uprava {_a['key']}: {_a['nick']} +{_a['added']}/-{_a['removed']}")
 finally:
     _aw.close()
 

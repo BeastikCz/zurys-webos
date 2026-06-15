@@ -58,6 +58,36 @@ def test_awp_import_runs_and_is_reversible(client):
         conn.close()
 
 
+def test_awp_adjustment_removes_from_newest(client):
+    from app.db import get_conn, now_iso
+    conn = get_conn()
+    try:
+        conn.execute("DELETE FROM products WHERE type='raffle' AND name LIKE '%AWP%' AND name LIKE '%Printstream%'")
+        conn.execute("DELETE FROM app_settings WHERE key=? OR key LIKE 'awp_adj_%'", (awp_import.FLAG,))
+        conn.commit()
+        pid = _mk_awp(conn, now_iso())
+        conn.commit()
+        awp_import.run(conn)
+
+        uid = conn.execute("SELECT id FROM users WHERE kick_username='interaty'").fetchone()["id"]
+        before = conn.execute("SELECT COUNT(*) c FROM raffle_entries WHERE product_id=? AND user_id=?",
+                              (pid, uid)).fetchone()["c"]
+        assert before == 8, "Interaty má po importu 8 tiketů"
+
+        done = awp_import.apply_adjustments(conn)
+        minus = [d for d in done if d["nick"] == "Interaty" and d["delta"] == -2]
+        assert minus and minus[0]["removed"] == 2
+
+        after = conn.execute("SELECT COUNT(*) c FROM raffle_entries WHERE product_id=? AND user_id=?",
+                             (pid, uid)).fetchone()["c"]
+        assert after == 6
+
+        # idempotence: druhý běh už tu úpravu znovu neprovede
+        assert not any(d["nick"] == "Interaty" for d in awp_import.apply_adjustments(conn))
+    finally:
+        conn.close()
+
+
 def test_awp_import_skips_when_no_product(client):
     from app.db import get_conn
     conn = get_conn()
