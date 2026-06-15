@@ -161,8 +161,16 @@ def handle_event(conn, event_type: str, payload: dict) -> dict:
         n = len(giftees)
         mult = services.sub_points_mult(conn)   # happy-hour 2× na gift subs (jinak 1×)
         total = eco["eco_giftsub_pts"] * n * mult
-        if gifter and total:
-            _award_kick_user(conn, gifter, total, f"Kick gift sub 🎁 ×{n}" + (" (happy 2×)" if mult > 1 else ""))
+        gifter_uid = None
+        if gifter:
+            # award (i s 0 body založí/najde účet a zaloguje) → máme uid pro sub cíl
+            gifter_uid = _award_kick_user(
+                conn, gifter, total,
+                f"Kick gift sub 🎁 ×{n}" + (" (happy 2×)" if mult > 1 else ""),
+                log_event=(total == 0))
+        if gifter_uid:
+            # komunitní SUB cíl: zapiš giftera (PŘED tick → je v outpayu, i když cíl naplní jeho gift)
+            subgoal.record_gifter(conn, gifter_uid, n, in_hh=(mult > 1))
         gexp = payload.get("expires_at")
         for g in giftees:                                        # příjemci se stávají suby
             gu = (g or {}).get("username")

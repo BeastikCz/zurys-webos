@@ -4702,7 +4702,7 @@ function subGoalCardHTML(g) {
   return `<div class="panel" style="margin-bottom:18px;border-color:${on ? "var(--accent-2)" : "var(--border)"}">
     <div class="row-between"><div class="section-title" style="margin:0">🟣 Komunitní SUB cíl</div>
       <span class="badge ${on ? "badge-sub" : ""}">${g.done ? "✅ DNES SPLNĚNO" : (on ? "🟢 ZAPNUTO" : "⚫ vypnuto")}</span></div>
-    <p class="form-hint" style="margin:8px 0 12px">Kick suby (sub/resub +1, gift sub +počet) plní dnešní lištu. Po naplnění <b>všichni dnešní aktivní diváci</b> (sledovali nebo kecali) dostanou <b>+${fmtPts(g.reward)}</b> a bot to oznámí v chatu. Reset každý den. 🟣🌾<br>Teď: <b>${g.progress} / ${g.target}</b> subů.</p>
+    <p class="form-hint" style="margin:8px 0 12px">Kick suby (sub/resub +1, gift sub +počet) plní dnešní lištu. Po naplnění dostanou <b>+${fmtPts(g.reward)}</b> <b>jen dnešní gifteři z happy hour</b> (kdo giftnul sub během happy hour) a bot to oznámí v chatu. Reset každý den. 🟣🎁🌾<br>Teď: <b>${g.progress} / ${g.target}</b> subů${g.gifters != null ? ` · <b>${g.gifters}</b> ${g.gifters === 1 ? "gifter" : "gifterů"} v hře` : ""}.</p>
     <div style="margin:0 0 12px;padding:9px 11px;background:rgba(145,71,255,.1);border:1px solid rgba(145,71,255,.35);border-radius:9px;font-size:12.5px">
       🖥️ <b>OBS overlay</b> (živě synced s webem): <code style="user-select:all">${location.origin}/overlay/subgoal.html</code>
       <button class="btn btn-ghost btn-sm" data-action="copy-url" data-url="${location.origin}/overlay/subgoal.html" style="margin-left:6px">📋 Kopírovat</button>
@@ -4710,7 +4710,7 @@ function subGoalCardHTML(g) {
     </div>
     <div class="field-row">
       <div class="field"><label>Cíl (subů / den)</label><input class="input" id="sg_target" type="number" min="1" value="${g.target}"></div>
-      <div class="field"><label>Odměna všem (sedláků)</label><input class="input" id="sg_reward" type="number" min="0" value="${g.reward}"></div>
+      <div class="field"><label>Odměna gifterům (sedláků)</label><input class="input" id="sg_reward" type="number" min="0" value="${g.reward}"></div>
     </div>
     <div class="toolbar" style="margin-top:12px">
       <button class="btn ${on ? "btn-danger" : "btn-primary"}" data-action="subgoal-toggle" data-on="${on ? 1 : 0}">${on ? "⏸️ Vypnout SUB cíl" : "▶️ Zapnout SUB cíl"}</button>

@@ -1,9 +1,11 @@
 """Komunitní SUB cíl: společná lišta se plní z Kick subů (sub/resub = +1, gift sub = +n).
-Když se naplní, VŠICHNI dnešní aktivní diváci (kdo sledoval nebo kecal) dostanou odměnu
-+ bot to oznámí v chatu. Reset každý den. Stav/konfig v app_settings.
+Když se naplní, odměnu dostanou JEN dnešní gifteři z happy hour (kdo dnes giftnul aspoň
+1 sub během happy hour) + bot to oznámí v chatu. Reset každý den. Stav/konfig v app_settings,
+seznam dnešních gifterů v tabulce subgoal_gifters.
 
-Flywheel: víc subů → cíl se naplní → všichni diváci berou → motivace subnout/giftnout.
-Sourozenec community_goal.py (chat cíl) – stejný vzor.
+Flywheel: happy hour → giftni suby → naplň cíl → gifteři berou odměnu → motivace giftnout
+právě v happy hour. Sourozenec community_goal.py (chat cíl) – plní se stejně, jen odměnu
+tam berou všichni aktivní (sub cíl ji cílí na giftery).
 """
 from .db import now_iso, get_setting, set_setting, local_date
 
@@ -32,11 +34,12 @@ def _cfg(conn) -> dict:
 
 
 def _ensure_day(conn) -> None:
-    """Nový den → vynuluj počítadlo i příznak výplaty."""
+    """Nový den → vynuluj počítadlo, příznak výplaty i seznam dnešních gifterů."""
     if get_setting(conn, "subgoal_day") != _today():
         set_setting(conn, "subgoal_day", _today())
         set_setting(conn, "subgoal_progress", "0")
         set_setting(conn, "subgoal_done", "0")
+        conn.execute("DELETE FROM subgoal_gifters WHERE day != ?", (_today(),))
 
 
 def status(conn) -> dict:
@@ -45,6 +48,9 @@ def status(conn) -> dict:
     cfg = _cfg(conn)
     progress = _int(conn, "subgoal_progress", 0)
     done = get_setting(conn, "subgoal_done") == "1"
+    gifters = conn.execute(
+        "SELECT COUNT(*) c FROM subgoal_gifters WHERE day = ? AND hh_subs > 0", (_today(),)
+    ).fetchone()["c"]
     conn.commit()
     return {
         "enabled": bool(cfg["enabled"]),
@@ -52,6 +58,7 @@ def status(conn) -> dict:
         "target": cfg["target"],
         "reward": cfg["reward"],
         "done": done,
+        "gifters": gifters,        # kolik dnešních HH gifterů odměnu vezme (zatím)
         "pct": min(100, round(progress * 100 / cfg["target"])) if cfg["target"] else 0,
     }
 
@@ -72,33 +79,50 @@ def tick(conn, count: int = 1) -> None:
         _fire(conn, cfg)
 
 
-# dnes aktivní = měl dnes pohyb (sledoval nebo kecal)
-_ACTIVE_WHERE = "day = ? AND (watch_today > 0 OR chat_today > 0)"
+def record_gifter(conn, user_id: int, n: int, in_hh: bool) -> None:
+    """Zaznamenej dnešního giftera subů (kolik subů celkem, z toho v happy hour).
+    Volá kickevents při gift sub eventu PŘED tickem (ať je gifter v outpayu, i kdyby
+    cíl naplnil právě jeho gift). Necommituje – commit dělá caller / _fire."""
+    if not user_id or n <= 0:
+        return
+    _ensure_day(conn)
+    hh = n if in_hh else 0
+    conn.execute(
+        "INSERT INTO subgoal_gifters (day, user_id, subs, hh_subs) VALUES (?, ?, ?, ?) "
+        "ON CONFLICT(day, user_id) DO UPDATE SET subs = subs + ?, hh_subs = hh_subs + ?",
+        (_today(), user_id, n, hh, n, hh))
 
 
 def _fire(conn, cfg) -> None:
-    """Atomicky claimni výplatu (jen jednou za den) a rozdej všem dnešním aktivním divákům."""
+    """Atomicky claimni výplatu (jen jednou za den) a rozdej JEN dnešním gifterům z happy hour."""
     cur = conn.execute(
         "UPDATE app_settings SET value = '1', updated_at = ? WHERE key = 'subgoal_done' AND value != '1'",
         (now_iso(),))
     if cur.rowcount == 0:
         return                                   # už vyplaceno dnes (race)
     today, reward = _today(), cfg["reward"]
-    conn.execute(
-        f"UPDATE users SET points = points + ? WHERE id IN "
-        f"(SELECT user_id FROM activity_state WHERE {_ACTIVE_WHERE})", (reward, today))
-    conn.execute(
-        f"INSERT INTO points_log (user_id, change, reason, created_at) "
-        f"SELECT user_id, ?, 'Sub cíl komunity 🟣', ? FROM activity_state WHERE {_ACTIVE_WHERE}",
-        (reward, now_iso(), today))
-    n = conn.execute(
-        f"SELECT COUNT(*) c FROM activity_state WHERE {_ACTIVE_WHERE}", (today,)).fetchone()["c"]
+    ids = [r["user_id"] for r in conn.execute(
+        "SELECT user_id FROM subgoal_gifters WHERE day = ? AND hh_subs > 0", (today,)).fetchall()]
+    if ids and reward > 0:
+        qm = ",".join("?" * len(ids))
+        conn.execute(f"UPDATE users SET points = points + ? WHERE id IN ({qm})", [reward, *ids])
+        conn.executemany(
+            "INSERT INTO points_log (user_id, change, reason, created_at) "
+            "VALUES (?, ?, 'Sub cíl komunity 🟣🎁', ?)",
+            [(uid, reward, now_iso()) for uid in ids])
+    n = len(ids)
     conn.commit()
     try:
         from . import kickbot
-        kickbot.send_message(
-            conn, f"🟣 KOMUNITA SPLNILA SUB CÍL! {n} aktivních diváků právě bere +{reward} sedláků! "
-                  f"Díky za subscribe! 🌾", kind="system")
+        if n > 0:
+            who = "gifter" if n == 1 else "gifterů"
+            kickbot.send_message(
+                conn, f"🟣 KOMUNITA SPLNILA SUB CÍL! {n} {who} z happy hour bere +{reward} sedláků! "
+                      f"Díky za gift suby! 🎁🌾", kind="system")
+        else:
+            kickbot.send_message(
+                conn, "🟣 SUB CÍL SPLNĚN! Dnes ale nikdo nedaroval sub v happy hour, "
+                      "takže odměna propadá – příště giftněte během happy hour! 🎁", kind="system")
     except Exception:
         import traceback
         traceback.print_exc()

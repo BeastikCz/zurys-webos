@@ -58,7 +58,7 @@
       <div class="mascot"></div>
       <div class="head">
         <div class="ttl" id="ttl">Dnešní <span class="g">SUB cíl</span></div>
-        <div class="rew">🎁 Odměna <b id="rew">+0</b> sedláků všem aktivním 🌾</div>
+        <div class="rew">🎁 Odměna <b id="rew">+0</b> sedláků gifterům z happy hour 🌾</div>
       </div>
     </div>
     <div class="bar"><div class="fill" id="fill"></div><div class="barnum"><span class="now" id="num">0</span> / <span id="tgt">0</span></div></div>
@@ -84,8 +84,8 @@
         ? 'Dnešní <span class="g">SUB cíl</span> — <span class="g">SPLNĚNO!</span> 🎉'
         : 'Dnešní <span class="g">SUB cíl</span>';
       document.getElementById("msg").textContent = g.done
-        ? "rozdáno všem dnešním divákům! 🎁"
-        : "subněte / giftněte a naplňte to společně!";
+        ? "rozdáno dnešním gifterům z happy hour! 🎁"
+        : "giftněte suby v happy hour a naplňte cíl! 🎁";
       card.classList.toggle("done", !!g.done);
       if (last >= 0 && g.progress > last) { card.style.transform = "scale(1.02)"; setTimeout(function () { card.style.transform = ""; }, 220); }
       last = g.progress;

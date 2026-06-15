@@ -261,6 +261,16 @@ CREATE TABLE IF NOT EXISTS activity_state (
     last_chat_at  TEXT
 );
 
+-- Komunitní SUB cíl: kdo dnes giftnul suby (a kolik z toho v happy hour). Po splnění
+-- cíle berou odměnu JEN dnešní gifteři z happy hour (hh_subs > 0). Reset = nový den.
+CREATE TABLE IF NOT EXISTS subgoal_gifters (
+    day      TEXT NOT NULL,
+    user_id  INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    subs     INTEGER NOT NULL DEFAULT 0,   -- kolik subů dnes giftnul celkem
+    hh_subs  INTEGER NOT NULL DEFAULT 0,   -- z toho během happy hour
+    PRIMARY KEY (day, user_id)
+);
+
 -- PvP hry o body: piškvorky (gomoku). 1v1 se sázkou, escrow vkladů, vítěz bere bank.
 CREATE TABLE IF NOT EXISTS games (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,

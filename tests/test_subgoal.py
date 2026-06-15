@@ -1,47 +1,97 @@
-"""Komunitní SUB cíl: tick plní cíl, po naplnění odměna všem dnešním aktivním divákům (1×).
+"""Komunitní SUB cíl: tick plní cíl, po naplnění odměnu berou JEN dnešní gifteři z happy
+hour (ne aktivní diváci, ne gifteři mimo HH). Výplata 1×/den.
 
     .venv/Scripts/python.exe -m pytest tests/test_subgoal.py -v
 """
 import secrets
 
 
-def _user_active_today(conn):
-    from app.db import now_iso, local_date
+def _mk_user(conn):
+    from app.db import now_iso
     u = f"sg_{secrets.token_hex(3)}"
-    uid = conn.execute(
+    return conn.execute(
         "INSERT INTO users (kick_username, username, role, points, created_at) VALUES (?,?,?,?,?)",
         (u, u, "user", 0, now_iso())).lastrowid
-    conn.execute("INSERT INTO activity_state (user_id, day, watch_today, chat_today) VALUES (?,?,?,?)",
-                 (uid, local_date(), 1, 0))
+
+
+def _reset(conn, target, reward):
+    from app.db import set_setting
+    from app import subgoal
+    set_setting(conn, "subgoal_enabled", "1")
+    set_setting(conn, "subgoal_target", str(target))
+    set_setting(conn, "subgoal_reward", str(reward))
+    set_setting(conn, "subgoal_day", subgoal._today())   # dnešní den → žádný reset uprostřed testu
+    set_setting(conn, "subgoal_progress", "0")
+    set_setting(conn, "subgoal_done", "0")
+    conn.execute("DELETE FROM subgoal_gifters")           # izolace mezi testy (sdílená session DB)
     conn.commit()
-    return uid
 
 
-def test_subgoal_fires_and_rewards_active_once(client):
-    from app.db import get_conn, set_setting
+def test_subgoal_rewards_only_hh_gifters(client):
+    from app.db import get_conn, now_iso, local_date
     from app import subgoal
     conn = get_conn()
     try:
-        set_setting(conn, "subgoal_enabled", "1")
-        set_setting(conn, "subgoal_target", "3")
-        set_setting(conn, "subgoal_reward", "100")
-        set_setting(conn, "subgoal_day", subgoal._today())   # dnešní den → žádný reset uprostřed testu
-        set_setting(conn, "subgoal_progress", "0")
-        set_setting(conn, "subgoal_done", "0")
-        uid = _user_active_today(conn)
+        _reset(conn, target=3, reward=4000)
+        day = local_date()
+        hh = _mk_user(conn)          # giftnul v happy hour → BERE
+        plain = _mk_user(conn)       # giftnul mimo HH → nebere
+        viewer = _mk_user(conn)      # aktivní divák, negifter → nebere
+        conn.execute("INSERT INTO activity_state (user_id, day, watch_today, chat_today) VALUES (?,?,1,0)",
+                     (viewer, day))
+        conn.commit()
 
-        subgoal.tick(conn, 1)
-        subgoal.tick(conn, 1)
-        assert conn.execute("SELECT points FROM users WHERE id=?", (uid,)).fetchone()["points"] == 0, \
-            "pod cílem se nesmí nic vyplatit"
+        subgoal.record_gifter(conn, hh, 2, in_hh=True)
+        subgoal.record_gifter(conn, plain, 1, in_hh=False)
+        conn.commit()
 
-        subgoal.tick(conn, 1)                                # 3. = dosažení cíle → výplata
-        assert conn.execute("SELECT points FROM users WHERE id=?", (uid,)).fetchone()["points"] == 100
+        subgoal.tick(conn, 2)
+        assert conn.execute("SELECT points FROM users WHERE id=?", (hh,)).fetchone()["points"] == 0, \
+            "pod cílem se nic nevyplácí"
+
+        subgoal.tick(conn, 1)        # 3. sub = dosažení cíle → výplata
         assert subgoal.status(conn)["done"] is True
+        assert conn.execute("SELECT points FROM users WHERE id=?", (hh,)).fetchone()["points"] == 4000, \
+            "HH gifter bere odměnu"
+        assert conn.execute("SELECT points FROM users WHERE id=?", (plain,)).fetchone()["points"] == 0, \
+            "gifter mimo happy hour nebere"
+        assert conn.execute("SELECT points FROM users WHERE id=?", (viewer,)).fetchone()["points"] == 0, \
+            "pasivní aktivní divák nebere"
 
-        subgoal.tick(conn, 5)                                # další subby už nevyplácí (1×/den)
-        assert conn.execute("SELECT points FROM users WHERE id=?", (uid,)).fetchone()["points"] == 100, \
-            "výplata jen jednou za den"
+        subgoal.tick(conn, 5)        # další subby už nevyplácí (1×/den)
+        assert conn.execute("SELECT points FROM users WHERE id=?", (hh,)).fetchone()["points"] == 4000
+    finally:
+        conn.close()
+
+
+def test_subgoal_fires_even_without_gifters(client):
+    """Cíl se naplní, ale dnes nikdo nedaroval v HH → done=True, nikomu se nic nevyplatí (nespadne)."""
+    from app.db import get_conn
+    from app import subgoal
+    conn = get_conn()
+    try:
+        _reset(conn, target=2, reward=4000)
+        subgoal.tick(conn, 2)
+        st = subgoal.status(conn)
+        assert st["done"] is True and st["gifters"] == 0
+    finally:
+        conn.close()
+
+
+def test_record_gifter_upsert_counts(client):
+    from app.db import get_conn, local_date
+    from app import subgoal
+    conn = get_conn()
+    try:
+        _reset(conn, target=99, reward=0)
+        uid = _mk_user(conn)
+        subgoal.record_gifter(conn, uid, 2, in_hh=True)
+        subgoal.record_gifter(conn, uid, 3, in_hh=False)    # přičte se k existujícímu řádku
+        conn.commit()
+        row = conn.execute("SELECT subs, hh_subs FROM subgoal_gifters WHERE day=? AND user_id=?",
+                           (local_date(), uid)).fetchone()
+        assert row["subs"] == 5 and row["hh_subs"] == 2     # 2 v HH, 3 mimo
+        assert subgoal.status(conn)["gifters"] == 1          # 1 HH gifter v hře
     finally:
         conn.close()
 
