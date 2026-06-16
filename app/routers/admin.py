@@ -1784,7 +1784,7 @@ def gift_requests_list(conn: sqlite3.Connection = Depends(db_dep)):
 @router.post("/gift-requests/{rid}/approve")
 def gift_request_approve(rid: int, request: Request,
                          conn: sqlite3.Connection = Depends(db_dep),
-                         user: sqlite3.Row = Depends(require_admin)):
+                         user: sqlite3.Row = Depends(require_user)):   # sekci 'gifts' (admin+broadcaster) hlídá admin_guard
     """Povolí dar: připíše body příjemci (odesílateli odešly už při žádosti = escrow)."""
     g = conn.execute("SELECT * FROM gift_requests WHERE id = ?", (rid,)).fetchone()
     if not g:
@@ -1816,7 +1816,7 @@ def gift_request_approve(rid: int, request: Request,
 @router.post("/gift-requests/{rid}/reject")
 def gift_request_reject(rid: int, request: Request,
                         conn: sqlite3.Connection = Depends(db_dep),
-                        user: sqlite3.Row = Depends(require_admin)):
+                        user: sqlite3.Row = Depends(require_user)):   # sekci 'gifts' (admin+broadcaster) hlídá admin_guard
     """Zamítne dar: vrátí body odesílateli (escrow zpět). Příjemce nedostane nic."""
     g = conn.execute("SELECT * FROM gift_requests WHERE id = ?", (rid,)).fetchone()
     if not g:

@@ -39,3 +39,12 @@ def test_gift_requests_mod_and_user_forbidden(client):
     assert client.get("/api/admin/gift-requests", headers=_hdr(_tok("mod"))).status_code == 403, \
         "mod na žádosti o dar nemá"
     assert client.get("/api/admin/gift-requests", headers=_hdr(_tok("user"))).status_code == 403
+
+
+def test_gift_approve_reject_broadcaster_passes_auth(client):
+    # broadcaster musí PROJÍT auth na approve/reject (404 na neexistující žádost = prošel; 403 = blokován)
+    bc = _tok("broadcaster")
+    assert client.post("/api/admin/gift-requests/999999/approve", headers=_hdr(bc)).status_code == 404
+    assert client.post("/api/admin/gift-requests/999999/reject", headers=_hdr(bc)).status_code == 404
+    # mod zůstává blokován (403)
+    assert client.post("/api/admin/gift-requests/999999/approve", headers=_hdr(_tok("mod"))).status_code == 403
