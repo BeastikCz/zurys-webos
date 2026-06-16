@@ -1004,8 +1004,9 @@ async function buyProduct(id) {
   try {
     const r = await api("/shop/purchase", { method: "POST", body: { product_id: id } });
     state.user.points = r.balance;
-    toast(r.message, "success");
     closeModal();
+    toast(r.message, "success");
+    try { confettiBurst(); } catch (e) {}      // 🎉 gamifikace: oslava při koupi
     render();
   } catch (e) { toast(e.message, "error"); }
 }
