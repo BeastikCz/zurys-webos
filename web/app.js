@@ -311,8 +311,9 @@ function pageShop() {
   view.innerHTML = `
     <div class="ticker"><div class="ticker-track" id="tickerTrack"></div></div>
     <div id="dropBanner"></div>
-    <div class="da-head"><h1>Zurys <span class="accent">Shop</span></h1>
-      <p>Utrať nasbírané sedláky za prémiové skiny a odměny — instantky, limitky i tomboly. 🌾</p></div>
+    <div class="da-head shop-hero"><img src="/sedlak-cut.png" class="hero-sedlak" alt="Sedlák" />
+      <div><h1>Zurys <span class="accent">Shop</span></h1>
+      <p>Utrať nasbírané sedláky za prémiové skiny a odměny — instantky, limitky i tomboly. 🌾</p></div></div>
     <div id="happyBanner"></div>
     <div id="soldFeed"></div>
     <div id="shopHero"></div>
@@ -1087,7 +1088,7 @@ function animateCounts(root) {
 }
 async function pageLeaderboard() {
   const view = $("#view");
-  view.innerHTML = `<div class="page-head" style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap"><div><h1>🏆 Leaderboard</h1><p class="muted">Nejlepší sběrači sedláků.</p></div><a class="btn btn-ghost btn-sm" href="#/sin-slavy">📣 Síň slávy</a></div><div id="lb">${skeletonCards(1)}</div>`;
+  view.innerHTML = `<div class="page-head" style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap"><div class="ph-mascotgroup"><img class="page-mascot" src="/sedlak-cut.png" alt=""><div><h1>🏆 Leaderboard</h1><p class="muted">Nejlepší sběrači sedláků.</p></div></div><a class="btn btn-ghost btn-sm" href="#/sin-slavy">📣 Síň slávy</a></div><div id="lb">${skeletonCards(1)}</div>`;
   try {
     const rows = await api("/leaderboard?limit=100");
     const myName = state.user && state.user.username;
@@ -1378,7 +1379,7 @@ function badgesSectionHTML(badges) {
 async function pageExchange() {
   const view = $("#view");
   view.innerHTML = `
-    <div class="page-head"><h1>💱 Exchange</h1><p class="muted">Pošli sedláky kamarádům nebo uplatni promo kód od streamera.</p></div>
+    <div class="page-head with-mascot"><img class="page-mascot" src="/sedlak-cut.png" alt=""><div class="ph-text"><h1>💱 Exchange</h1><p class="muted">Pošli sedláky kamarádům nebo uplatni promo kód od streamera.</p></div></div>
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(310px,1fr));gap:18px;margin-bottom:24px">${giftCardHTML()}${redeemCardHTML()}</div>
     <div id="exWrap">${skeletonCards(2)}</div>`;
   try {
@@ -1988,7 +1989,7 @@ function pageBonusy() {
   const view = $("#view");
   if (!state.user) {
     view.innerHTML = `
-      <div class="page-head"><h1>🎁 Denní odměny</h1><p class="muted">Streak bonus a kolo štěstí – sedláci zdarma každý den.</p></div>
+      <div class="page-head with-mascot"><img class="page-mascot" src="/sedlak-cut.png" alt=""><div class="ph-text"><h1>🎁 Denní odměny</h1><p class="muted">Streak bonus a kolo štěstí – sedláci zdarma každý den.</p></div></div>
       <div class="panel" style="text-align:center;padding:36px 20px">
         <div style="font-size:42px;margin-bottom:8px">🎡</div>
         <div class="section-title" style="margin:0 0 6px">Připoj se a ber denní odměny</div>
@@ -1998,7 +1999,7 @@ function pageBonusy() {
     return;
   }
   view.innerHTML = `
-    <div class="page-head"><h1>🎁 Denní odměny</h1><p class="muted">Vyzvedni si streak a zatoč kolem štěstí – každý den nové sedláky! 🍀</p></div>
+    <div class="page-head with-mascot"><img class="page-mascot" src="/sedlak-cut.png" alt=""><div class="ph-text"><h1>🎁 Denní odměny</h1><p class="muted">Vyzvedni si streak a zatoč kolem štěstí – každý den nové sedláky! 🍀</p></div></div>
     <div id="chatGoal" style="margin-bottom:18px"></div>
     <div id="subGoal" style="margin-bottom:18px"></div>
     <div class="bonus-grid">
@@ -5357,7 +5358,7 @@ async function pageGames() {
   if (param === "duely") { navigate("games"); return; }   // duely jsou teď inline na Herně
   if (param) { gameView(parseInt(param, 10)); return; }   // číslo = konkrétní piškvorková hra
   $("#view").innerHTML = `
-    <div class="page-head" style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap"><h1>🎮 Herna</h1><a class="btn btn-ghost btn-sm" href="#/staty">📊 Moje herní staty</a></div>
+    <div class="page-head" style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap"><div class="ph-mascotgroup"><img class="page-mascot" src="/sedlak-cut.png" alt=""><h1>🎮 Herna</h1></div><a class="btn btn-ghost btn-sm" href="#/staty">📊 Moje herní staty</a></div>
     ${gambleBlockBanner()}
     <div class="panel" style="margin-bottom:18px;display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap">
       <div><b style="font-size:17px">💣 Mines</b> <span class="faint">— odkrývej pole, vyhni se bombám, cashni kdykoliv. Provably-fair, single-player.</span></div>

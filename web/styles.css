@@ -1140,3 +1140,519 @@ footer.site-footer { border-top: 1px solid var(--border); padding: 22px 0; color
 .ms-fill { height: 100%; border-radius: 999px; background: linear-gradient(90deg, var(--accent), #3fe0a8); }
 .ms-foot { font-size: 11.5px; }
 .da-orig { color: var(--text-faint); font-weight: 700; font-size: 12px; opacity: .7; margin-left: 4px; }
+
+/* ============================================================
+   REDESIGN PROTOTYPE — "premium esports loot"
+   Jen větev redesign-prototype / local. Smazat tenhle blok = původní vzhled.
+   ============================================================ */
+:root {
+  --bg: #07070d;
+  --bg-2: #0b0c16;
+  --surface: rgba(24, 26, 46, .60);
+  --surface-2: rgba(31, 34, 58, .60);
+  --surface-3: #23263e;
+  --border: rgba(255, 255, 255, .085);
+  --text: #f4f6ff;
+  --text-dim: #9aa0c6;
+  --text-faint: #6a7099;
+
+  --accent: #ff9d2e;
+  --accent-2: #ffc061;
+  --accent-violet: #a855f7;
+  --accent-grad: linear-gradient(135deg, #ffb347 0%, #ff7a18 55%, #ff5e3a 100%);
+  --accent-glow: rgba(255, 157, 46, .55);
+  --violet-glow: rgba(168, 85, 247, .45);
+
+  --r: 16px; --r-sm: 10px; --r-lg: 22px;
+  --shadow: 0 22px 54px -18px rgba(0, 0, 0, .72);
+  --glass: saturate(140%) blur(14px);
+}
+
+/* aurora cosmic pozadí */
+body {
+  background:
+    radial-gradient(1100px 700px at 10% -8%, rgba(255,157,46,.15), transparent 60%),
+    radial-gradient(1000px 680px at 94% -6%, rgba(168,85,247,.17), transparent 58%),
+    radial-gradient(1000px 900px at 50% 118%, rgba(120,80,255,.10), transparent 60%),
+    linear-gradient(180deg, #07070d, #0a0a15 42%, #07070d) !important;
+  background-attachment: fixed !important;
+}
+
+/* sklenený topbar */
+.topbar {
+  background: rgba(9, 10, 20, .55) !important;
+  backdrop-filter: var(--glass); -webkit-backdrop-filter: var(--glass);
+  border-bottom: 1px solid rgba(255,255,255,.07);
+  box-shadow: 0 1px 0 rgba(255,157,46,.10), 0 18px 44px -26px rgba(0,0,0,.85);
+}
+
+/* glassmorphism panely + gradientový top akcent místo levého borderu */
+.card, .panel {
+  background: linear-gradient(180deg, rgba(28,30,54,.62), rgba(15,16,30,.62));
+  backdrop-filter: var(--glass); -webkit-backdrop-filter: var(--glass);
+  border: 1px solid rgba(255,255,255,.085);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow), inset 0 1px 0 rgba(255,255,255,.06);
+}
+.panel { padding: 22px; border-left: none !important; position: relative; }
+.panel::before {
+  content: ""; position: absolute; inset: 0 0 auto 0; height: 2px;
+  border-radius: var(--r-lg) var(--r-lg) 0 0;
+  background: linear-gradient(90deg, transparent, var(--accent), var(--accent-violet), transparent);
+  opacity: .6;
+}
+
+/* produktové karty — loot feel */
+.da-card {
+  background: linear-gradient(180deg, rgba(26,28,52,.66), rgba(11,12,22,.7)) !important;
+  backdrop-filter: var(--glass); -webkit-backdrop-filter: var(--glass);
+  border: 1px solid rgba(255,255,255,.085);
+  border-radius: var(--r-lg);
+  transition: transform .2s cubic-bezier(.2,.7,.2,1), box-shadow .2s, border-color .2s;
+}
+.da-card:hover {
+  transform: translateY(-6px) scale(1.012);
+  border-color: var(--rar, var(--accent));
+  box-shadow: 0 28px 64px -22px rgba(0,0,0,.82),
+              0 0 0 1px var(--rar, var(--accent-glow)),
+              0 0 42px -10px var(--rar, var(--accent-glow));
+}
+.da-img { height: 188px;
+  background: radial-gradient(120% 90% at 50% 0%, rgba(255,255,255,.07), transparent 62%), rgba(8,9,16,.4) !important; }
+.da-name { font-size: 16px; letter-spacing: -.01em; }
+
+/* glowing progress fill */
+.da-progress .bar { background: rgba(255,255,255,.06); box-shadow: inset 0 1px 2px rgba(0,0,0,.45); }
+.da-progress .fill {
+  background: linear-gradient(90deg, var(--accent), var(--accent-2));
+  box-shadow: 0 0 14px var(--accent-glow);
+}
+
+/* premium CTA se shimmer sweep */
+.btn { border-radius: 12px; }
+.btn-primary {
+  background: var(--accent-grad);
+  box-shadow: 0 10px 28px -6px var(--accent-glow), inset 0 1px 0 rgba(255,255,255,.35);
+  position: relative; overflow: hidden;
+}
+.btn-primary::after {
+  content: ""; position: absolute; top: 0; left: -120%; width: 55%; height: 100%;
+  background: linear-gradient(100deg, transparent, rgba(255,255,255,.5), transparent);
+  transform: skewX(-18deg); transition: left .55s ease;
+}
+.btn-primary:not(:disabled):hover { transform: translateY(-2px); filter: brightness(1.07); }
+.btn-primary:not(:disabled):hover::after { left: 135%; }
+
+/* badges crisp */
+.da-b, .badge, .da-timer, .da-rarity { box-shadow: 0 4px 14px -4px rgba(0,0,0,.6); }
+
+/* ============================================================
+   REDESIGN PROTOTYPE v2 — "Cozy farma / harvest" (přepisuje v1 výš)
+   Teplé krémové pozadí, zlatá sklizeň + farmářská zelená, útulné zaoblené.
+   ============================================================ */
+:root {
+  --bg: #f3ead6;
+  --bg-2: #ece0c7;
+  --surface: #fffaf0;
+  --surface-2: #f8efdd;
+  --surface-3: #ece0c7;
+  --border: #ddcca8;
+  --text: #3c3020;
+  --text-dim: #7c6a4f;
+  --text-faint: #a8967a;
+
+  --accent: #e2912a;                 /* harvest gold */
+  --accent-2: #6f9c3a;               /* farm green */
+  --accent-ink: #2a1d06;
+  --accent-grad: linear-gradient(135deg, #f3b53e, #e2912a 60%, #d97a1f);
+  --accent-glow: rgba(226, 145, 42, .30);
+  --farm-green: #6f9c3a;
+
+  --r: 18px; --r-sm: 12px; --r-lg: 26px;
+  --shadow: 0 16px 36px -16px rgba(120, 86, 40, .28);
+  --glass: saturate(115%) blur(6px);
+}
+
+body {
+  color: var(--text) !important;
+  background:
+    radial-gradient(900px 600px at 8% -6%, rgba(231,182,84,.32), transparent 60%),
+    radial-gradient(900px 560px at 96% 2%, rgba(111,156,58,.20), transparent 58%),
+    radial-gradient(1200px 320px at 50% 116%, rgba(111,156,58,.22), transparent 60%),
+    linear-gradient(180deg, #f6eedb, #f0e6cf 60%, #ecdfc4) !important;
+  background-attachment: fixed !important;
+}
+
+/* krémový topbar */
+.topbar {
+  background: rgba(255,250,240,.82) !important;
+  backdrop-filter: var(--glass); -webkit-backdrop-filter: var(--glass);
+  border-bottom: 1px solid #e6d7b6;
+  box-shadow: 0 8px 22px -14px rgba(120,86,40,.4);
+}
+
+/* teplé krémové panely */
+.card, .panel {
+  background: var(--surface);
+  backdrop-filter: none; -webkit-backdrop-filter: none;
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow);
+}
+.panel::before {
+  background: linear-gradient(90deg, transparent, var(--accent), var(--farm-green), transparent) !important;
+  opacity: .55;
+}
+
+/* produktové karty — dřevěné/krémové, měkký harvest glow */
+.da-card {
+  background: var(--surface) !important;
+  backdrop-filter: none; -webkit-backdrop-filter: none;
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+}
+.da-card:hover {
+  border-color: var(--rar, var(--accent));
+  box-shadow: 0 22px 44px -20px rgba(120,86,40,.45),
+              0 0 0 1px var(--rar, var(--accent-glow)),
+              0 0 36px -12px var(--rar, var(--accent-glow));
+}
+.da-img {
+  background: radial-gradient(120% 95% at 50% 0%, rgba(255,255,255,.7), transparent 65%), #f1e7d0 !important;
+}
+.da-rarity, .da-timer {
+  background: rgba(255,250,240,.9) !important;
+  color: var(--text) !important;
+  border: 1px solid var(--border);
+}
+
+/* glowing zlatý progress */
+.da-progress .bar { background: #e7dabd; box-shadow: inset 0 1px 2px rgba(120,86,40,.25); }
+.da-progress .fill { background: linear-gradient(90deg, var(--accent), #f3b53e); box-shadow: 0 0 12px var(--accent-glow); }
+
+/* CTA = zlatá sklizeň */
+.btn-primary { color: var(--accent-ink); box-shadow: 0 10px 24px -8px var(--accent-glow), inset 0 1px 0 rgba(255,255,255,.4); }
+
+/* drobné: stíny chipů jemnější/teplé */
+.da-b, .badge, .da-timer, .da-rarity { box-shadow: 0 4px 12px -5px rgba(120,86,40,.4); }
+
+/* ============================================================
+   REDESIGN PROTOTYPE v3 — "Hacker / terminal" (přepisuje v1+v2 výš)
+   Monospace, phosphor zelená na černé, scanlines, CRT glow, ostré hrany.
+   ============================================================ */
+:root {
+  --bg: #020503;
+  --bg-2: #030806;
+  --surface: #05110a;
+  --surface-2: #071a0f;
+  --surface-3: #0a2114;
+  --border: #1f5f3a;
+  --text: #b9f5cf;
+  --text-dim: #5fae7e;
+  --text-faint: #3a7a55;
+
+  --accent: #2bff88;
+  --accent-2: #16c46a;
+  --accent-ink: #021006;
+  --accent-grad: linear-gradient(135deg, #2bff88, #14d96e);
+  --accent-glow: rgba(43, 255, 136, .5);
+
+  --r: 2px; --r-sm: 1px; --r-lg: 4px;
+  --shadow: 0 0 0 1px rgba(43,255,136,.06), 0 18px 40px -22px rgba(0,0,0,.92);
+  --mono: 'JetBrains Mono','Fira Code','SF Mono',Menlo,Consolas,'Liberation Mono',monospace;
+}
+
+* { font-family: var(--mono) !important; }
+
+body {
+  color: var(--text) !important;
+  background:
+    radial-gradient(1000px 600px at 50% -12%, rgba(43,255,136,.08), transparent 60%),
+    linear-gradient(180deg, #020503, #010402) !important;
+  background-attachment: fixed !important;
+}
+/* scanlines + CRT vignette */
+body::after {
+  content: ""; position: fixed; inset: 0; pointer-events: none; z-index: 9998;
+  background:
+    repeating-linear-gradient(0deg, transparent 0, transparent 2px, rgba(0,0,0,.22) 3px),
+    radial-gradient(130% 120% at 50% 50%, transparent 62%, rgba(0,0,0,.55));
+  opacity: .4;
+}
+
+.topbar {
+  background: rgba(2,8,5,.86) !important;
+  backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
+  border-bottom: 1px solid var(--border);
+  box-shadow: 0 0 26px -10px var(--accent-glow);
+}
+
+.card, .panel {
+  background: var(--surface) !important;
+  backdrop-filter: none !important; -webkit-backdrop-filter: none !important;
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow);
+}
+.panel { border-left: 2px solid var(--accent) !important; }
+.panel::before { display: none !important; }
+
+.da-card {
+  background: var(--surface) !important;
+  backdrop-filter: none !important; -webkit-backdrop-filter: none !important;
+  border: 1px solid var(--border) !important;
+  border-radius: var(--r-lg) !important;
+}
+.da-card:hover {
+  border-color: var(--accent) !important;
+  box-shadow: 0 0 0 1px var(--accent), 0 0 30px -6px var(--accent-glow) !important;
+  transform: translateY(-3px) !important;
+}
+.da-img { background: #030a06 !important; }
+.da-name { font-weight: 700; letter-spacing: 0; }
+.da-type, .da-rarity, .da-b { letter-spacing: .08em; }
+.da-rarity, .da-timer { background: rgba(2,8,5,.9) !important; color: var(--accent) !important; border: 1px solid var(--border) !important; }
+
+.da-progress .bar, .cgoal-bar { background: #0a2114 !important; }
+.da-progress .fill { background: var(--accent) !important; box-shadow: 0 0 12px var(--accent-glow) !important; }
+
+.btn { border-radius: var(--r) !important; }
+.btn-primary {
+  background: transparent !important;
+  color: var(--accent) !important;
+  border: 1px solid var(--accent) !important;
+  box-shadow: inset 0 0 0 1px rgba(43,255,136,.12), 0 0 18px -9px var(--accent-glow) !important;
+  text-shadow: 0 0 8px var(--accent-glow);
+}
+.btn-primary:not(:disabled):hover { background: var(--accent) !important; color: var(--accent-ink) !important; text-shadow: none; transform: translateY(-1px); }
+.btn-primary::after { display: none !important; }
+
+h1, h2, .section-title { text-shadow: 0 0 14px rgba(43,255,136,.22); }
+
+/* ============================================================
+   REDESIGN PROTOTYPE v4 — "Noční farma + sedlák" (přepisuje v1–v3)
+   Teplá tmavá espresso + zlatá sklizeň + farmářská zelená, sedlák maskot v rohu.
+   ============================================================ */
+:root {
+  --bg: #16110b;
+  --bg-2: #1c160e;
+  --surface: #221b11;
+  --surface-2: #2a2114;
+  --surface-3: #332817;
+  --border: #4a3a20;
+  --text: #f2e7d0;
+  --text-dim: #b9a583;
+  --text-faint: #8a7656;
+
+  --accent: #f0a830;                 /* harvest gold */
+  --accent-2: #8bbf4d;               /* farm green */
+  --accent-ink: #2a1d06;
+  --accent-grad: linear-gradient(135deg, #f7bd44, #e89020 70%, #d97a14);
+  --accent-glow: rgba(240, 168, 48, .40);
+  --farm-green: #8bbf4d;
+
+  --r: 16px; --r-sm: 10px; --r-lg: 22px;
+  --shadow: 0 18px 40px -18px rgba(0, 0, 0, .7);
+  --mono: 'JetBrains Mono', monospace;
+}
+
+* { font-family: system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif !important; }
+
+body {
+  color: var(--text) !important;
+  background:
+    radial-gradient(1000px 620px at 50% -12%, rgba(240,168,48,.16), transparent 60%),
+    radial-gradient(900px 540px at 90% 8%, rgba(139,191,77,.10), transparent 58%),
+    linear-gradient(180deg, #16110b, #100c07 70%, #16110b) !important;
+  background-attachment: fixed !important;
+}
+body::after { display: none !important; }   /* zruš scanlines z v3 */
+
+/* SEDLÁK maskot kouká z levého dolního rohu */
+body::before {
+  content: ""; position: fixed; left: -18px; bottom: -14px;
+  width: 230px; height: 230px; z-index: 2; pointer-events: none;
+  background: url('/sedlak.png') no-repeat bottom left / contain;
+  filter: drop-shadow(0 6px 26px rgba(0,0,0,.6)) drop-shadow(0 0 30px rgba(240,168,48,.22));
+  opacity: .96;
+}
+
+.topbar {
+  background: rgba(18,13,8,.86) !important;
+  backdrop-filter: saturate(120%) blur(6px); -webkit-backdrop-filter: saturate(120%) blur(6px);
+  border-bottom: 1px solid #3a2d18;
+  box-shadow: 0 10px 30px -16px rgba(0,0,0,.8);
+}
+
+.card, .panel {
+  background: linear-gradient(180deg, #261e12, #1b150d) !important;
+  backdrop-filter: none !important; -webkit-backdrop-filter: none !important;
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow);
+}
+.panel { border-left: none !important; position: relative; }
+.panel::before {
+  display: block !important; content: ""; position: absolute; inset: 0 0 auto 0; height: 2px;
+  border-radius: var(--r-lg) var(--r-lg) 0 0;
+  background: linear-gradient(90deg, transparent, var(--accent), var(--farm-green), transparent) !important;
+  opacity: .6;
+}
+
+.da-card {
+  background: linear-gradient(180deg, #261e12, #17110a) !important;
+  backdrop-filter: none !important; -webkit-backdrop-filter: none !important;
+  border: 1px solid var(--border) !important;
+  border-radius: var(--r-lg) !important;
+}
+.da-card:hover {
+  border-color: var(--rar, var(--accent)) !important;
+  box-shadow: 0 22px 46px -20px rgba(0,0,0,.8),
+              0 0 0 1px var(--rar, var(--accent-glow)),
+              0 0 36px -12px var(--rar, var(--accent-glow)) !important;
+  transform: translateY(-5px) !important;
+}
+.da-img { background: radial-gradient(120% 95% at 50% 0%, rgba(240,168,48,.06), transparent 62%), #1a140c !important; }
+.da-rarity, .da-timer { background: rgba(18,13,8,.85) !important; color: var(--text) !important; border: 1px solid var(--border) !important; }
+
+.da-progress .bar, .cgoal-bar { background: #2a2114 !important; }
+.da-progress .fill { background: linear-gradient(90deg, var(--accent), #f7bd44) !important; box-shadow: 0 0 12px var(--accent-glow) !important; }
+
+.btn { border-radius: 12px !important; }
+.btn-primary {
+  background: var(--accent-grad) !important;
+  color: var(--accent-ink) !important;
+  border: none !important;
+  box-shadow: 0 10px 24px -8px var(--accent-glow), inset 0 1px 0 rgba(255,255,255,.35) !important;
+  text-shadow: none !important;
+}
+.btn-primary:not(:disabled):hover { transform: translateY(-2px); filter: brightness(1.06); }
+
+h1, h2, .section-title { text-shadow: 0 1px 18px rgba(240,168,48,.18); }
+
+/* ============================================================
+   REDESIGN PROTOTYPE v5 — "Hravá farma" (děti & teenageři) — přepisuje v4
+   Živější barvy, chunky zaoblené, bouncy hover, hrdější sedlák.
+   ============================================================ */
+:root {
+  --bg: #17120a;
+  --surface: #241b10;
+  --surface-2: #2c2113;
+  --surface-3: #382a17;
+  --border: #5a4524;
+  --text: #f8efd8;
+  --text-dim: #c4b189;
+  --text-faint: #95805d;
+
+  --accent: #ffb423;                 /* vibrant harvest gold */
+  --accent-2: #7ed957;               /* vivid grass green */
+  --pop: #4cc9f0;                    /* fun sky pop */
+  --accent-ink: #2a1c04;
+  --accent-grad: linear-gradient(135deg, #ffd23f, #ffa31f 70%, #ff8a14);
+  --accent-glow: rgba(255, 180, 35, .5);
+  --farm-green: #7ed957;
+
+  --r: 18px; --r-sm: 12px; --r-lg: 26px;
+  --shadow: 0 20px 44px -18px rgba(0,0,0,.66);
+}
+
+body {
+  background:
+    radial-gradient(1000px 640px at 50% -10%, rgba(255,180,35,.22), transparent 60%),
+    radial-gradient(820px 520px at 88% 6%, rgba(126,217,87,.16), transparent 56%),
+    radial-gradient(700px 480px at 8% 32%, rgba(76,201,240,.08), transparent 56%),
+    linear-gradient(180deg, #17120a, #120d07 70%, #17120a) !important;
+}
+
+/* sedlák — větší a hrdější maskot */
+body::before {
+  left: -22px !important; bottom: -16px !important; width: 212px !important; height: 212px !important;
+  opacity: 1 !important;
+  filter: drop-shadow(0 8px 26px rgba(0,0,0,.55)) drop-shadow(0 0 26px rgba(255,180,35,.32)) !important;
+}
+
+/* chunky hravé karty */
+.card, .panel { border-radius: var(--r-lg); }
+.da-card {
+  border-radius: var(--r-lg) !important;
+  border: 1.5px solid var(--border) !important;
+  background: linear-gradient(180deg, #2a2013, #181109) !important;
+}
+.da-card:hover {
+  transform: translateY(-7px) scale(1.025) !important;
+  border-color: var(--rar, var(--accent)) !important;
+  box-shadow: 0 28px 56px -18px rgba(0,0,0,.72),
+              0 0 0 2px var(--rar, var(--accent)),
+              0 0 46px -10px var(--rar, var(--accent-glow)) !important;
+}
+.da-progress .fill { background: linear-gradient(90deg, var(--accent), var(--farm-green)) !important; }
+
+/* chunky bright CTA */
+.btn { border-radius: 14px !important; font-weight: 900 !important; }
+.btn-primary {
+  background: var(--accent-grad) !important; color: var(--accent-ink) !important; border: none !important;
+  box-shadow: 0 12px 26px -8px var(--accent-glow), inset 0 2px 0 rgba(255,255,255,.45), inset 0 -3px 0 rgba(0,0,0,.18) !important;
+}
+.btn-primary:not(:disabled):hover { transform: translateY(-3px) scale(1.02) !important; filter: brightness(1.07) saturate(1.1); }
+
+h1, h2, .section-title { text-shadow: 0 2px 22px rgba(255,180,35,.25); }
+
+/* ============================================================
+   REDESIGN PROTOTYPE v6 — "Hravá farma+" (full pass: sedlák hrdina, gamifikace)
+   Sedlák jako bobbing maskot u titulku, chunky pill odznaky, víc pop.
+   ============================================================ */
+/* rohový sedlák pryč – nahrazen hrdinou u titulku */
+body::before { display: none !important; }
+
+/* SEDLÁK HRDINA vedle titulku */
+.shop-hero { display: flex; align-items: center; gap: 20px; }
+.shop-hero > div { min-width: 0; }
+.hero-sedlak {
+  width: 104px; height: 104px; object-fit: contain; flex: 0 0 auto;
+  filter: drop-shadow(0 8px 20px rgba(0,0,0,.5)) drop-shadow(0 0 22px rgba(255,180,35,.4));
+  animation: sedlakBob 3.2s ease-in-out infinite;
+}
+@keyframes sedlakBob { 0%,100% { transform: translateY(0) rotate(-2.5deg); } 50% { transform: translateY(-7px) rotate(2.5deg); } }
+@media (max-width:560px){ .hero-sedlak { width: 70px; height: 70px; } .shop-hero { gap: 12px; } }
+
+/* gamifikace: chunky pill odznaky s pop barvou */
+.da-b, .da-rarity, .badge, .da-timer {
+  border-radius: 999px !important;
+  font-weight: 900 !important;
+  padding: 4px 11px !important;
+  border: 1.5px solid rgba(255,255,255,.14) !important;
+}
+.da-rarity { background: rgba(20,14,7,.8) !important; }
+.b-end { background: var(--accent-grad) !important; color: var(--accent-ink) !important; }
+
+/* poppy filtry */
+.da-filters .chip.active, .chip.active { box-shadow: 0 6px 16px -6px var(--accent-glow); }
+
+/* lišty: tlustší, zaoblené, dvoubarevný harvest fill */
+.da-progress .bar { height: 8px !important; border-radius: 999px !important; }
+.da-progress .fill { border-radius: 999px !important; background: linear-gradient(90deg, var(--accent), var(--farm-green)) !important; }
+
+/* karty ještě baculatější + bouncy */
+.da-card { border-radius: 24px !important; }
+.da-card:hover { transform: translateY(-8px) scale(1.03) !important; }
+.da-img { border-radius: 0 !important; }
+
+/* CTA mega chunky */
+.btn-primary { border-radius: 16px !important; letter-spacing: .01em; }
+
+/* ============================================================
+   REDESIGN v7 — ticker do tématu + sedlák maskot na všech stránkách
+   ============================================================ */
+.ticker { background: linear-gradient(180deg, #1e1710, #17110a) !important; border-bottom: 1px solid #3a2d18 !important; }
+.ticker-item .who { color: var(--accent) !important; }
+.ticker-item .dot { background: var(--farm-green) !important; box-shadow: 0 0 8px var(--farm-green) !important; }
+
+.page-mascot {
+  width: 78px; height: 78px; object-fit: contain; flex: 0 0 auto;
+  filter: drop-shadow(0 6px 16px rgba(0,0,0,.5)) drop-shadow(0 0 18px rgba(255,180,35,.35));
+  animation: sedlakBob 3.2s ease-in-out infinite;
+}
+.ph-mascotgroup { display: flex; align-items: center; gap: 14px; min-width: 0; }
+.page-head.with-mascot { display: flex !important; align-items: center; gap: 16px; }
+.page-head.with-mascot .ph-text { min-width: 0; }
+@media (max-width:560px){ .page-mascot { width: 56px; height: 56px; } }
