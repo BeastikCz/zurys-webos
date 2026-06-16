@@ -239,6 +239,26 @@ function render() {
 }
 
 /* ---------------- Horní navigace (ZURYS) ---------------- */
+let _lastBalance = null;
+function animateBalance(target) {       // gamifikace: napočítej zůstatek old→new (jen při změně)
+  const el = document.querySelector(".pts-num");
+  if (!el) { _lastBalance = target; return; }
+  const reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const from = _lastBalance;
+  _lastBalance = target;
+  if (reduce || from === null || from === target) { el.textContent = Number(target).toLocaleString("cs-CZ"); return; }
+  el.classList.remove("bal-up", "bal-down");
+  el.classList.add(target > from ? "bal-up" : "bal-down");
+  const dur = 700, t0 = performance.now();
+  const tick = (now) => {
+    const p = Math.min(1, (now - t0) / dur);
+    const v = Math.round(from + (target - from) * (1 - Math.pow(1 - p, 3)));
+    el.textContent = v.toLocaleString("cs-CZ");
+    if (p < 1) requestAnimationFrame(tick);
+    else setTimeout(() => el.classList.remove("bal-up", "bal-down"), 250);
+  };
+  requestAnimationFrame(tick);
+}
 function renderHeader() {
   const route = currentRoute();
   const u = state.user;
@@ -253,7 +273,7 @@ function renderHeader() {
   const notifBtn = u ? `<button class="icon-btn" data-action="open-notifs" title="Notifikace">🔔${u.notif_unread ? `<span class="cart-badge">${u.notif_unread}</span>` : ""}</button>` : "";
   let right;
   if (u) {
-    right = `<div class="pts-pill" title="Tvůj zůstatek"><span class="coin"></span><b>${Number(u.points).toLocaleString("cs-CZ")}</b><span class="lbl">sedláků</span></div>${cartBtn}${msgBtn}${notifBtn}
+    right = `<div class="pts-pill" title="Tvůj zůstatek"><span class="coin"></span><b class="pts-num">${Number(u.points).toLocaleString("cs-CZ")}</b><span class="lbl">sedláků</span></div>${cartBtn}${msgBtn}${notifBtn}
       <a href="#/profile" class="user-chip" title="Můj profil">${avatarHTML(u.username, u.avatar_url, "", cosF(u))}<div style="display:flex;flex-direction:column;line-height:1.15"><span class="uc-name ${cosN(u)}">${esc(u.username)}</span><span class="uc-tier">${userTier(u.rank) ? "★ " + userTier(u.rank) : ""}</span></div></a>
       <button class="btn btn-ghost btn-sm logout-top" data-action="logout" title="Odhlásit">Odhlásit</button>`;
   } else {
@@ -278,6 +298,7 @@ function renderHeader() {
 
   refreshStreamDot();
   if (!window._streamDotTimer) window._streamDotTimer = setInterval(refreshStreamDot, 60000);
+  if (u) animateBalance(Number(u.points));   // gamifikace: napočítej zůstatek při změně
 }
 
 /* ---------------- Živá tečka: stav streamu (online/offline) ---------------- */

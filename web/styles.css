@@ -1656,3 +1656,8 @@ body::before { display: none !important; }
 .page-head.with-mascot { display: flex !important; align-items: center; gap: 16px; }
 .page-head.with-mascot .ph-text { min-width: 0; }
 @media (max-width:560px){ .page-mascot { width: 56px; height: 56px; } }
+
+/* gamifikace: animované počítadlo sedláků (zelená nahoru / červená dolů) */
+.pts-num { display: inline-block; transition: color .25s, transform .25s; }
+.pts-num.bal-up { color: var(--farm-green) !important; transform: scale(1.14); }
+.pts-num.bal-down { color: #ff8a6a !important; transform: scale(1.14); }
