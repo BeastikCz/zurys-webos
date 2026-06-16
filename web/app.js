@@ -250,7 +250,7 @@ function animateBalance(target) {       // gamifikace: napočítej zůstatek old
   el.classList.remove("bal-up", "bal-down");
   el.classList.add(target > from ? "bal-up" : "bal-down");
   const delta = target - from;
-  // 7) „+X / −X sedláků" floating popup u zůstatku
+  // [7] „+X / −X sedláků" floating popup u zůstatku
   const pill = el.closest(".pts-pill");
   if (pill) {
     const pop = document.createElement("span");
@@ -259,7 +259,7 @@ function animateBalance(target) {       // gamifikace: napočítej zůstatek old
     pill.appendChild(pop);
     setTimeout(() => pop.remove(), 1400);
   }
-  // 4) sedlák maskot oslaví při zisku (skok)
+  // [4] sedlák maskot oslaví při zisku (skok)
   if (delta > 0) {
     document.querySelectorAll(".hero-sedlak, .page-mascot").forEach((m) => {
       m.classList.remove("cheer"); void m.offsetWidth; m.classList.add("cheer");
@@ -276,6 +276,18 @@ function animateBalance(target) {       // gamifikace: napočítej zůstatek old
   };
   requestAnimationFrame(tick);
 }
+let _lastLevel = null;
+function checkLevelUp(level) {        // gamifikace 1: oslava při level-upu
+  const prev = _lastLevel;
+  _lastLevel = level;
+  if (prev === null || !level || level <= prev) return;
+  try { confettiBurst(); } catch (e) {}
+  document.querySelectorAll(".hero-sedlak, .page-mascot").forEach((m) => {
+    m.classList.remove("cheer"); void m.offsetWidth; m.classList.add("cheer");
+    setTimeout(() => m.classList.remove("cheer"), 900);
+  });
+  toast(`🆙 LEVEL UP! Jsi Level ${level}! 🌾`, "success");
+}
 function renderHeader() {
   const route = currentRoute();
   const u = state.user;
@@ -290,7 +302,7 @@ function renderHeader() {
   const notifBtn = u ? `<button class="icon-btn" data-action="open-notifs" title="Notifikace">🔔${u.notif_unread ? `<span class="cart-badge">${u.notif_unread}</span>` : ""}</button>` : "";
   let right;
   if (u) {
-    right = `<div class="pts-pill" title="Tvůj zůstatek"><span class="coin"></span><b class="pts-num">${Number(u.points).toLocaleString("cs-CZ")}</b><span class="lbl">sedláků</span></div>${cartBtn}${msgBtn}${notifBtn}
+    right = `<div class="pts-pill" title="Tvůj zůstatek"><span class="coin"></span><b class="pts-num">${Number(u.points).toLocaleString("cs-CZ")}</b><span class="lbl">sedláků</span></div>${u.level ? `<div class="lvl-pill" title="Level ${u.level} · ${Number(u.level_into || 0).toLocaleString("cs-CZ")}/${Number(u.level_span || 0).toLocaleString("cs-CZ")} XP do dalšího levelu"><b class="lvl-num">Lv ${u.level}</b><span class="lvl-bar"><i class="lvl-fill" style="width:${u.level_pct || 0}%"></i></span></div>` : ""}${cartBtn}${msgBtn}${notifBtn}
       <a href="#/profile" class="user-chip" title="Můj profil">${avatarHTML(u.username, u.avatar_url, "", cosF(u))}<div style="display:flex;flex-direction:column;line-height:1.15"><span class="uc-name ${cosN(u)}">${esc(u.username)}</span><span class="uc-tier">${userTier(u.rank) ? "★ " + userTier(u.rank) : ""}</span></div></a>
       <button class="btn btn-ghost btn-sm logout-top" data-action="logout" title="Odhlásit">Odhlásit</button>`;
   } else {
@@ -316,6 +328,7 @@ function renderHeader() {
   refreshStreamDot();
   if (!window._streamDotTimer) window._streamDotTimer = setInterval(refreshStreamDot, 60000);
   if (u) animateBalance(Number(u.points));   // gamifikace: napočítej zůstatek při změně
+  if (u) checkLevelUp(Number(u.level || 0));  // gamifikace: oslava level-upu
 }
 
 /* ---------------- Živá tečka: stav streamu (online/offline) ---------------- */

@@ -203,6 +203,13 @@ def to_public(row: sqlite3.Row, include_email: bool = False) -> dict:
         "is_vip": bool(row["is_vip"]) if "is_vip" in row.keys() else False,
         "is_og": bool(row["is_og"]) if "is_og" in row.keys() else False,
     }
+    _et = row["earned_total"] if "earned_total" in row.keys() else 0
+    _li = level_info(_et)
+    data["earned_total"] = _et
+    data["level"] = _li["level"]
+    data["level_pct"] = _li["pct"]
+    data["level_into"] = _li["into"]
+    data["level_span"] = _li["span"]
     try:
         from . import cosmetics
         data["cos"] = cosmetics.resolve(row)
@@ -319,9 +326,27 @@ def admin_guard(request: Request, user: sqlite3.Row = Depends(require_user)) -> 
     return user
 
 
+XP_DIV = 300   # earned_total → level: level = 1 + floor(sqrt(earned_total / XP_DIV))
+
+
+def level_info(earned_total) -> dict:
+    """Level + progress v levelu z celkově nafarmeného (earned_total). Level nikdy neklesá."""
+    import math
+    e = max(0, int(earned_total or 0))
+    level = 1 + int(math.floor((e / XP_DIV) ** 0.5))
+    cur_at = XP_DIV * (level - 1) ** 2
+    next_at = XP_DIV * level ** 2
+    span = next_at - cur_at
+    into = e - cur_at
+    pct = int(round(into * 100 / span)) if span > 0 else 0
+    return {"level": level, "into": into, "span": span, "next_at": next_at, "pct": max(0, min(100, pct))}
+
+
 def add_points(conn: sqlite3.Connection, user_id: int, change: int, reason: str) -> None:
-    """Změní body uživatele a zapíše záznam do points_log."""
-    conn.execute("UPDATE users SET points = points + ? WHERE id = ?", (change, user_id))
+    """Změní body uživatele a zapíše záznam do points_log. Kladný přírůstek navíc
+    naskládá do earned_total (lifetime XP – nikdy neklesá, ani při útratě)."""
+    conn.execute("UPDATE users SET points = points + ?, earned_total = earned_total + ? WHERE id = ?",
+                 (change, max(0, change), user_id))
     conn.execute(
         "INSERT INTO points_log (user_id, change, reason, created_at) VALUES (?, ?, ?, ?)",
         (user_id, change, reason, now_iso()),

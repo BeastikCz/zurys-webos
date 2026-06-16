@@ -128,6 +128,20 @@ try:
 finally:
     _ob.close()
 
+# Jednorázově: dopočítej earned_total (lifetime nafarmeno) = součet KLADNÝCH points_log.
+# → veteráni rovnou dostanou level podle historie. Aditivní, žádná data se nemažou.
+_xp = get_conn()
+try:
+    if not get_setting(_xp, "earned_total_backfill_v1", ""):
+        _xp.execute(
+            "UPDATE users SET earned_total = COALESCE("
+            "(SELECT SUM(change) FROM points_log WHERE points_log.user_id = users.id AND change > 0), 0)")
+        set_setting(_xp, "earned_total_backfill_v1", "done")
+        _xp.commit()
+        print("[xp] earned_total backfill hotov (level z historie)")
+finally:
+    _xp.close()
+
 # Jednorázově: import ručně dodaných tiketů do tomboly Navaja (ghost účty bez Kicku).
 # Idempotentní (flag navaja_import_v1) + plně vratné (navaja_import.undo). Viz modul.
 _nv = get_conn()
