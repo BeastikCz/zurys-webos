@@ -1661,3 +1661,28 @@ body::before { display: none !important; }
 .pts-num { display: inline-block; transition: color .25s, transform .25s; }
 .pts-num.bal-up { color: var(--farm-green) !important; transform: scale(1.14); }
 .pts-num.bal-down { color: #ff8a6a !important; transform: scale(1.14); }
+
+/* 7) „+X" floating popup u zůstatku */
+.pts-pill { position: relative; }
+.pts-pop {
+  position: absolute; left: 50%; top: -3px; transform: translateX(-50%);
+  font-weight: 900; font-size: 13px; white-space: nowrap; pointer-events: none; z-index: 5;
+  text-shadow: 0 2px 8px rgba(0,0,0,.6); animation: ptsPop 1.4s cubic-bezier(.2,.8,.2,1) forwards;
+}
+.pts-pop.up { color: var(--farm-green); }
+.pts-pop.down { color: #ff8a6a; }
+@keyframes ptsPop {
+  0% { opacity: 0; transform: translate(-50%, 6px) scale(.8); }
+  18% { opacity: 1; transform: translate(-50%, -8px) scale(1.12); }
+  100% { opacity: 0; transform: translate(-50%, -38px) scale(1); }
+}
+
+/* 4) sedlák oslaví (skok) při zisku */
+@keyframes sedlakCheer {
+  0% { transform: translateY(0) rotate(0) scale(1); }
+  25% { transform: translateY(-16px) rotate(-9deg) scale(1.1); }
+  50% { transform: translateY(0) rotate(7deg) scale(1.06); }
+  75% { transform: translateY(-7px) rotate(-4deg) scale(1.03); }
+  100% { transform: translateY(0) rotate(0) scale(1); }
+}
+.hero-sedlak.cheer, .page-mascot.cheer { animation: sedlakCheer .9s ease-in-out !important; }

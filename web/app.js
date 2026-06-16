@@ -249,6 +249,23 @@ function animateBalance(target) {       // gamifikace: napočítej zůstatek old
   if (reduce || from === null || from === target) { el.textContent = Number(target).toLocaleString("cs-CZ"); return; }
   el.classList.remove("bal-up", "bal-down");
   el.classList.add(target > from ? "bal-up" : "bal-down");
+  const delta = target - from;
+  // 7) „+X / −X sedláků" floating popup u zůstatku
+  const pill = el.closest(".pts-pill");
+  if (pill) {
+    const pop = document.createElement("span");
+    pop.className = "pts-pop " + (delta > 0 ? "up" : "down");
+    pop.textContent = (delta > 0 ? "+" : "−") + Math.abs(delta).toLocaleString("cs-CZ");
+    pill.appendChild(pop);
+    setTimeout(() => pop.remove(), 1400);
+  }
+  // 4) sedlák maskot oslaví při zisku (skok)
+  if (delta > 0) {
+    document.querySelectorAll(".hero-sedlak, .page-mascot").forEach((m) => {
+      m.classList.remove("cheer"); void m.offsetWidth; m.classList.add("cheer");
+      setTimeout(() => m.classList.remove("cheer"), 900);
+    });
+  }
   const dur = 700, t0 = performance.now();
   const tick = (now) => {
     const p = Math.min(1, (now - t0) / dur);
