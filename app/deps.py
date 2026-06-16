@@ -294,6 +294,7 @@ _SECTION_BY_PREFIX = [
     ("/api/admin/order", "orders"),          # pokryje /orders i /order-products
     ("/api/admin/raffle", "raffles"),
     ("/api/admin/codes", "codes"),
+    ("/api/admin/gift-requests", "gifts"),
     ("/api/admin/security", "security"),
     ("/api/admin/backup", "security"),
     ("/api/admin/drops", "drops"),

@@ -49,6 +49,7 @@ ADMIN_SECTIONS = {
     "predictions": (ROLE_MOD, ROLE_BROADCASTER),   # moderátor smí spravovat predikce
     "economy":  (ROLE_BROADCASTER,),   # vč. zapnout/vypnout stream (live toggle)
     "news":     (ROLE_BROADCASTER,),   # patch notes / novinky (changelog)
+    "gifts":    (ROLE_BROADCASTER,),   # schvalování žádostí o dar bodů (gift requests)
     "security": (),
 }
 

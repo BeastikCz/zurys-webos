@@ -138,7 +138,7 @@ const ADMIN_SECTIONS = {
   overview: [], stats: ["broadcaster"], products: ["mod", "broadcaster"], users: ["mod", "broadcaster"], subs: [], orders: ["mod", "broadcaster"],
   raffles: ["broadcaster"], codes: ["broadcaster"], drops: ["broadcaster"], games: ["mod", "broadcaster"], bot: ["broadcaster"],
   predictions: ["mod", "broadcaster"], economy: ["broadcaster"], news: ["broadcaster"], security: [],
-  modnabor: ["broadcaster"],
+  modnabor: ["broadcaster"], gifts: ["broadcaster"],
 };
 function isStaff(u) { return !!u && ["admin", "broadcaster", "mod"].includes(u.role); }
 function canSection(u, sec) { return !!u && (u.role === "admin" || (ADMIN_SECTIONS[sec] || []).includes(u.role)); }
@@ -2294,7 +2294,7 @@ async function pageAdmin() {
     ["overview", "📊 Přehled"], ["products", "🎁 Odměny"], ["users", "👥 Uživatelé"], ["subs", "💜 Suby"], ["orders", "📦 Objednávky"],
     ["raffles", "🎟️ Tomboly"], ["predictions", "🎯 Predikce"], ["codes", "🎫 Kódy"], ["drops", "🎁 Dropy"], ["games", "🎮 Hry"],
     ["bot", "🤖 Kick bot"], ["economy", "⚙️ Ekonomika"], ["news", "📣 Novinky"], ["security", "🛡️ Bezpečnost"],
-    ["modnabor", "🛡️ Nábor modů"],
+    ["modnabor", "🛡️ Nábor modů"], ["gifts", "💝 Dary"],
   ].filter(([k]) => canSection(state.user, k));
   if (!tabs.some(([k]) => k === adminState.tab)) adminState.tab = tabs.length ? tabs[0][0] : null;
   const lbl = state.user.role === "admin" ? "Admin panel"
@@ -2579,6 +2579,7 @@ function renderAdminTab(tab) {
   else if (tab === "news") adminNews();
   else if (tab === "security") adminSecurity();
   else if (tab === "modnabor") adminModApps();
+  else if (tab === "gifts") adminGifts();
 }
 
 /* --- Admin: Ekonomika (pasivní výdělek) --- */
@@ -3606,6 +3607,7 @@ async function adminGames() {
   }).join("") : `<div class="empty">Zatím žádná historie.</div>`;
   box.innerHTML = `<div class="section-title" style="margin:0 0 8px">💣 Mines — historie & house</div>
     <div id="minesHistBox">${skeletonCards(1)}</div>
+    <div id="minesBanBox" style="margin-top:22px">${skeletonCards(1)}</div>
     <div class="row-between" style="margin:26px 0 6px">
       <div class="section-title" style="margin:0">🎮 Probíhající hry (${active.length})</div>
       <button class="btn btn-ghost btn-sm" data-action="games-refresh">🔄 Obnovit</button>
@@ -3616,6 +3618,45 @@ async function adminGames() {
     <p class="muted" style="font-size:13px;margin-bottom:14px">Kdo s kým hrál a kdo vyhrál. <b>↩️ Refund</b> u dohrané hry vrátí oběma vklad a stornuje výhru — třeba když to rozbil deploy/bug. (Vítěz může jít do mínusu, když už výhru utratil.)</p>
     <div class="lb-list">${histRows}</div>`;
   loadMinesHistory();
+  loadMinesBans();
+}
+async function loadMinesBans() {
+  const box = document.getElementById("minesBanBox"); if (!box) return;
+  try {
+    const d = await api("/admin/mines-bans");
+    const rows = (d.banned || []).length
+      ? d.banned.map((b) => `<div class="lb-row" style="padding:7px 0">
+          <span class="hof-name">${uLink(b.username)}</span>
+          <button class="btn btn-ghost btn-sm" data-action="mines-unban" data-username="${esc(b.username)}" style="margin-left:auto">✅ Odbanit</button>
+        </div>`).join("")
+      : `<div class="faint" style="font-size:13px">Nikdo nemá zákaz Mines.</div>`;
+    box.innerHTML = `<div class="panel">
+      <div class="section-title" style="margin:0 0 4px">🚫 Mines — zákaz hraní</div>
+      <p class="muted" style="font-size:12.5px;margin:0 0 10px">Zabanovaný nemůže spustit Mines (dostane 403). Zbytek webu — shop, ostatní hry, predikce — mu funguje dál.</p>
+      <div class="toolbar" style="margin-bottom:10px">
+        <input id="minesBanNick" class="input input-sm" placeholder="Kick nick" style="max-width:200px" onkeydown="if(event.key==='Enter')this.nextElementSibling.click()">
+        <button class="btn btn-danger btn-sm" data-action="mines-ban-add">🚫 Zabanovat na Mines</button>
+      </div>
+      <div class="lb-list">${rows}</div>
+    </div>`;
+  } catch (e) { box.innerHTML = `<div class="empty">${esc(e.message)}</div>`; }
+}
+async function minesBanAdd() {
+  const inp = document.getElementById("minesBanNick");
+  const nick = ((inp && inp.value) || "").trim();
+  if (!nick) { toast("Zadej nick.", "error"); if (inp) inp.focus(); return; }
+  try {
+    const r = await api("/admin/mines-ban", { method: "POST", body: { username: nick, banned: true } });
+    if (r.ok) toast(`${r.username} zabanován na Mines. 🚫`, "success");
+    loadMinesBans();
+  } catch (e) { toast(e.message, "error"); }
+}
+async function minesUnban(username) {
+  try {
+    const r = await api("/admin/mines-ban", { method: "POST", body: { username, banned: false } });
+    if (r.ok) toast(`${r.username} odbanován z Mines. ✅`, "success");
+    loadMinesBans();
+  } catch (e) { toast(e.message, "error"); }
 }
 let _minesHistQ = "";
 async function loadMinesHistory(q) {
@@ -4052,6 +4093,50 @@ async function toggleRule(key, enabled) {
     adminSecurity();
   } catch (e) { toast(e.message, "error"); }
 }
+function giftRequestsHTML(giftReqs) {
+  const grPending = (giftReqs && giftReqs.pending) || [], grRecent = (giftReqs && giftReqs.recent) || [];
+  let giftReqHtml = `<div class="section-title" style="margin-top:6px">🎁 Žádosti o dar <span class="faint" style="font-size:12px;font-weight:400">— čekají na tvé schválení; body jsou u odesílatele zatím zablokované</span></div>`;
+  if (!grPending.length) {
+    giftReqHtml += `<div class="panel ok">✅ Žádné čekající žádosti o dar.</div>`;
+  } else {
+    giftReqHtml += grPending.map((g) => `
+        <div class="panel ${g.shared ? "bad" : "gold"}" style="margin-bottom:10px">
+          <div class="row-between" style="flex-wrap:wrap;gap:8px">
+            <div><b>${uLink(g.from)}</b>${g.from_banned ? ` <span class="badge badge-admin">BAN</span>` : ""} <span style="opacity:.7">→</span> <b>${uLink(g.to)}</b>${g.to_banned ? ` <span class="badge badge-admin">BAN</span>` : ""}
+              <span class="badge badge-vip" style="margin-left:6px">${fmtPts(g.amount)}</span></div>
+            <span class="faint" style="font-size:12px">${timeAgo(g.created_at)}</span>
+          </div>
+          ${g.note ? `<div class="muted" style="font-size:13px;margin:8px 0 0;font-style:italic">💬 „${esc(g.note)}"</div>` : `<div class="faint" style="font-size:12px;margin:8px 0 0">💬 bez důvodu</div>`}
+          ${g.shared ? `<div class="muted" style="font-size:12.5px;margin:8px 0 0;color:#ff8a8a">🚩 <b>Stejná IP / zařízení</b> — možný pokus o přelévání bodů (funnel). Zvaž zamítnutí.</div>` : ""}
+          <div class="toolbar" style="margin-top:10px">
+            <button class="btn btn-primary btn-sm" data-action="gift-approve" data-id="${g.id}" data-label="${esc(g.from)}→${esc(g.to)} ${fmtPts(g.amount)}">✅ Povolit</button>
+            <button class="btn btn-danger btn-sm" data-action="gift-reject" data-id="${g.id}" data-label="${esc(g.from)}→${esc(g.to)}">✖ Zamítnout (vrátit)</button>
+            <span class="faint" style="font-size:12px;margin-left:auto">zůstatek odesílatele: ${fmtPts(g.from_points)}</span>
+          </div>
+        </div>`).join("");
+  }
+  if (grRecent.length) {
+    giftReqHtml += `<div class="muted" style="font-size:12.5px;margin:12px 0 6px">Posledně vyřízené:</div>
+      <div class="table-wrap"><table class="tbl"><thead><tr><th>Od</th><th>Komu</th><th>Sedláků</th><th>Stav</th><th>Admin</th><th>Kdy</th></tr></thead><tbody>
+      ${grRecent.map((g) => `<tr>
+        <td>${uLink(g.from)}</td><td>${uLink(g.to)}</td>
+        <td><b>${fmtPts(g.amount)}</b></td>
+        <td>${g.status === "approved" ? `<span style="color:#46d369">✅ povoleno</span>` : `<span style="color:#ff7a7a">✖ zamítnuto</span>`}</td>
+        <td class="faint">${esc(g.decided_by || "—")}</td>
+        <td class="faint">${timeAgo(g.decided_at || g.created_at)}</td>
+      </tr>`).join("")}
+      </tbody></table></div>`;
+  }
+  return giftReqHtml;
+}
+async function adminGifts() {
+  const box = $("#adminContent");
+  box.innerHTML = skeletonCards(2);
+  try {
+    const giftReqs = await api("/admin/gift-requests");
+    box.innerHTML = giftRequestsHTML(giftReqs);
+  } catch (e) { box.innerHTML = `<div class="empty">${esc(e.message)}</div>`; }
+}
 async function banIp() {
   const ip = ($("#ipBanIp")?.value || "").trim();
   const reason = ($("#ipBanReason")?.value || "").trim();
@@ -4243,40 +4328,8 @@ async function adminSecurity() {
         <span class="faint" style="margin-left:auto;font-size:12px">${pf.total ? adminState.pfOffset + 1 : 0}–${adminState.pfOffset + pf.rows.length} z ${pf.total}</span>
       </div>`;
 
-    // --- Žádosti o dar (schvalování) ---
-    const grPending = (giftReqs && giftReqs.pending) || [], grRecent = (giftReqs && giftReqs.recent) || [];
-    let giftReqHtml = `<div class="section-title" style="margin-top:6px">🎁 Žádosti o dar <span class="faint" style="font-size:12px;font-weight:400">— čekají na tvé schválení; body jsou u odesílatele zatím zablokované</span></div>`;
-    if (!grPending.length) {
-      giftReqHtml += `<div class="panel ok">✅ Žádné čekající žádosti o dar.</div>`;
-    } else {
-      giftReqHtml += grPending.map((g) => `
-        <div class="panel ${g.shared ? "bad" : "gold"}" style="margin-bottom:10px">
-          <div class="row-between" style="flex-wrap:wrap;gap:8px">
-            <div><b>${uLink(g.from)}</b>${g.from_banned ? ` <span class="badge badge-admin">BAN</span>` : ""} <span style="opacity:.7">→</span> <b>${uLink(g.to)}</b>${g.to_banned ? ` <span class="badge badge-admin">BAN</span>` : ""}
-              <span class="badge badge-vip" style="margin-left:6px">${fmtPts(g.amount)}</span></div>
-            <span class="faint" style="font-size:12px">${timeAgo(g.created_at)}</span>
-          </div>
-          ${g.note ? `<div class="muted" style="font-size:13px;margin:8px 0 0;font-style:italic">💬 „${esc(g.note)}"</div>` : `<div class="faint" style="font-size:12px;margin:8px 0 0">💬 bez důvodu</div>`}
-          ${g.shared ? `<div class="muted" style="font-size:12.5px;margin:8px 0 0;color:#ff8a8a">🚩 <b>Stejná IP / zařízení</b> — možný pokus o přelévání bodů (funnel). Zvaž zamítnutí.</div>` : ""}
-          <div class="toolbar" style="margin-top:10px">
-            <button class="btn btn-primary btn-sm" data-action="gift-approve" data-id="${g.id}" data-label="${esc(g.from)}→${esc(g.to)} ${fmtPts(g.amount)}">✅ Povolit</button>
-            <button class="btn btn-danger btn-sm" data-action="gift-reject" data-id="${g.id}" data-label="${esc(g.from)}→${esc(g.to)}">✖ Zamítnout (vrátit)</button>
-            <span class="faint" style="font-size:12px;margin-left:auto">zůstatek odesílatele: ${fmtPts(g.from_points)}</span>
-          </div>
-        </div>`).join("");
-    }
-    if (grRecent.length) {
-      giftReqHtml += `<div class="muted" style="font-size:12.5px;margin:12px 0 6px">Posledně vyřízené:</div>
-      <div class="table-wrap"><table class="tbl"><thead><tr><th>Od</th><th>Komu</th><th>Sedláků</th><th>Stav</th><th>Admin</th><th>Kdy</th></tr></thead><tbody>
-      ${grRecent.map((g) => `<tr>
-        <td>${uLink(g.from)}</td><td>${uLink(g.to)}</td>
-        <td><b>${fmtPts(g.amount)}</b></td>
-        <td>${g.status === "approved" ? `<span style="color:#46d369">✅ povoleno</span>` : `<span style="color:#ff7a7a">✖ zamítnuto</span>`}</td>
-        <td class="faint">${esc(g.decided_by || "—")}</td>
-        <td class="faint">${timeAgo(g.decided_at || g.created_at)}</td>
-      </tr>`).join("")}
-      </tbody></table></div>`;
-    }
+    // --- Žádosti o dar (schvalování) — render sdílí samostatný tab „Dary" (i pro broadcastera) ---
+    const giftReqHtml = giftRequestsHTML(giftReqs);
 
     box.innerHTML = `
       <div class="toolbar"><a class="btn btn-ghost btn-sm" href="/api/admin/backup">💾 Stáhnout zálohu DB</a><span class="faint" style="font-size:12px">Doporučeno zálohovat pravidelně.</span></div>
@@ -4969,6 +5022,8 @@ function handleAction(action, el) {
     case "games-refresh": adminGames(); break;
     case "mines-hist-filter": loadMinesHistory(($("#minesHistQ").value || "").trim()); break;
     case "mines-hist-reset": loadMinesHistory(""); break;
+    case "mines-ban-add": minesBanAdd(); break;
+    case "mines-unban": minesUnban(el.dataset.username); break;
     case "subs-refresh": adminSubs(); break;
     case "raffle-draw": drawRaffle(id); break;
     case "raffle-undo": undoRaffleDraw(id); break;
