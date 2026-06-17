@@ -419,10 +419,10 @@ async function loadSubGoal() {
     box.innerHTML = `<div class="cgoal cgoal--sub${g.done ? " done" : ""}">
       <div class="cgoal-top">
         <span class="cgoal-title">🟣 Dnešní SUB cíl${g.done ? " — SPLNĚNO! 🎉" : ""}</span>
-        <span class="cgoal-rew">Odměna <b>+${fmtPts(g.reward)}</b> všem aktivním 🌾</span>
+        <span class="cgoal-rew">Odměna <b>+${fmtPts(g.reward)}</b> gifterům z happy hour 🎁</span>
       </div>
       <div class="cgoal-bar"><span style="width:${pct}%"></span></div>
-      <div class="cgoal-sub">${g.progress} / ${g.target} subů · ${g.done ? "rozdáno všem dnešním divákům! 🎁" : "subněte / giftněte a naplňte to společně! 🟣"}</div>
+      <div class="cgoal-sub">${g.progress} / ${g.target} subů · ${g.done ? "rozdáno dnešním gifterům z happy hour! 🎁" : "subněte / giftněte a naplňte to společně! 🟣"}</div>
     </div>`;
   } catch (e) { box.innerHTML = ""; }
 }
