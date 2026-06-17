@@ -1526,3 +1526,30 @@ body::before { display: none !important; }
 /* Šampion sezóny – exkluzivní rámeček avataru (jen grant) */
 .avatar.cf-champion { box-shadow: 0 0 0 2px #ffd23f, 0 0 14px -1px rgba(255,200,40,.8); animation: cf-champ 2s ease-in-out infinite; }
 @keyframes cf-champ { 0%,100% { box-shadow: 0 0 0 2px #ffd23f, 0 0 12px -2px rgba(255,200,40,.7); } 50% { box-shadow: 0 0 0 2.5px #fff0a8, 0 0 22px 0 rgba(255,210,63,.95); } }
+
+/* Level Pass – exkluzivní rámečky za dosaženou úroveň (grant-only, vizuál eskaluje) */
+.avatar.cf-pass10 { box-shadow: 0 0 0 2px #c9803c, 0 0 8px -2px rgba(201,128,60,.55); }
+.avatar.cf-pass25 { box-shadow: 0 0 0 2px #ff6a3c, 0 0 13px -2px rgba(255,106,60,.75); animation: cf-pass25 2.6s ease-in-out infinite; }
+@keyframes cf-pass25 { 0%,100% { box-shadow: 0 0 0 2px #ff6a3c, 0 0 10px -2px rgba(255,106,60,.6); } 50% { box-shadow: 0 0 0 2px #ff8a4c, 0 0 18px -1px rgba(255,130,60,.9); } }
+.avatar.cf-pass50 { box-shadow: 0 0 0 2px #56e0ff, 0 0 14px -2px rgba(86,224,255,.8); animation: cf-pass50 2.4s ease-in-out infinite; }
+@keyframes cf-pass50 { 0%,100% { box-shadow: 0 0 0 2px #56e0ff, 0 0 11px -2px rgba(86,224,255,.65); } 50% { box-shadow: 0 0 0 2.5px #b8f2ff, 0 0 20px 0 rgba(120,230,255,.95); } }
+.avatar.cf-pass75 { box-shadow: 0 0 0 2px #b06bff, 0 0 16px -2px rgba(176,107,255,.85); animation: cf-pass75 2.2s ease-in-out infinite; }
+@keyframes cf-pass75 { 0%,100% { box-shadow: 0 0 0 2px #b06bff, 0 0 13px -2px rgba(176,107,255,.7); } 50% { box-shadow: 0 0 0 2.5px #e0b3ff, 0 0 22px 0 rgba(200,140,255,1); } }
+/* Legenda – úroveň 100 (vrchol; zlatá pulzující záře, BEZ filter ať nemění avatar fotku) */
+.avatar.cf-legend { box-shadow: 0 0 0 3px #ffd23f, 0 0 20px -1px rgba(255,210,63,.95); animation: cf-legend 3.2s ease-in-out infinite; }
+@keyframes cf-legend { 0%,100% { box-shadow: 0 0 0 3px #ffd23f, 0 0 18px -1px rgba(255,210,63,.9); } 33% { box-shadow: 0 0 0 3px #fff0a8, 0 0 26px 1px rgba(255,240,168,1); } 66% { box-shadow: 0 0 0 3px #ffaf3c, 0 0 24px 0 rgba(255,175,60,.95); } }
+.cn-legend { background: linear-gradient(90deg,#fff0a8,#ffd23f,#ffffff,#ffd23f,#fff0a8); background-size:300% 100%; -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent; color:transparent !important; animation: cos-shine 4s linear infinite; }
+
+/* Level Pass – seznam milníků na stránce Bonusy */
+.lp-track { display: flex; flex-direction: column; gap: 8px; }
+.lp-node { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 14px; border: 1px solid var(--border); background: rgba(255,255,255,.03); }
+.lp-node.lp-ready { border-color: rgba(70,224,138,.5); background: rgba(70,224,138,.07); }
+.lp-node.lp-claimed { opacity: .72; }
+.lp-node.lp-locked { opacity: .82; }
+.lp-prev { width: 42px; height: 42px; border-radius: 50%; flex: 0 0 auto; background: #1a1f2e; }
+.lp-prev-name { display: flex; align-items: center; justify-content: center; font-weight: 900; font-size: 15px; background: #14161f; }
+.lp-info { flex: 1 1 auto; display: flex; flex-direction: column; min-width: 0; }
+.lp-info b { font-size: 14px; }
+.lp-info .faint { font-size: 12px; }
+.lp-done { font-size: 13px; color: var(--farm-green); font-weight: 700; flex: 0 0 auto; }
+.lp-lock { font-size: 12.5px; color: var(--text-dim); flex: 0 0 auto; }

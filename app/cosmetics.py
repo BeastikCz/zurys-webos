@@ -69,6 +69,13 @@ CATALOG = [
     {"key": "frame_galaxy",  "type": "frame", "name": "Galaxie",           "cost": 42000, "rarity": "contraband", "sub": True,  "cls": "cf-galaxy"},
     # ---- Exkluzivní (nelze koupit, jen vyhrát) ----
     {"key": "frame_champion", "type": "frame", "name": "Šampion sezóny 👑", "cost": 0, "rarity": "legendary", "sub": False, "cls": "cf-champion", "grant_only": True},
+    # ---- Level Pass milníky (grant-only – jen za dosaženou úroveň, nedají se koupit) ----
+    {"key": "frame_pass10", "type": "frame", "name": "Učeň ⭐ (úroveň 10)",      "cost": 0, "rarity": "restricted", "sub": False, "cls": "cf-pass10", "grant_only": True},
+    {"key": "frame_pass25", "type": "frame", "name": "Veterán 🔥 (úroveň 25)",   "cost": 0, "rarity": "classified",  "sub": False, "cls": "cf-pass25", "grant_only": True},
+    {"key": "frame_pass50", "type": "frame", "name": "Mistr 💎 (úroveň 50)",     "cost": 0, "rarity": "covert",      "sub": False, "cls": "cf-pass50", "grant_only": True},
+    {"key": "frame_pass75", "type": "frame", "name": "Velmistr 🌟 (úroveň 75)",  "cost": 0, "rarity": "contraband",  "sub": False, "cls": "cf-pass75", "grant_only": True},
+    {"key": "frame_legend", "type": "frame", "name": "Legenda 👑 (úroveň 100)",  "cost": 0, "rarity": "legendary",   "sub": False, "cls": "cf-legend", "grant_only": True},
+    {"key": "name_legend",  "type": "name",  "name": "Legenda (úroveň 100)",     "cost": 0, "rarity": "legendary",   "sub": False, "cls": "cn-legend", "grant_only": True},
 ]
 
 # Zrušené kousky (v1: profil bannery vypadaly špatně) → cena, pro JEDNORÁZOVÝ refund komu je

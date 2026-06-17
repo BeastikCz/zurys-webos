@@ -196,6 +196,11 @@ class BattlePassClaimIn(BaseModel):
     premium: bool = False
 
 
+class LevelPassClaimIn(BaseModel):
+    """Vyzvednutí milníku Level Passu (exkluzivní kosmetika za dosaženou úroveň)."""
+    level: int = Field(..., ge=1, le=100)
+
+
 class LoginCalClaimIn(BaseModel):
     """Vyzvednutí milníkového bonusu z login kalendáře (počet aktivních dní)."""
     milestone: int = Field(..., ge=1, le=31)

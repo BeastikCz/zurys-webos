@@ -14,7 +14,7 @@ from ..deps import (db_dep, require_user, add_points, try_debit, record_audit, c
                     user_rank, tier_for_rank, self_excluded_until)
 from ..models import (RedeemIn, TradeUrlIn, GiftIn, QuestClaimIn, CosmeticIn, FairSeedIn, SelfExcludeIn,
                       ProfileBioIn, WagerLimitIn, ModApplyIn, BattlePassClaimIn, LoginCalClaimIn,
-                      GardenPlantIn, GardenHarvestIn, DecorBuyIn)
+                      GardenPlantIn, GardenHarvestIn, DecorBuyIn, LevelPassClaimIn)
 from ..services import product_public, role_allows
 from ..ratelimit import rate_limit
 from ..security import secure_weighted_choice
@@ -476,6 +476,25 @@ def battlepass_claim(data: BattlePassClaimIn, user: sqlite3.Row = Depends(requir
     r = battlepass.claim(conn, user, data.tier, getattr(data, "premium", False))
     if not r.get("ok"):
         raise HTTPException(status_code=400, detail=r.get("error", "Tento tier teď vyzvednout nejde."))
+    return r
+
+
+@router.get("/level-pass")
+def level_pass_status(user: sqlite3.Row = Depends(require_user),
+                      conn: sqlite3.Connection = Depends(db_dep)):
+    """Level Pass uživatele: aktuální úroveň + milníky (10/25/50/75/100) a jejich stav."""
+    from .. import levelpass
+    return levelpass.status(conn, user)
+
+
+@router.post("/level-pass/claim")
+def level_pass_claim(data: LevelPassClaimIn, user: sqlite3.Row = Depends(require_user),
+                     conn: sqlite3.Connection = Depends(db_dep)):
+    """Vyzvedne milník Level Passu (exkluzivní kosmetika; server ověří dosaženou úroveň)."""
+    from .. import levelpass
+    r = levelpass.claim(conn, user, data.level)
+    if not r.get("ok"):
+        raise HTTPException(status_code=400, detail=r.get("error", "Tenhle milník teď vyzvednout nejde."))
     return r
 
 

@@ -2032,9 +2032,11 @@ function pageBonusy() {
     <div id="chatGoal" style="margin-bottom:18px"></div>
     <div id="subGoal" style="margin-bottom:18px"></div>
     <div id="bpCard"></div>
+    <div id="levelPassCard" style="margin-top:18px"></div>
     <div id="wheelCard" style="margin-top:18px"></div>
     <div id="partnersCard" style="margin-top:18px"></div>`;
   loadBattlePass();
+  loadLevelPass();
   loadWheel();
   loadPartnerLinks();
   loadCommunityGoal();
@@ -2177,6 +2179,46 @@ async function claimBpTier(tier, premium) {
     toast(`${premium ? "💜 PRÉMIUM tier" : "🎟️ Tier"} ${r.tier} vyzvednut! +${fmtPts(r.reward)} 🌾`, "success");
     try { confettiBurst(); } catch (e) {}
     renderHeader(); loadBattlePass();
+  } catch (e) { toast(e.message, "error"); }
+}
+
+async function loadLevelPass() {
+  const box = document.getElementById("levelPassCard"); if (!box) return;
+  try {
+    const lp = await api("/level-pass");
+    const nodes = lp.milestones.map((m) => {
+      const cls = m.claimed ? "lp-claimed" : (m.reached ? "lp-ready" : "lp-locked");
+      const rew = m.rewards[0] || {};
+      const preview = rew.type === "name"
+        ? `<div class="lp-prev lp-prev-name"><span class="${rew.cls || ""}">Abc</span></div>`
+        : `<div class="avatar lp-prev ${rew.cls || ""}"></div>`;
+      const action = m.claimed ? `<span class="lp-done">✓ Máš</span>`
+        : (m.reached ? `<button class="bp-claim${m.irl ? " bp-claim-prem" : ""}" data-action="lp-claim" data-level="${m.level}">Vyzvednout 🎁</button>`
+          : `<span class="lp-lock">🔒 Lvl ${m.level}</span>`);
+      return `<div class="lp-node ${cls}">
+        ${preview}
+        <div class="lp-info"><b>${m.icon} ${esc(m.label)}</b><span class="faint">Úroveň ${m.level}${m.irl ? " · 🔪 reálná cena!" : ""}</span></div>
+        ${action}
+      </div>`;
+    }).join("");
+    box.innerHTML = `<div class="panel">
+      <div class="row-between" style="flex-wrap:wrap;gap:8px;margin-bottom:6px">
+        <div class="section-title" style="margin:0">🏅 Level Pass</div>
+        <span class="faint" style="font-size:12.5px">Tvá úroveň <b style="color:var(--accent)">${lp.level}</b>${lp.claimable ? ` · <b style="color:var(--farm-green)">${lp.claimable} k vyzvednutí!</b>` : ""}</span>
+      </div>
+      <p class="muted" style="font-size:12.5px;margin:0 0 12px">Exkluzivní rámečky, co <b>nejdou koupit</b> — jen za dosaženou úroveň. A úroveň roste <b>jen poctivým farmením</b> (ne z gamblingu ani subů), takže je fakt vydřená. Vrchol = <b>úroveň 100</b> 👑 → trofej + <b>reálná cena</b>! 🔪</p>
+      <div class="lp-track">${nodes}</div>
+    </div>`;
+  } catch (e) { box.innerHTML = ""; }
+}
+async function claimLevelPass(level) {
+  try {
+    const r = await api("/level-pass/claim", { method: "POST", body: { level: parseInt(level, 10) } });
+    const names = (r.reward_names || []).join(" + ");
+    toast(`🏅 Milník ${r.level} (${r.label}) vyzvednut! Získal jsi: ${names} 🎁`, "success");
+    if (r.irl) toast("🔪 ÚROVEŇ 100! Streamer dostal echo na Discord — domluví se s tebou na předání reálné ceny! 👑", "success");
+    try { confettiBurst(); } catch (e) {}
+    loadLevelPass();
   } catch (e) { toast(e.message, "error"); }
 }
 
@@ -5078,6 +5120,7 @@ function handleAction(action, el) {
     case "wl-save": saveWagerLimit(); break;
     case "bp-claim": claimBpTier(el.dataset.tier); break;
     case "bp-claim-premium": claimBpTier(el.dataset.tier, true); break;
+    case "lp-claim": claimLevelPass(el.dataset.level); break;
     case "bp-daily": claimBpDaily(); break;
     case "grd-pick": grdPick(el.dataset.crop); break;
     case "grd-plant": grdPlant(el.dataset.plot); break;
