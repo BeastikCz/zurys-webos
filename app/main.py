@@ -142,6 +142,34 @@ try:
 finally:
     _xp.close()
 
+# Jednorázově (na žádost): RESET levelů – všichni od úrovně 1. Sedláci/body se NEMAŽOU,
+# nuluje se JEN lifetime XP (earned_total). Záloha předem do level_reset_backup → revert = restore.
+# Battle Pass baseline aktuální sezóny → 0 (jinak by pass zamrznul: počítá earned_total − baseline);
+# už vyzvednuté tiery zůstávají (žádný double-pay). Idempotentní (guard setting). Aditivně přidá
+# i changelog hlášku hráčům, ať je jim jasné proč jim spadl level.
+_lr = get_conn()
+try:
+    if not get_setting(_lr, "level_reset_v1", ""):
+        from .db import local_date
+        _lr.execute("CREATE TABLE IF NOT EXISTS level_reset_backup ("
+                    "user_id INTEGER PRIMARY KEY, earned_total INTEGER NOT NULL)")
+        _lr.execute("INSERT OR REPLACE INTO level_reset_backup (user_id, earned_total) "
+                    "SELECT id, earned_total FROM users")
+        _lr.execute("UPDATE users SET earned_total = 0")
+        _lr.execute("UPDATE battlepass SET baseline = 0 WHERE season = ?", (local_date()[:7],))
+        _lr.execute(
+            "INSERT INTO patch_notes (title, body, tag, published, created_at) VALUES (?, ?, ?, ?, ?)",
+            ("🏆 Level Pass startuje – všichni od úrovně 1!",
+             "Spustili jsme Level Pass a s ním férový restart: všem se úroveň vynulovala na 1. "
+             "Tvoje sedláky, skiny i odměny zůstávají! 🌾 Závod o milníky (a 🔪 nožík na úrovni 100) "
+             "teď začíná úplně od začátku – kdo nejvíc farmí, vyhrává. 💪",
+             "🏆 Level Pass", 1, now_iso()))
+        set_setting(_lr, "level_reset_v1", "done")
+        _lr.commit()
+        print("[lvl] reset levelu hotov - vsichni od 1, body netknute, zaloha v level_reset_backup")
+finally:
+    _lr.close()
+
 # Jednorázově: import ručně dodaných tiketů do tomboly Navaja (ghost účty bez Kicku).
 # Idempotentní (flag navaja_import_v1) + plně vratné (navaja_import.undo). Viz modul.
 _nv = get_conn()
