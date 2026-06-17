@@ -303,6 +303,14 @@ CREATE TABLE IF NOT EXISTS garden (
     PRIMARY KEY (user_id, plot)
 );
 
+-- Dekorace zahrádky: koupené farmářské ozdoby (cosmetic sink). Vlastní se navždy.
+CREATE TABLE IF NOT EXISTS garden_decor (
+    user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    decor_key  TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    PRIMARY KEY (user_id, decor_key)
+);
+
 -- PvP hry o body: piškvorky (gomoku). 1v1 se sázkou, escrow vkladů, vítěz bere bank.
 CREATE TABLE IF NOT EXISTS games (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,

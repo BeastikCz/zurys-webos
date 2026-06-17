@@ -2073,8 +2073,36 @@ function pageGarden() {
   const view = $("#view");
   if (!state.user) { view.innerHTML = `<div class="empty"><div class="big">🌱</div>Přihlas se přes Kick a začni pěstovat sedláky!</div>`; return; }
   view.innerHTML = `<div class="page-head with-mascot"><img class="page-mascot" src="/sedlak-cut.png" alt=""><div class="ph-text"><h1>🌱 Zahrádka</h1><p class="muted">Vyber semínko → zasaď na záhon → počkej až doroste → sklidíš sedláky! 🌾</p></div></div>
-    <div id="gardenBox">${skeletonCards(1)}</div>`;
+    <div id="gardenBox">${skeletonCards(1)}</div>
+    <div id="gardenDecor" style="margin-top:8px"></div>`;
   loadGarden();
+  loadGardenDecor();
+}
+async function loadGardenDecor() {
+  const box = document.getElementById("gardenDecor"); if (!box) return;
+  try {
+    const d = await api("/garden/decor");
+    const shelf = d.owned_icons.length
+      ? `<div class="decor-shelf">${d.owned_icons.map((i) => `<span>${i}</span>`).join("")}</div>`
+      : `<p class="muted" style="font-size:12.5px;margin:0 0 10px">Zatím žádné dekorace — kup si je dole a oživ zahrádku! 🌻</p>`;
+    const shop = d.items.map((it) => {
+      const btn = it.owned ? `<span class="decor-owned">✓ máš</span>`
+        : `<button class="bp-claim" data-action="decor-buy" data-key="${it.key}">${fmtPts(it.cost)}</button>`;
+      return `<div class="decor-card${it.owned ? " owned" : ""}"><div class="decor-ico">${it.icon}</div><b>${esc(it.name)}</b>${btn}</div>`;
+    }).join("");
+    box.innerHTML = `<div class="section-title" style="margin:26px 0 8px">🎨 Dekorace zahrádky</div>
+      ${shelf}
+      <div class="decor-shop">${shop}</div>`;
+  } catch (e) { box.innerHTML = ""; }
+}
+async function buyDecor(key) {
+  try {
+    const r = await api("/garden/decor/buy", { method: "POST", body: { key } });
+    if (state.user) state.user.points = r.balance;
+    toast(`Koupeno: ${r.icon} ${r.name}! 🎨`, "success");
+    try { confettiBurst(); } catch (e) {}
+    renderHeader(); loadGardenDecor();
+  } catch (e) { toast(e.message, "error"); }
 }
 async function loadGarden() {
   const box = document.getElementById("gardenBox"); if (!box) return;
@@ -5119,6 +5147,7 @@ function handleAction(action, el) {
     case "grd-pick": grdPick(el.dataset.crop); break;
     case "grd-plant": grdPlant(el.dataset.plot); break;
     case "grd-harvest": grdHarvest(el.dataset.plot); break;
+    case "decor-buy": buyDecor(el.dataset.key); break;
     case "claim-partner": claimPartnerLink(el.dataset.id, el.dataset.url); break;
     case "cos-buy": buyCosmetic(el.dataset.key); break;
     case "cos-equip": equipCosmetic(el.dataset.key); break;

@@ -42,3 +42,24 @@ def test_garden_plant_grow_harvest(client):
         assert garden.plant(conn, user, 1, "neznama")["ok"] is False   # neznámá plodina
     finally:
         conn.close()
+
+
+def test_garden_decor_buy(client):
+    from app.db import get_conn
+    from app import garden
+    conn = get_conn()
+    try:
+        uid = _mk(conn, points=3000)
+        user = {"id": uid}
+        st = garden.decor_status(conn, user)
+        assert len(st["items"]) == len(garden.DECOR) and not st["owned_icons"]
+
+        r = garden.buy_decor(conn, user, "sunflower")   # cost 500
+        assert r["ok"] and r["balance"] == 2500
+        assert garden.buy_decor(conn, user, "sunflower")["ok"] is False     # už vlastní
+        assert "🌻" in garden.decor_status(conn, user)["owned_icons"]
+
+        assert garden.buy_decor(conn, user, "rainbow")["ok"] is False       # 9000 > 2500
+        assert garden.buy_decor(conn, user, "neznama")["ok"] is False       # neznámá
+    finally:
+        conn.close()

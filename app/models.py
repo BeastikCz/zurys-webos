@@ -211,6 +211,11 @@ class GardenHarvestIn(BaseModel):
     plot: int = Field(..., ge=0, le=20)
 
 
+class DecorBuyIn(BaseModel):
+    """Koupě dekorace zahrádky."""
+    key: str = Field(..., min_length=1, max_length=24)
+
+
 class CommunityGoalIn(BaseModel):
     """Nastavení komunitního chat cíle (posílají se jen měněná pole)."""
     enabled: Optional[int] = Field(default=None, ge=0, le=1)

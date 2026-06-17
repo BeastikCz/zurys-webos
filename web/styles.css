@@ -1699,6 +1699,18 @@ body::before { display: none !important; }
   transition: width .6s cubic-bezier(.2,.8,.2,1); }
 @media (max-width:760px){ .lvl-pill .lvl-bar { display: none; } }
 
+/* Dekorace zahrádky */
+.decor-shelf { display: flex; gap: 12px; flex-wrap: wrap; font-size: 38px; padding: 14px 16px; margin-bottom: 14px;
+  border-radius: 16px; border: 1px solid var(--border);
+  background: linear-gradient(180deg, rgba(126,217,87,.06), rgba(60,44,22,.18)); }
+.decor-shop { display: flex; gap: 12px; flex-wrap: wrap; }
+.decor-card { flex: 1 1 130px; display: flex; flex-direction: column; align-items: center; gap: 6px;
+  padding: 14px 10px; border-radius: 16px; border: 1.5px solid var(--border); background: rgba(255,255,255,.03); }
+.decor-card.owned { border-color: var(--farm-green); background: rgba(126,217,87,.07); }
+.decor-ico { font-size: 38px; }
+.decor-card b { font-size: 13px; }
+.decor-owned { font-size: 12px; font-weight: 800; color: var(--farm-green); }
+
 /* Zahrádka (farm-sim) */
 .grd-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 14px; }
 .grd-plot { aspect-ratio: 1; border-radius: 20px; border: 2px solid var(--border);

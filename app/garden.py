@@ -78,3 +78,40 @@ def harvest(conn, user, plot: int) -> dict:
     conn.commit()
     bal = conn.execute("SELECT points FROM users WHERE id = ?", (user["id"],)).fetchone()["points"]
     return {"ok": True, "reward": reward, "balance": bal, "name": c.get("name")}
+
+
+# ---- Dekorace zahrádky (cosmetic sink: kup → vlastníš → zdobí zahrádku) ----
+DECOR = [
+    {"key": "sunflower", "icon": "🌻", "name": "Slunečnice", "cost": 500},
+    {"key": "tree",      "icon": "🌳", "name": "Strom",      "cost": 1000},
+    {"key": "well",      "icon": "⛲", "name": "Studna",     "cost": 2000},
+    {"key": "tractor",   "icon": "🚜", "name": "Traktor",    "cost": 3500},
+    {"key": "house",     "icon": "🏡", "name": "Chaloupka",  "cost": 5500},
+    {"key": "rainbow",   "icon": "🌈", "name": "Duha",       "cost": 9000},
+]
+_DECOR_BY_KEY = {d["key"]: d for d in DECOR}
+
+
+def decor_status(conn, user) -> dict:
+    owned = {r["decor_key"] for r in conn.execute(
+        "SELECT decor_key FROM garden_decor WHERE user_id = ?", (user["id"],))}
+    items = [{"key": d["key"], "icon": d["icon"], "name": d["name"], "cost": d["cost"],
+              "owned": d["key"] in owned} for d in DECOR]
+    return {"items": items, "owned_icons": [d["icon"] for d in DECOR if d["key"] in owned]}
+
+
+def buy_decor(conn, user, key: str) -> dict:
+    from .deps import try_debit
+    d = _DECOR_BY_KEY.get(key)
+    if not d:
+        return {"ok": False, "error": "Neznámá dekorace."}
+    if conn.execute("SELECT 1 FROM garden_decor WHERE user_id = ? AND decor_key = ?",
+                    (user["id"], key)).fetchone():
+        return {"ok": False, "error": "Tuhle dekoraci už máš. ✅"}
+    if not try_debit(conn, user["id"], d["cost"], f"Dekorace zahrádky: {d['name']} {d['icon']}"):
+        return {"ok": False, "error": f"Nemáš dost sedláků ({d['cost']})."}
+    conn.execute("INSERT INTO garden_decor (user_id, decor_key, created_at) VALUES (?, ?, ?)",
+                 (user["id"], key, now_iso()))
+    conn.commit()
+    bal = conn.execute("SELECT points FROM users WHERE id = ?", (user["id"],)).fetchone()["points"]
+    return {"ok": True, "balance": bal, "name": d["name"], "icon": d["icon"]}

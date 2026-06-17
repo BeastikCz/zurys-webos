@@ -14,7 +14,7 @@ from ..deps import (db_dep, require_user, add_points, try_debit, record_audit, c
                     user_rank, tier_for_rank, self_excluded_until)
 from ..models import (RedeemIn, TradeUrlIn, GiftIn, QuestClaimIn, CosmeticIn, FairSeedIn, SelfExcludeIn,
                       ProfileBioIn, WagerLimitIn, ModApplyIn, BattlePassClaimIn, LoginCalClaimIn,
-                      GardenPlantIn, GardenHarvestIn)
+                      GardenPlantIn, GardenHarvestIn, DecorBuyIn)
 from ..services import product_public, role_allows
 from ..ratelimit import rate_limit
 from ..security import secure_weighted_choice
@@ -1003,6 +1003,25 @@ def garden_harvest(data: GardenHarvestIn, user: sqlite3.Row = Depends(require_us
     r = garden.harvest(conn, user, data.plot)
     if not r.get("ok"):
         raise HTTPException(status_code=400, detail=r.get("error", "Nelze sklidit."))
+    return r
+
+
+@router.get("/garden/decor")
+def garden_decor(user: sqlite3.Row = Depends(require_user),
+                 conn: sqlite3.Connection = Depends(db_dep)):
+    """Dekorace zahrádky: katalog + co hráč vlastní."""
+    from .. import garden
+    return garden.decor_status(conn, user)
+
+
+@router.post("/garden/decor/buy")
+def garden_decor_buy(data: DecorBuyIn, user: sqlite3.Row = Depends(require_user),
+                     conn: sqlite3.Connection = Depends(db_dep)):
+    """Koupí dekoraci (cosmetic sink, vlastní se navždy)."""
+    from .. import garden
+    r = garden.buy_decor(conn, user, data.key)
+    if not r.get("ok"):
+        raise HTTPException(status_code=400, detail=r.get("error", "Nelze koupit."))
     return r
 
 
