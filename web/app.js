@@ -2321,10 +2321,9 @@ async function claimPartnerLink(id, url) {
 async function refreshBonusDot() {
   if (!state.user) { bonusReady = false; return; }
   try {
-    const [d, w, qs, pl] = await Promise.all([api("/daily/status"), api("/wheel/status"), api("/quests").catch(() => []), api("/partner-links").catch(() => ({ links: [] }))]);
-    const questReady = Array.isArray(qs) && qs.some((q) => q.completed && !q.claimed);
+    const [d, w, pl] = await Promise.all([api("/daily/status"), api("/wheel/status"), api("/partner-links").catch(() => ({ links: [] }))]);
     const partnerReady = pl && Array.isArray(pl.links) && pl.links.some((l) => l.claimable);
-    bonusReady = !!(d.can_claim || w.can_spin || questReady || partnerReady);
+    bonusReady = !!(d.can_claim || w.can_spin || partnerReady);
   } catch (e) { return; }
   renderHeader();
 }
@@ -4799,21 +4798,28 @@ async function pageHallOfFame() {
   box.innerHTML = skeletonCards(2);
   try {
     const d = await api("/hall-of-fame");
-    const row = (u, i, mfn) => `<div class="hof-row">
+    const ageMs = (iso) => { try { return Date.now() - new Date(iso).getTime(); } catch (e) { return 0; } };
+    const row = (u, i, mfn, frac) => `<div class="hof-row">
       <span class="hof-rank${i < 3 ? " g" + (i + 1) : ""}">${i + 1}</span>
       ${avatarHTML(u.username, u.avatar_url, "hof-av")}
-      <span class="hof-name">${uLink(u.username)} ${roleBadge(u.role)}</span>
+      <div class="hof-mid">
+        <div class="hof-name">${uLink(u.username)} ${roleBadge(u.role)}</div>
+        <div class="hof-track"><span style="width:${Math.max(4, Math.round((frac || 0) * 100))}%"></span></div>
+      </div>
       <span class="hof-metric">${mfn(u)}</span>
     </div>`;
-  const board = (icon, title, hint, list, mfn) => `<div class="panel hof-card">
+    const board = (icon, title, hint, list, mfn, valFn) => {
+      const max = Math.max(1, ...list.map((u) => valFn ? valFn(u) : 0));
+      return `<div class="panel hof-card">
       <div class="hof-head">${icon} ${title} <span class="faint" style="font-size:12px;font-weight:400">— ${hint}</span></div>
-      <div class="hof-list">${list.length ? list.map((u, i) => row(u, i, mfn)).join("") : `<div class="faint" style="font-size:13px;padding:6px 0">Zatím nikdo.</div>`}</div>
+      <div class="hof-list">${list.length ? list.map((u, i) => row(u, i, mfn, (valFn ? valFn(u) : 0) / max)).join("") : `<div class="faint" style="font-size:13px;padding:6px 0">Zatím nikdo.</div>`}</div>
     </div>`;
+    };
     box.innerHTML = `<div class="hof-grid">
-      ${board("🏆", "Nejvěrnější", "nejdéle v komunitě", d.loyal, (u) => "🎂 " + memberSince(u.created_at))}
-      ${board("💜", "Subscribeři", "naši subové", d.subs, () => "💜 sub")}
-      ${board("🎁", "Nejštědřejší", "nejvíc gift subů", d.gifters, (u) => { const n = u.subs || 0; const w = n === 1 ? "sub" : (n >= 2 && n <= 4 ? "suby" : "subů"); return `🎁 <b>${n}</b> ${w} <span class="faint" style="font-weight:400">· ${fmtPts(u.metric || 0)}</span>`; })}
-      ${board("🔥", "Nejaktivnější", "nejvíc v chatu", d.active, (u) => "💬 " + (u.metric || 0))}
+      ${board("🏆", "Nejvěrnější", "nejdéle v komunitě", d.loyal, (u) => "🎂 " + memberSince(u.created_at), (u) => ageMs(u.created_at))}
+      ${board("💜", "Subscribeři", "naši subové", d.subs, () => "💜 sub", (u) => ageMs(u.created_at))}
+      ${board("🎁", "Nejštědřejší", "nejvíc gift subů", d.gifters, (u) => { const n = u.subs || 0; const w = n === 1 ? "sub" : (n >= 2 && n <= 4 ? "suby" : "subů"); return `🎁 <b>${n}</b> ${w} <span class="faint" style="font-weight:400">· ${fmtPts(u.metric || 0)}</span>`; }, (u) => u.subs || 0)}
+      ${board("🔥", "Nejaktivnější", "nejvíc v chatu", d.active, (u) => "💬 " + (u.metric || 0), (u) => u.metric || 0)}
     </div>`;
   } catch (e) { box.innerHTML = `<div class="empty">${esc(e.message)}</div>`; }
 }

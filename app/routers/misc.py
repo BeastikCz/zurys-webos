@@ -356,9 +356,16 @@ def my_game_stats(user: sqlite3.Row = Depends(require_user),
 
 
 # ---------------- Síň slávy (veřejní top podporovatelé) ----------------
+_hof_cache = {"at": 0.0, "data": None}
+
+
 @router.get("/hall-of-fame")
 def hall_of_fame(conn: sqlite3.Connection = Depends(db_dep)):
-    """Veřejné žebříčky uznání (status bez gamblingu): nejvěrnější / subs / nejštědřejší / nejaktivnější."""
+    """Veřejné žebříčky uznání (status bez gamblingu): nejvěrnější / subs / nejštědřejší / nejaktivnější. Cache 60 s."""
+    import time
+    _nowm = time.monotonic()
+    if _hof_cache["data"] is not None and _nowm - _hof_cache["at"] < _WEEKLY_TTL:
+        return _hof_cache["data"]
     def q(sql, params=()):
         return [dict(r) for r in conn.execute(sql, params)]
     loyal = q("SELECT username, avatar_url, role, created_at FROM users "
@@ -385,7 +392,9 @@ def hall_of_fame(conn: sqlite3.Connection = Depends(db_dep)):
     active = q("SELECT u.username, u.avatar_url, u.role, COUNT(*) AS metric "
                "FROM points_log l JOIN users u ON u.id=l.user_id "
                "WHERE l.reason='Aktivita v chatu' AND u.banned=0 GROUP BY u.id ORDER BY metric DESC LIMIT 10")
-    return {"loyal": loyal, "subs": subs, "gifters": gifters, "active": active}
+    data = {"loyal": loyal, "subs": subs, "gifters": gifters, "active": active}
+    _hof_cache.update(at=_nowm, data=data)
+    return data
 
 
 # ---------------- Nábor moderátorů (přihláška) ----------------

@@ -76,6 +76,8 @@ def test_hall_of_fame_gifters_counts_subs(client):
         conn.commit()
     finally:
         conn.close()
+    from app.routers import misc
+    misc._hof_cache["data"] = None     # vynuluj cache → čerstvá data vč. nového giftera
     g = client.get("/api/hall-of-fame").json()["gifters"]
     me = next((x for x in g if x["username"] == u), None)
     assert me is not None, "gifter má být v žebříčku (×9000 = rank 1)"

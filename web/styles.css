@@ -637,20 +637,6 @@ footer.site-footer { border-top: 1px solid var(--border); padding: 22px 0; color
 .tag-pending { color: var(--warning); font-weight: 700; } .tag-done { color: var(--success); font-weight: 700; }
 .pos { color: var(--success); font-weight: 800; } .neg { color: var(--danger); font-weight: 800; }
 
-/* daily streak */
-#dailyCard .panel { border-left-color: var(--accent); margin-bottom: 18px; }
-.ds-badge { background: rgba(70,224,138,.14); color: var(--success); border: 1px solid rgba(70,224,138,.5); font-weight: 800; font-size: 12px; padding: 5px 12px; border-radius: 999px; white-space: nowrap; }
-.ds-row { display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px; margin-bottom: 14px; }
-.ds-chip { border-radius: 10px; padding: 10px 4px; text-align: center; border: 1px solid var(--border); background: var(--surface-2); }
-.ds-chip .ds-rew { font-weight: 900; font-size: 14px; }
-.ds-chip .ds-lbl { font-size: 10px; font-weight: 800; color: var(--text-faint); margin-top: 3px; }
-.ds-chip.done { background: rgba(70,224,138,.12); border-color: rgba(70,224,138,.5); }
-.ds-chip.done .ds-rew, .ds-chip.done .ds-lbl { color: var(--success); }
-.ds-chip.today { background: rgba(255,157,46,.16); border-color: var(--accent); box-shadow: 0 0 14px var(--accent-glow); }
-.ds-chip.today .ds-rew, .ds-chip.today .ds-lbl { color: var(--accent); }
-.ds-chip.locked { opacity: .65; }
-@media (max-width: 520px) { .ds-row { gap: 5px; } .ds-chip { padding: 8px 2px; } .ds-chip .ds-rew { font-size: 12px; } }
-
 /* kolo štěstí */
 .wheel-panel { border-left-color: #e8b923; margin-bottom: 18px; }
 .wheel-badge { background: rgba(232,185,35,.14); color: #e8b923; border: 1px solid rgba(232,185,35,.5); font-weight: 800; font-size: 12px; padding: 5px 12px; border-radius: 999px; white-space: nowrap; }
@@ -807,7 +793,12 @@ footer.site-footer { border-top: 1px solid var(--border); padding: 22px 0; color
 .hof-rank.g2 { background: linear-gradient(135deg,#e8ecf5,#aeb6c7); color: #1a1200; }
 .hof-rank.g3 { background: linear-gradient(135deg,#f0b486,#c87a43); color: #1a1200; }
 .hof-av { width: 30px !important; height: 30px !important; font-size: 12px !important; flex-shrink: 0; }
-.hof-name { flex: 1; min-width: 0; font-weight: 700; font-size: 13.5px; overflow: hidden; text-overflow: ellipsis; }
+.hof-mid { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.hof-name { display: flex; align-items: center; gap: 6px; min-width: 0; font-weight: 700; font-size: 13.5px; }
+.hof-name .prof-link { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hof-name .badge { flex: 0 0 auto; }
+.hof-track { height: 6px; border-radius: 999px; background: rgba(255,255,255,.07); overflow: hidden; }
+.hof-track > span { display: block; height: 100%; border-radius: 999px; background: linear-gradient(90deg, var(--accent), var(--farm-green)); }
 .hof-metric { font-weight: 800; font-size: 12.5px; color: var(--text-dim); white-space: nowrap; }
 .loy-badge { display: inline-block; font-size: 11px; font-weight: 800; padding: 1px 8px; border-radius: 999px; vertical-align: middle; }
 .loy-new { background: rgba(70,224,138,.15); color: #6ef0a0; }
@@ -1476,31 +1467,9 @@ body::before { display: none !important; }
 .bp-claim:hover { filter: brightness(1.08); transform: translateY(-1px); }
 @keyframes bpPulse { 0%,100% { box-shadow: 0 0 0 1px var(--accent-glow), 0 0 18px -10px var(--accent-glow); } 50% { box-shadow: 0 0 0 1px var(--accent), 0 0 30px -6px var(--accent-glow); } }
 
-/* 6) Login kalendář */
-.cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; margin-bottom: 14px; }
-.cal-cell { aspect-ratio: 1; border-radius: 9px; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 800; border: 1px solid var(--border); color: var(--text-faint); }
-.cal-cell.cal-on { background: rgba(126,217,87,.16); border-color: var(--farm-green); color: var(--farm-green); }
-.cal-cell.cal-today { border-color: var(--accent); color: var(--accent); animation: bpPulse 2s ease-in-out infinite; }
-.cal-cell.cal-miss { opacity: .38; }
-.cal-cell.cal-future { opacity: .5; }
-.cal-ms-row { display: flex; gap: 10px; flex-wrap: wrap; }
-.cal-ms { flex: 1 1 92px; border: 1.5px solid var(--border); border-radius: 14px; padding: 10px 8px; text-align: center; display: flex; flex-direction: column; gap: 6px; align-items: center; }
-.cal-ms.ready { border-color: var(--accent); animation: bpPulse 2s ease-in-out infinite; }
-.cal-ms.done { border-color: var(--farm-green); background: rgba(126,217,87,.08); }
-.cal-ms-d { font-size: 11.5px; font-weight: 800; color: var(--text-dim); }
-.cal-ms-r { font-size: 12px; font-weight: 800; min-height: 26px; display: flex; align-items: center; }
-.cal-ms.done .cal-ms-r { color: var(--farm-green); font-size: 17px; }
-
 /* propojení: denní aktivita → Battle Pass */
 .feeds-pass {
   font-size: 10.5px; font-weight: 800; color: var(--accent);
   background: rgba(255,180,35,.12); border: 1px solid rgba(255,180,35,.3);
   border-radius: 999px; padding: 2px 8px; margin-left: 6px; vertical-align: middle; white-space: nowrap;
-}
-
-/* 3) oheň/ember glow na daily streak kartě */
-#dailyCard .panel { animation: streakEmber 3.2s ease-in-out infinite; }
-@keyframes streakEmber {
-  0%, 100% { box-shadow: var(--shadow), 0 0 0 1px rgba(255,140,40,.18), 0 0 26px -12px rgba(255,120,30,.42); }
-  50% { box-shadow: var(--shadow), 0 0 0 1px rgba(255,165,55,.34), 0 0 42px -8px rgba(255,140,40,.62); }
 }
