@@ -830,7 +830,8 @@ footer.site-footer { border-top: 1px solid var(--border); padding: 22px 0; color
 /* ============ Responsive ============ */
 .kick-short { display: none; }   /* zkrácený label Kick tlačítka – jen na mobilu */
 
-@media (max-width: 860px) {
+@media (max-width: 1100px) {
+  /* hamburger zapnem dřív – plná nav lišta (8 položek + level pill + chip) se do ~1100 px nevejde a přetékala */
   .nav { display: none; } .hamburger { display: grid; } .user-chip .uc-name, .user-chip .uc-tier { display: none; }
   .da-head h1 { font-size: 26px; } .pts-pill .lbl { display: none; }
 }
