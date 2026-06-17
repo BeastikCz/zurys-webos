@@ -200,6 +200,17 @@ class LoginCalClaimIn(BaseModel):
     milestone: int = Field(..., ge=1, le=31)
 
 
+class GardenPlantIn(BaseModel):
+    """Zasazení plodiny na záhon v zahrádce."""
+    plot: int = Field(..., ge=0, le=20)
+    crop: str = Field(..., min_length=1, max_length=24)
+
+
+class GardenHarvestIn(BaseModel):
+    """Sklizeň záhonu v zahrádce."""
+    plot: int = Field(..., ge=0, le=20)
+
+
 class CommunityGoalIn(BaseModel):
     """Nastavení komunitního chat cíle (posílají se jen měněná pole)."""
     enabled: Optional[int] = Field(default=None, ge=0, le=1)

@@ -292,6 +292,17 @@ CREATE TABLE IF NOT EXISTS login_calendar (
     PRIMARY KEY (user_id, month)
 );
 
+-- Zahrádka (farm-sim): zasazené plodiny na záhonech. Prázdný záhon = žádný řádek.
+-- Plant = zaplať sazbu + nastav ready_at; po dorostení harvest = odměna, řádek smaž.
+CREATE TABLE IF NOT EXISTS garden (
+    user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    plot       INTEGER NOT NULL,             -- 0..N_PLOTS-1
+    crop       TEXT NOT NULL,
+    planted_at TEXT NOT NULL,
+    ready_at   TEXT NOT NULL,
+    PRIMARY KEY (user_id, plot)
+);
+
 -- PvP hry o body: piškvorky (gomoku). 1v1 se sázkou, escrow vkladů, vítěz bere bank.
 CREATE TABLE IF NOT EXISTS games (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,

@@ -13,7 +13,8 @@ from ..db import now_iso, get_setting
 from ..deps import (db_dep, require_user, add_points, try_debit, record_audit, client_ip,
                     user_rank, tier_for_rank, self_excluded_until)
 from ..models import (RedeemIn, TradeUrlIn, GiftIn, QuestClaimIn, CosmeticIn, FairSeedIn, SelfExcludeIn,
-                      ProfileBioIn, WagerLimitIn, ModApplyIn, BattlePassClaimIn, LoginCalClaimIn)
+                      ProfileBioIn, WagerLimitIn, ModApplyIn, BattlePassClaimIn, LoginCalClaimIn,
+                      GardenPlantIn, GardenHarvestIn)
 from ..services import product_public, role_allows
 from ..ratelimit import rate_limit
 from ..security import secure_weighted_choice
@@ -972,6 +973,36 @@ def login_calendar_claim(data: LoginCalClaimIn, user: sqlite3.Row = Depends(requ
     r = claim(conn, user, data.milestone)
     if not r.get("ok"):
         raise HTTPException(status_code=400, detail=r.get("error", "Milník nelze vyzvednout."))
+    return r
+
+
+@router.get("/garden")
+def garden_status(user: sqlite3.Row = Depends(require_user),
+                  conn: sqlite3.Connection = Depends(db_dep)):
+    """Zahrádka: stav záhonů (prázdný/roste/hotovo) + dostupné plodiny."""
+    from .. import garden
+    return garden.status(conn, user)
+
+
+@router.post("/garden/plant")
+def garden_plant(data: GardenPlantIn, user: sqlite3.Row = Depends(require_user),
+                 conn: sqlite3.Connection = Depends(db_dep)):
+    """Zasadí plodinu na záhon (zaplatí sazbu)."""
+    from .. import garden
+    r = garden.plant(conn, user, data.plot, data.crop)
+    if not r.get("ok"):
+        raise HTTPException(status_code=400, detail=r.get("error", "Nelze zasadit."))
+    return r
+
+
+@router.post("/garden/harvest")
+def garden_harvest(data: GardenHarvestIn, user: sqlite3.Row = Depends(require_user),
+                   conn: sqlite3.Connection = Depends(db_dep)):
+    """Sklidí dorostlý záhon (odměna)."""
+    from .. import garden
+    r = garden.harvest(conn, user, data.plot)
+    if not r.get("ok"):
+        raise HTTPException(status_code=400, detail=r.get("error", "Nelze sklidit."))
     return r
 
 

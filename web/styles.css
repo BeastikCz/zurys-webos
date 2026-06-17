@@ -1699,6 +1699,28 @@ body::before { display: none !important; }
   transition: width .6s cubic-bezier(.2,.8,.2,1); }
 @media (max-width:760px){ .lvl-pill .lvl-bar { display: none; } }
 
+/* Zahrádka (farm-sim) */
+.grd-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 14px; }
+.grd-plot { aspect-ratio: 1; border-radius: 20px; border: 2px solid var(--border);
+  background: linear-gradient(180deg, rgba(110,80,40,.18), rgba(60,44,22,.22));
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; padding: 12px; transition: transform .15s, border-color .15s; }
+.grd-plot.grd-empty { cursor: pointer; border-style: dashed; }
+.grd-plot.grd-empty:hover { transform: translateY(-3px); border-color: var(--accent); }
+.grd-plot.grd-ready { border-color: var(--farm-green); box-shadow: 0 0 26px -8px rgba(126,217,87,.5); animation: bpPulse 2s ease-in-out infinite; }
+.grd-crop { font-size: 46px; line-height: 1; filter: drop-shadow(0 6px 12px rgba(0,0,0,.5)); }
+.grd-sprout { animation: sedlakBob 2.4s ease-in-out infinite; }
+.grd-lbl { font-size: 12.5px; font-weight: 800; color: var(--text-dim); }
+.grd-time { font-size: 12px; font-weight: 900; color: var(--accent); font-variant-numeric: tabular-nums; }
+.grd-shop { display: flex; gap: 12px; flex-wrap: wrap; }
+.grd-seed { flex: 1 1 150px; display: flex; flex-direction: column; gap: 4px; align-items: flex-start;
+  padding: 12px 14px; border-radius: 14px; border: 1.5px solid var(--border); background: rgba(255,255,255,.03);
+  cursor: pointer; text-align: left; color: var(--text); transition: .15s; }
+.grd-seed:hover { transform: translateY(-2px); border-color: var(--accent); }
+.grd-seed.sel { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent-glow), 0 0 24px -8px var(--accent-glow); background: rgba(255,180,35,.08); }
+.grd-seed .grd-si { font-size: 26px; }
+.grd-seed b { font-size: 14px; }
+.grd-seed .faint { font-size: 11.5px; }
+
 /* denní bonus folded v Battle Passu */
 .bp-daily-done { font-size: 12.5px; font-weight: 700; color: var(--farm-green); background: rgba(126,217,87,.08); border: 1px solid rgba(126,217,87,.28); border-radius: 12px; padding: 9px 12px; margin: 0 0 14px; text-align: center; }
 
