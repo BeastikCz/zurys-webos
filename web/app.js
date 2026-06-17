@@ -2164,7 +2164,7 @@ async function loadBattlePass() {
         <div class="section-title" style="margin:0">🎟️ Farmářský Battle Pass</div>
         <span class="faint" style="font-size:12.5px">Sezóna ${esc(bp.season)} · Tier <b style="color:var(--accent)">${bp.tier}</b>/${bp.max_tier}${bp.claimable ? ` · <b style="color:var(--farm-green)">${bp.claimable} k vyzvednutí!</b>` : ""}</span>
       </div>
-      <p class="muted" style="font-size:12.5px;margin:0 0 10px">Vše co nasbíráš — <b>denní bonus, kolo, výhry, sledování</b> — tě posouvá v passu. Reset každý měsíc. <span class="faint">(${fmtPts(bp.into)} / ${fmtPts(bp.tier_xp)} do dalšího tieru)</span></p>
+      <p class="muted" style="font-size:12.5px;margin:0 0 10px">Vše co nafarmíš — <b>sledování, chat, denní bonus, kolo, úkoly</b> — tě posouvá v passu. Reset každý měsíc. <span class="faint">(${fmtPts(bp.into)} / ${fmtPts(bp.tier_xp)} do dalšího tieru)</span></p>
       ${premBanner}
       ${dailyHtml}
       <div class="bp-prog"><i style="width:${bp.pct}%"></i></div>
