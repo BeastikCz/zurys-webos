@@ -1716,6 +1716,21 @@ body::before { display: none !important; }
 .bp-claim:hover { filter: brightness(1.08); transform: translateY(-1px); }
 @keyframes bpPulse { 0%,100% { box-shadow: 0 0 0 1px var(--accent-glow), 0 0 18px -10px var(--accent-glow); } 50% { box-shadow: 0 0 0 1px var(--accent), 0 0 30px -6px var(--accent-glow); } }
 
+/* 6) Login kalendář */
+.cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; margin-bottom: 14px; }
+.cal-cell { aspect-ratio: 1; border-radius: 9px; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 800; border: 1px solid var(--border); color: var(--text-faint); }
+.cal-cell.cal-on { background: rgba(126,217,87,.16); border-color: var(--farm-green); color: var(--farm-green); }
+.cal-cell.cal-today { border-color: var(--accent); color: var(--accent); animation: bpPulse 2s ease-in-out infinite; }
+.cal-cell.cal-miss { opacity: .38; }
+.cal-cell.cal-future { opacity: .5; }
+.cal-ms-row { display: flex; gap: 10px; flex-wrap: wrap; }
+.cal-ms { flex: 1 1 92px; border: 1.5px solid var(--border); border-radius: 14px; padding: 10px 8px; text-align: center; display: flex; flex-direction: column; gap: 6px; align-items: center; }
+.cal-ms.ready { border-color: var(--accent); animation: bpPulse 2s ease-in-out infinite; }
+.cal-ms.done { border-color: var(--farm-green); background: rgba(126,217,87,.08); }
+.cal-ms-d { font-size: 11.5px; font-weight: 800; color: var(--text-dim); }
+.cal-ms-r { font-size: 12px; font-weight: 800; min-height: 26px; display: flex; align-items: center; }
+.cal-ms.done .cal-ms-r { color: var(--farm-green); font-size: 17px; }
+
 /* propojení: denní aktivita → Battle Pass */
 .feeds-pass {
   font-size: 10.5px; font-weight: 800; color: var(--accent);

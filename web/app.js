@@ -2059,11 +2059,13 @@ function pageBonusy() {
       <div id="dailyCard"></div>
       <div id="wheelCard"></div>
     </div>
+    <div id="calCard" style="margin-top:18px"></div>
     <div id="bpCard" style="margin-top:18px"></div>
     <div id="partnersCard" style="margin-top:18px"></div>
     <div id="questsCard" style="margin-top:18px"></div>`;
   loadDaily();
   loadWheel();
+  loadLoginCal();
   loadBattlePass();
   loadPartnerLinks();
   loadQuests();
@@ -2105,6 +2107,44 @@ async function claimBpTier(tier) {
     toast(`🎟️ Tier ${r.tier} vyzvednut! +${fmtPts(r.reward)} 🌾`, "success");
     try { confettiBurst(); } catch (e) {}
     renderHeader(); loadBattlePass();
+  } catch (e) { toast(e.message, "error"); }
+}
+
+/* ---------- Login kalendář (měsíční aktivní dny) ---------- */
+async function loadLoginCal() {
+  const box = document.getElementById("calCard"); if (!box) return;
+  try {
+    const c = await api("/login-calendar");
+    const active = new Set(c.active);
+    let cells = "";
+    for (let d = 1; d <= c.days_in_month; d++) {
+      const cls = active.has(d) ? "cal-on" : (d === c.today ? "cal-today" : (d < c.today ? "cal-miss" : "cal-future"));
+      cells += `<div class="cal-cell ${cls}">${active.has(d) ? "✓" : d}</div>`;
+    }
+    const ms = c.milestones.map((m) => {
+      const inner = m.claimed ? "✓"
+        : (m.reached ? `<button class="bp-claim" data-action="cal-claim" data-ms="${m.days}">+${fmtPts(m.reward)}</button>`
+          : `🔒 ${fmtPts(m.reward)}`);
+      return `<div class="cal-ms ${m.claimed ? "done" : (m.reached ? "ready" : "")}"><div class="cal-ms-d">${m.days} dní</div><div class="cal-ms-r">${inner}</div></div>`;
+    }).join("");
+    box.innerHTML = `<div class="panel">
+      <div class="row-between" style="flex-wrap:wrap;gap:8px;margin-bottom:4px">
+        <div class="section-title" style="margin:0">🗓️ Login kalendář <span class="feeds-pass">→ 🎟️ plní Pass</span></div>
+        <span class="faint" style="font-size:12.5px"><b style="color:var(--accent)">${c.total}</b> aktivních dní${c.claimable ? ` · <b style="color:var(--farm-green)">${c.claimable} bonus k vyzvednutí!</b>` : ""}</span>
+      </div>
+      <p class="muted" style="font-size:12.5px;margin:0 0 12px">Vyzvedni denní bonus → den se ti označí ✓. Nasbírej aktivní dny → ber milníkové bonusy.</p>
+      <div class="cal-grid">${cells}</div>
+      <div class="cal-ms-row">${ms}</div>
+    </div>`;
+  } catch (e) { box.innerHTML = ""; }
+}
+async function claimCalMs(ms) {
+  try {
+    const r = await api("/login-calendar/claim", { method: "POST", body: { milestone: parseInt(ms, 10) } });
+    if (state.user) state.user.points = r.balance;
+    toast(`🗓️ ${r.milestone} dní splněno! +${fmtPts(r.reward)} 🌾`, "success");
+    try { confettiBurst(); } catch (e) {}
+    renderHeader(); loadLoginCal();
   } catch (e) { toast(e.message, "error"); }
 }
 
@@ -5010,6 +5050,7 @@ function handleAction(action, el) {
     case "wl-save": saveWagerLimit(); break;
     case "claim-quest": claimQuest(el.dataset.key); break;
     case "bp-claim": claimBpTier(el.dataset.tier); break;
+    case "cal-claim": claimCalMs(el.dataset.ms); break;
     case "claim-partner": claimPartnerLink(el.dataset.id, el.dataset.url); break;
     case "cos-buy": buyCosmetic(el.dataset.key); break;
     case "cos-equip": equipCosmetic(el.dataset.key); break;

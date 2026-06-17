@@ -13,7 +13,7 @@ from ..db import now_iso, get_setting
 from ..deps import (db_dep, require_user, add_points, try_debit, record_audit, client_ip,
                     user_rank, tier_for_rank, self_excluded_until)
 from ..models import (RedeemIn, TradeUrlIn, GiftIn, QuestClaimIn, CosmeticIn, FairSeedIn, SelfExcludeIn,
-                      ProfileBioIn, WagerLimitIn, ModApplyIn, BattlePassClaimIn)
+                      ProfileBioIn, WagerLimitIn, ModApplyIn, BattlePassClaimIn, LoginCalClaimIn)
 from ..services import product_public, role_allows
 from ..ratelimit import rate_limit
 from ..security import secure_weighted_choice
@@ -946,12 +946,33 @@ def daily_claim(user: sqlite3.Row = Depends(require_user),
     add_points(conn, user["id"], reward, f"Denní streak – den {idx + 1} (×{mult} liga)")
     conn.execute("UPDATE users SET last_daily = ?, daily_streak = ? WHERE id = ?",
                  (now.isoformat(), streak + 1, user["id"]))
+    from ..logincal import mark as _mark_cal
+    _mark_cal(conn, user["id"])     # login kalendář: označ dnešní den jako aktivní
     conn.commit()
     fresh = conn.execute("SELECT points FROM users WHERE id = ?", (user["id"],)).fetchone()
     return {
         "ok": True, "reward": reward, "mult": mult, "day": idx + 1, "streak": streak + 1,
         "balance": fresh["points"], "message": f"🔥 Den {idx + 1}/7 — získáváš +{reward} sedláků (×{mult} liga)!",
     }
+
+
+@router.get("/login-calendar")
+def login_calendar(user: sqlite3.Row = Depends(require_user),
+                   conn: sqlite3.Connection = Depends(db_dep)):
+    """Login kalendář: aktivní dny v aktuálním měsíci + milníkové bonusy."""
+    from ..logincal import status
+    return status(conn, user)
+
+
+@router.post("/login-calendar/claim")
+def login_calendar_claim(data: LoginCalClaimIn, user: sqlite3.Row = Depends(require_user),
+                         conn: sqlite3.Connection = Depends(db_dep)):
+    """Vyzvedne milníkový bonus za X aktivních dní v měsíci."""
+    from ..logincal import claim
+    r = claim(conn, user, data.milestone)
+    if not r.get("ok"):
+        raise HTTPException(status_code=400, detail=r.get("error", "Milník nelze vyzvednout."))
+    return r
 
 
 # ---------------- Kolo štěstí (denní spin) ----------------

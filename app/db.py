@@ -282,6 +282,16 @@ CREATE TABLE IF NOT EXISTS battlepass (
     PRIMARY KEY (user_id, season)
 );
 
+-- Login kalendář: které dny v měsíci byl hráč aktivní (mark při denním claimu) +
+-- vyzvednuté milníky (X aktivních dní = bonus). Reset = nový měsíc.
+CREATE TABLE IF NOT EXISTS login_calendar (
+    user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    month      TEXT NOT NULL,                -- 'YYYY-MM'
+    days       TEXT NOT NULL DEFAULT '[]',   -- JSON list dnů (1..31) aktivních v měsíci
+    claimed_ms TEXT NOT NULL DEFAULT '[]',   -- JSON list vyzvednutých milníků (počet dní)
+    PRIMARY KEY (user_id, month)
+);
+
 -- PvP hry o body: piškvorky (gomoku). 1v1 se sázkou, escrow vkladů, vítěz bere bank.
 CREATE TABLE IF NOT EXISTS games (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
