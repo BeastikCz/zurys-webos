@@ -342,11 +342,28 @@ def level_info(earned_total) -> dict:
     return {"level": level, "into": into, "span": span, "next_at": next_at, "pct": max(0, min(100, pct))}
 
 
+# Reasons z gamblingu a vratek/storen NEpočítají do earned_total → level / Battle Pass = jen
+# poctivé farmení (sledování, chat, subs, denní, kolo, úkoly, sklizeň, drops…), ne sázky a výhry.
+# points (zůstatek) se mění normálně; tohle filtruje JEN lifetime XP. Forward-only (staré
+# earned_total se nemění → nikomu neklesne level). Soft: nezachycený gambling reason nadál počítá
+# (= dosavadní chování), nerozbije farmení – proto denylist, ne allowlist (ten by riskoval opačně).
+_NO_EARN_KW = ("mines", "blackjack", "piškvor", "duel", "hra #", "predikce", "výhra",
+               "vrácen", "vráceno", "remíza", "vypršel", "refund", "storno", "zrušen",
+               "odchod (vrácení")
+
+
+def counts_as_earned(reason: str) -> bool:
+    """True = kladný přírůstek se počítá do earned_total (lifetime XP). False pro gambling/vratky."""
+    r = (reason or "").lower()
+    return not any(k in r for k in _NO_EARN_KW)
+
+
 def add_points(conn: sqlite3.Connection, user_id: int, change: int, reason: str) -> None:
-    """Změní body uživatele a zapíše záznam do points_log. Kladný přírůstek navíc
-    naskládá do earned_total (lifetime XP – nikdy neklesá, ani při útratě)."""
+    """Změní body uživatele a zapíše záznam do points_log. Kladný přírůstek z FARMENÍ navíc
+    naskládá do earned_total (lifetime XP – nikdy neklesá; gambling/vratky se nezapočítají)."""
+    earn = max(0, change) if counts_as_earned(reason) else 0
     conn.execute("UPDATE users SET points = points + ?, earned_total = earned_total + ? WHERE id = ?",
-                 (change, max(0, change), user_id))
+                 (change, earn, user_id))
     conn.execute(
         "INSERT INTO points_log (user_id, change, reason, created_at) VALUES (?, ?, ?, ?)",
         (user_id, change, reason, now_iso()),
