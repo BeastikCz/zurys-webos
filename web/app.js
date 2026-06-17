@@ -14,7 +14,7 @@ const state = {
 };
 
 const shopState = { type: "all", subs: false, vip: false, afford: false, sort: null, page: 1, items: [], total: 0, hasMore: false };
-const adminState = { tab: "products", orderFilter: "all", userQuery: "", products: [],
+const adminState = { tab: "products", orderFilter: "all", userQuery: "", userSort: "points", products: [],
   auditAction: "", auditAdmin: "", auditOffset: 0, auditLimit: 50,
   loginsQuery: "", loginsIp: "", loginsOffset: 0, loginsLimit: 60,
   secTab: "anticheat", pfQuery: "", pfFlow: "", pfMin: 0, pfReason: "", pfOffset: 0, pfLimit: 60 };
@@ -3391,12 +3391,14 @@ async function banCluster(idsCsv, label) {
 async function adminUsers() {
   const box = $("#adminContent");
   try {
-    const list = await api("/admin/users?q=" + encodeURIComponent(adminState.userQuery));
+    const list = await api("/admin/users?q=" + encodeURIComponent(adminState.userQuery) + "&sort=" + adminState.userSort);
     const isAdmin = state.user && state.user.role === "admin";   // IP + změnu role vidí/dělá jen admin
     box.innerHTML = `
       <form class="toolbar" data-submit="user-search">
         <input class="input grow" id="userSearch" placeholder="🔍 Hledat podle jména…" value="${esc(adminState.userQuery)}">
         <button class="btn btn-ghost" type="submit">Hledat</button>
+        <button type="button" class="btn btn-ghost${adminState.userSort === "points" ? " on" : ""}" data-action="user-sort" data-sort="points" title="Seřadit podle zůstatku bodů">Dle bodů</button>
+        <button type="button" class="btn btn-ghost${adminState.userSort === "level" ? " on" : ""}" data-action="user-sort" data-sort="level" title="Seřadit podle úrovně (nafarmeno XP) – kdo má nejvyšší level">Dle úrovně ⭐</button>
         <a class="btn btn-ghost" href="/api/admin/export/users.csv" title="Export všech uživatelů: zůstatek, utraceno, nasbíráno, registrace">📥 CSV</a>
       </form>
       <div class="table-wrap"><table class="tbl"><thead><tr><th>Uživatel</th><th>${isAdmin ? "Kick / IP" : "Kick"}</th><th>Role</th><th title="Úroveň z celkem nafarmeného (earned_total). Nepočítá gambling ani suby.">Úroveň</th><th>Body</th><th>Upravit body</th><th>Stav</th></tr></thead><tbody>
@@ -3434,6 +3436,7 @@ async function adminUsers() {
       </tbody></table></div>`;
   } catch (e) { box.innerHTML = `<div class="empty">${esc(e.message)}</div>`; }
 }
+function setUserSort(sort) { adminState.userSort = (sort === "level") ? "level" : "points"; adminUsers(); }
 async function setUserRole(id, role) {
   if (["admin", "broadcaster", "mod"].includes(role)
       && !requireTypedConfirm(`Chystáš se dát uživateli citlivou roli: ${role}.`, "ROLE")) {
@@ -5122,6 +5125,7 @@ function handleAction(action, el) {
     case "bp-claim": claimBpTier(el.dataset.tier); break;
     case "bp-claim-premium": claimBpTier(el.dataset.tier, true); break;
     case "lp-claim": claimLevelPass(el.dataset.level); break;
+    case "user-sort": setUserSort(el.dataset.sort); break;
     case "bp-daily": claimBpDaily(); break;
     case "grd-pick": grdPick(el.dataset.crop); break;
     case "grd-plant": grdPlant(el.dataset.plot); break;

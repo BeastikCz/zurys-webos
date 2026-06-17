@@ -730,9 +730,12 @@ def delete_product(product_id: int, request: Request,
 # ---------------- Uživatelé ----------------
 @router.get("/users")
 def admin_users(q: str = Query("", max_length=64),
+                sort: str = Query("points", max_length=12),
                 conn: sqlite3.Connection = Depends(db_dep),
                 admin: sqlite3.Row = Depends(require_user)):
     is_admin = admin["role"] == ROLE_ADMIN   # IP + e-mail vidí JEN admin, ne broadcaster
+    # ORDER BY z whitelistu (NE z klienta přímo → žádná SQL injekce). level = dle nafarmeného XP.
+    order_sql = "u.earned_total DESC, u.points DESC" if sort == "level" else "u.points DESC"
     cols = ("SELECT u.*, "
             "(SELECT ip FROM login_events e WHERE e.user_id=u.id ORDER BY e.id DESC LIMIT 1) AS last_ip, "
             "(SELECT COUNT(DISTINCT ip) FROM login_events e WHERE e.user_id=u.id) AS ip_count "
@@ -741,10 +744,10 @@ def admin_users(q: str = Query("", max_length=64),
         like = f"%{q.strip()}%"
         rows = conn.execute(
             cols + "WHERE u.username LIKE ? OR u.kick_username LIKE ? OR u.email LIKE ? "
-            "ORDER BY u.points DESC LIMIT 100", (like, like, like),
+            "ORDER BY " + order_sql + " LIMIT 100", (like, like, like),
         ).fetchall()
     else:
-        rows = conn.execute(cols + "ORDER BY u.points DESC LIMIT 100").fetchall()
+        rows = conn.execute(cols + "ORDER BY " + order_sql + " LIMIT 100").fetchall()
     out = []
     for r in rows:
         d = to_public(r, include_email=is_admin)
