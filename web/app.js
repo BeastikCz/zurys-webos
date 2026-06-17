@@ -2011,48 +2011,6 @@ async function saveTradeUrl() {
     toast(e.message, "error");
   }
 }
-async function loadDaily() {
-  const box = $("#dailyCard"); if (!box) return;
-  try {
-    const s = await api("/daily/status");
-    const mult = s.mult || 1;
-    const tierHtml = tierChip(s.rank);
-    const ligaLine = tierHtml
-      ? `Drž streak · <b style="color:var(--accent)">×${mult}</b> bonus za ligu ${tierHtml}`
-      : `Drž streak · dostaň se do <b style="color:var(--accent)">TOP 100</b> a získej bonus za ligu! 🌾`;
-    const CZ = ["NE", "PO", "ÚT", "ST", "ČT", "PÁ", "SO"];
-    const wd = (off) => { const d = new Date(); d.setDate(d.getDate() + off); return CZ[d.getDay()]; };
-    const chips = s.ladder.map((rew, i) => {
-      const claimed = i < s.done_count;
-      const today = s.can_claim && i === s.done_count;
-      const cls = claimed ? "done" : today ? "today" : "locked";
-      const lbl = claimed ? "✓" : wd(i - s.done_count);
-      return `<div class="ds-chip ${cls}"><div class="ds-rew">+${rew * mult}</div><div class="ds-lbl">${lbl}</div></div>`;
-    }).join("");
-    const fmtWait = (sec) => sec >= 3600 ? Math.ceil(sec / 3600) + " h" : Math.max(1, Math.ceil(sec / 60)) + " min";
-    const btn = s.can_claim
-      ? `<button class="btn btn-primary btn-block" data-action="claim-daily">⚡ Vyzvednout +${s.reward_now * mult} sedláků</button>`
-      : `<button class="btn btn-block" disabled>Další za ${fmtWait(s.next_in_seconds)}</button>`;
-    box.innerHTML = `<div class="panel">
-      <div class="row-between" style="margin-bottom:14px">
-        <div><div class="section-title" style="margin:0">🔥 Daily Streak <span class="feeds-pass">→ 🎟️ plní Pass</span></div>
-          <div class="muted" style="font-size:12.5px;margin-top:5px">${ligaLine}</div></div>
-        <span class="ds-badge">DEN ${s.day}/7</span>
-      </div>
-      <div class="ds-row">${chips}</div>
-      ${btn}
-    </div>`;
-  } catch (e) { box.innerHTML = ""; }
-}
-async function doClaimDaily() {
-  try {
-    const r = await api("/daily/claim", { method: "POST" });
-    state.user.points = r.balance;
-    toast(r.message, "success");
-    try { confettiBurst(); } catch (e) {}
-    renderHeader(); loadDaily(); refreshBonusDot();
-  } catch (e) { toast(e.message, "error"); loadDaily(); }
-}
 
 /* ---------- Stránka „🎁 Bonusy" – daily streak + kolo štěstí ---------- */
 function pageBonusy() {
@@ -2219,44 +2177,6 @@ async function claimBpDaily() {     // denní bonus folded do Battle Passu (reus
   } catch (e) { toast(e.message, "error"); }
 }
 
-/* ---------- Login kalendář (měsíční aktivní dny) ---------- */
-async function loadLoginCal() {
-  const box = document.getElementById("calCard"); if (!box) return;
-  try {
-    const c = await api("/login-calendar");
-    const active = new Set(c.active);
-    let cells = "";
-    for (let d = 1; d <= c.days_in_month; d++) {
-      const cls = active.has(d) ? "cal-on" : (d === c.today ? "cal-today" : (d < c.today ? "cal-miss" : "cal-future"));
-      cells += `<div class="cal-cell ${cls}">${active.has(d) ? "✓" : d}</div>`;
-    }
-    const ms = c.milestones.map((m) => {
-      const inner = m.claimed ? "✓"
-        : (m.reached ? `<button class="bp-claim" data-action="cal-claim" data-ms="${m.days}">+${fmtPts(m.reward)}</button>`
-          : `🔒 ${fmtPts(m.reward)}`);
-      return `<div class="cal-ms ${m.claimed ? "done" : (m.reached ? "ready" : "")}"><div class="cal-ms-d">${m.days} dní</div><div class="cal-ms-r">${inner}</div></div>`;
-    }).join("");
-    box.innerHTML = `<div class="panel">
-      <div class="row-between" style="flex-wrap:wrap;gap:8px;margin-bottom:4px">
-        <div class="section-title" style="margin:0">🗓️ Login kalendář <span class="feeds-pass">→ 🎟️ plní Pass</span></div>
-        <span class="faint" style="font-size:12.5px"><b style="color:var(--accent)">${c.total}</b> aktivních dní${c.claimable ? ` · <b style="color:var(--farm-green)">${c.claimable} bonus k vyzvednutí!</b>` : ""}</span>
-      </div>
-      <p class="muted" style="font-size:12.5px;margin:0 0 12px">Vyzvedni denní bonus → den se ti označí ✓. Nasbírej aktivní dny → ber milníkové bonusy.</p>
-      <div class="cal-grid">${cells}</div>
-      <div class="cal-ms-row">${ms}</div>
-    </div>`;
-  } catch (e) { box.innerHTML = ""; }
-}
-async function claimCalMs(ms) {
-  try {
-    const r = await api("/login-calendar/claim", { method: "POST", body: { milestone: parseInt(ms, 10) } });
-    if (state.user) state.user.points = r.balance;
-    toast(`🗓️ ${r.milestone} dní splněno! +${fmtPts(r.reward)} 🌾`, "success");
-    try { confettiBurst(); } catch (e) {}
-    renderHeader(); loadLoginCal();
-  } catch (e) { toast(e.message, "error"); }
-}
-
 /* ---------- Kolo štěstí (denní spin) ---------- */
 let wheelState = null, wheelBusy = false, bonusReady = false;
 async function loadWheel() {
@@ -2334,48 +2254,6 @@ async function doSpinWheel() {
     if (btn) { btn.disabled = false; btn.textContent = "🎡 Zatočit kolem"; }
     wheelBusy = false;
   }
-}
-/* ---------- Úkoly (denní/týdenní questy) ---------- */
-async function loadQuests() {
-  const box = document.getElementById("questsCard"); if (!box) return;
-  try {
-    const qs = await api("/quests");
-    if (!Array.isArray(qs) || !qs.length) { box.innerHTML = ""; return; }   // úkoly mimo provoz → kartu schovej
-    const sec = (period, title, icon) => {
-      const list = qs.filter((q) => q.period === period);
-      if (!list.length) return "";
-      return `<div class="section-title" style="margin-top:16px">${icon} ${title}</div><div class="quest-list">${list.map(questRowHTML).join("")}</div>`;
-    };
-    box.innerHTML = `<div class="panel">
-      <div class="section-title" style="margin-top:0">📋 Úkoly <span class="faint" style="font-weight:400;font-size:13px">– plň a ber sedláky navíc</span> <span class="feeds-pass">→ 🎟️ plní Pass</span></div>
-      ${sec("daily", "Denní úkoly", "☀️")}${sec("weekly", "Týdenní úkoly", "📅")}
-    </div>`;
-  } catch (e) { box.innerHTML = ""; }
-}
-function questRowHTML(q) {
-  const pct = Math.min(100, Math.round(q.progress / q.target * 100));
-  const btn = q.claimed
-    ? `<button class="btn btn-sm" disabled>✓ Hotovo</button>`
-    : (q.completed
-      ? `<button class="btn btn-accent btn-sm" data-action="claim-quest" data-key="${q.key}">Vyzvednout +${fmtPts(q.reward)}</button>`
-      : `<span class="quest-prog-txt faint">${q.progress}/${q.target}</span>`);
-  return `<div class="quest${q.claimed ? " done" : q.completed ? " ready" : ""}">
-    <div class="quest-main">
-      <div class="quest-name">${esc(q.name)} <span class="faint" style="font-weight:400">+${fmtPts(q.reward)} 🌾</span></div>
-      <div class="quest-desc faint">${esc(q.desc)}</div>
-      <div class="quest-bar"><span style="width:${pct}%"></span></div>
-    </div>
-    <div class="quest-cta">${btn}</div>
-  </div>`;
-}
-async function claimQuest(key) {
-  try {
-    const r = await api("/quests/claim", { method: "POST", body: { key } });
-    if (state.user) state.user.points = r.balance;
-    toast(r.message || "Odměna vyzvednuta! 🌾", "success");
-    try { confettiBurst(); } catch (e) {}
-    renderHeader(); loadQuests(); refreshBonusDot();
-  } catch (e) { toast(e.message, "error"); }
 }
 
 /* ---------- Partnerské/sponzorské odkazy (1× navždy / ⚡ flash okna) ---------- */
@@ -5146,7 +5024,6 @@ function handleAction(action, el) {
   switch (action) {
     case "nav": navigate(el.dataset.href); break;
     case "connect": openConnect(); break;
-    case "claim-daily": doClaimDaily(); break;
     case "spin-wheel": doSpinWheel(); break;
     case "mines-start": minesStart(); break;
     case "mines-reveal": minesReveal(parseInt(el.dataset.tile, 10)); break;
@@ -5157,10 +5034,8 @@ function handleAction(action, el) {
     case "bio-cancel": loadMyBio(); break;
     case "prestige-buy": prestigeBuy(parseInt(el.dataset.cost, 10), parseInt(el.dataset.lvl, 10)); break;
     case "wl-save": saveWagerLimit(); break;
-    case "claim-quest": claimQuest(el.dataset.key); break;
     case "bp-claim": claimBpTier(el.dataset.tier); break;
     case "bp-daily": claimBpDaily(); break;
-    case "cal-claim": claimCalMs(el.dataset.ms); break;
     case "grd-pick": grdPick(el.dataset.crop); break;
     case "grd-plant": grdPlant(el.dataset.plot); break;
     case "grd-harvest": grdHarvest(el.dataset.plot); break;
