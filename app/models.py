@@ -190,6 +190,11 @@ class QuestClaimIn(BaseModel):
     key: str = Field(..., min_length=1, max_length=32)
 
 
+class BattlePassClaimIn(BaseModel):
+    """Vyzvednutí odměny za odemčený tier farmářského Battle Passu."""
+    tier: int = Field(..., ge=1, le=100)
+
+
 class CommunityGoalIn(BaseModel):
     """Nastavení komunitního chat cíle (posílají se jen měněná pole)."""
     enabled: Optional[int] = Field(default=None, ge=0, le=1)

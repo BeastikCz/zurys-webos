@@ -2059,15 +2059,53 @@ function pageBonusy() {
       <div id="dailyCard"></div>
       <div id="wheelCard"></div>
     </div>
+    <div id="bpCard" style="margin-top:18px"></div>
     <div id="partnersCard" style="margin-top:18px"></div>
     <div id="questsCard" style="margin-top:18px"></div>`;
   loadDaily();
   loadWheel();
+  loadBattlePass();
   loadPartnerLinks();
   loadQuests();
   loadCommunityGoal();
   loadSubGoal();
   dropTimer = setInterval(() => { if (!document.hidden) { loadCommunityGoal(); loadSubGoal(); } }, 12000);
+}
+
+/* ---------- Farmářský Battle Pass (sezónní dráha) ---------- */
+async function loadBattlePass() {
+  const box = document.getElementById("bpCard"); if (!box) return;
+  try {
+    const bp = await api("/battlepass");
+    const nodes = bp.tiers.map((t) => {
+      const cls = t.claimed ? "bp-claimed" : (t.reached ? "bp-ready" : "bp-locked");
+      const inner = t.claimed ? "✓"
+        : (t.reached ? `<button class="bp-claim" data-action="bp-claim" data-tier="${t.tier}">+${fmtPts(t.reward)}</button>`
+          : `🔒 ${fmtPts(t.reward)}`);
+      return `<div class="bp-node ${cls}${t.milestone ? " bp-milestone" : ""}" title="Tier ${t.tier} · +${fmtPts(t.reward)} sedláků">
+        <div class="bp-tier">${t.milestone ? "⭐ " : ""}${t.tier}</div>
+        <div class="bp-rew">${inner}</div>
+      </div>`;
+    }).join("");
+    box.innerHTML = `<div class="panel" style="overflow:hidden">
+      <div class="row-between" style="flex-wrap:wrap;gap:8px;margin-bottom:6px">
+        <div class="section-title" style="margin:0">🎟️ Farmářský Battle Pass</div>
+        <span class="faint" style="font-size:12.5px">Sezóna ${esc(bp.season)} · Tier <b style="color:var(--accent)">${bp.tier}</b>/${bp.max_tier}${bp.claimable ? ` · <b style="color:var(--farm-green)">${bp.claimable} k vyzvednutí!</b>` : ""}</span>
+      </div>
+      <p class="muted" style="font-size:12.5px;margin:0 0 12px">Farmi sedláky → odemykej tiery → ber odměny. Reset každý měsíc. <span class="faint">(${fmtPts(bp.into)} / ${fmtPts(bp.tier_xp)} do dalšího tieru)</span></p>
+      <div class="bp-prog"><i style="width:${bp.pct}%"></i></div>
+      <div class="bp-track">${nodes}</div>
+    </div>`;
+  } catch (e) { box.innerHTML = ""; }
+}
+async function claimBpTier(tier) {
+  try {
+    const r = await api("/battlepass/claim", { method: "POST", body: { tier: parseInt(tier, 10) } });
+    if (state.user) state.user.points = r.balance;
+    toast(`🎟️ Tier ${r.tier} vyzvednut! +${fmtPts(r.reward)} 🌾`, "success");
+    try { confettiBurst(); } catch (e) {}
+    renderHeader(); loadBattlePass();
+  } catch (e) { toast(e.message, "error"); }
 }
 
 /* ---------- Kolo štěstí (denní spin) ---------- */
@@ -4971,6 +5009,7 @@ function handleAction(action, el) {
     case "prestige-buy": prestigeBuy(parseInt(el.dataset.cost, 10), parseInt(el.dataset.lvl, 10)); break;
     case "wl-save": saveWagerLimit(); break;
     case "claim-quest": claimQuest(el.dataset.key); break;
+    case "bp-claim": claimBpTier(el.dataset.tier); break;
     case "claim-partner": claimPartnerLink(el.dataset.id, el.dataset.url); break;
     case "cos-buy": buyCosmetic(el.dataset.key); break;
     case "cos-equip": equipCosmetic(el.dataset.key); break;

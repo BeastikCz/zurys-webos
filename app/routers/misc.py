@@ -13,7 +13,7 @@ from ..db import now_iso, get_setting
 from ..deps import (db_dep, require_user, add_points, try_debit, record_audit, client_ip,
                     user_rank, tier_for_rank, self_excluded_until)
 from ..models import (RedeemIn, TradeUrlIn, GiftIn, QuestClaimIn, CosmeticIn, FairSeedIn, SelfExcludeIn,
-                      ProfileBioIn, WagerLimitIn, ModApplyIn)
+                      ProfileBioIn, WagerLimitIn, ModApplyIn, BattlePassClaimIn)
 from ..services import product_public, role_allows
 from ..ratelimit import rate_limit
 from ..security import secure_weighted_choice
@@ -401,6 +401,25 @@ def quests_claim(data: QuestClaimIn, user: sqlite3.Row = Depends(require_user),
         return claim_quest(conn, user["id"], data.key)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.get("/battlepass")
+def battlepass_status(user: sqlite3.Row = Depends(require_user),
+                      conn: sqlite3.Connection = Depends(db_dep)):
+    """Farmářský Battle Pass aktuálního uživatele (tier, postup, odměny po tierech)."""
+    from .. import battlepass
+    return battlepass.status(conn, user)
+
+
+@router.post("/battlepass/claim")
+def battlepass_claim(data: BattlePassClaimIn, user: sqlite3.Row = Depends(require_user),
+                     conn: sqlite3.Connection = Depends(db_dep)):
+    """Vyzvedne odměnu za odemčený tier (server ověří odemčení)."""
+    from .. import battlepass
+    r = battlepass.claim(conn, user, data.tier)
+    if not r.get("ok"):
+        raise HTTPException(status_code=400, detail=r.get("error", "Tier nelze vyzvednout."))
+    return r
 
 
 @router.get("/partner-links")

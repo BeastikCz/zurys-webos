@@ -1,0 +1,70 @@
+"""Farmářský Battle Pass: tier z earned_total diffu, claim odemčeného tieru.
+
+    .venv/Scripts/python.exe -m pytest tests/test_battlepass.py -v
+"""
+import secrets
+
+
+def _mk(conn, earned=0):
+    from app.db import now_iso
+    u = f"bp_{secrets.token_hex(3)}"
+    return conn.execute(
+        "INSERT INTO users (kick_username, username, role, points, earned_total, created_at) "
+        "VALUES (?,?,?,?,?,?)", (u, u, "user", 0, earned, now_iso())).lastrowid
+
+
+def test_battlepass_progress_and_claim(client):
+    from app.db import get_conn
+    from app import battlepass
+    conn = get_conn()
+    try:
+        uid = _mk(conn, earned=0)
+        conn.commit()
+        # první status nastaví baseline = 0
+        st = battlepass.status(conn, {"id": uid})
+        assert st["tier"] == 0 and st["claimable"] == 0 and len(st["tiers"]) == battlepass.N_TIERS
+
+        # nafarmi 6000 XP → 2 tiery (TIER_XP 2500)
+        conn.execute("UPDATE users SET earned_total = 6000 WHERE id=?", (uid,))
+        conn.commit()
+        st = battlepass.status(conn, {"id": uid})
+        assert st["tier"] == 2 and st["claimable"] == 2
+
+        # claim tier 1 → odměna
+        r = battlepass.claim(conn, {"id": uid}, 1)
+        assert r["ok"] and r["reward"] == battlepass.tier_reward(1)
+
+        # claim stejného znovu → fail; claim neodemčeného (tier 5) → fail
+        assert battlepass.claim(conn, {"id": uid}, 1)["ok"] is False
+        assert battlepass.claim(conn, {"id": uid}, 5)["ok"] is False
+
+        # milník tier 5 dává víc než běžný
+        assert battlepass.tier_reward(5) > battlepass.tier_reward(4)
+    finally:
+        conn.close()
+
+
+def test_battlepass_api(client):
+    from app.db import get_conn, now_iso
+    from app.config import SESSION_COOKIE
+    from datetime import datetime, timezone, timedelta
+    conn = get_conn()
+    try:
+        from app import battlepass
+        uid = _mk(conn, earned=8000)
+        # baseline 0 pro aktuální sezónu (jako by sezóna začala když měl 0) → 8000 XP = 3 tiery
+        conn.execute("INSERT INTO battlepass (user_id, season, baseline, claimed, created_at) VALUES (?,?,0,'[]',?)",
+                     (uid, battlepass._season(), now_iso()))
+        t = secrets.token_hex(24)
+        conn.execute("INSERT INTO sessions (token, user_id, created_at, expires_at) VALUES (?,?,?,?)",
+                     (t, uid, now_iso(), (datetime.now(timezone.utc) + timedelta(days=1)).isoformat()))
+        conn.commit()
+    finally:
+        conn.close()
+    h = {"Cookie": f"{SESSION_COOKIE}={t}"}
+    st = client.get("/api/battlepass", headers=h).json()
+    assert st["tier"] == 3
+    r = client.post("/api/battlepass/claim", json={"tier": 2}, headers=h)
+    assert r.status_code == 200 and r.json()["ok"]
+    # neodemčený tier → 400
+    assert client.post("/api/battlepass/claim", json={"tier": 9}, headers=h).status_code == 400

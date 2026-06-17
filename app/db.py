@@ -271,6 +271,17 @@ CREATE TABLE IF NOT EXISTS subgoal_gifters (
     PRIMARY KEY (day, user_id)
 );
 
+-- Farmářský Battle Pass: sezónní (měsíční) postupová dráha. Tier = XP nafarmené OD
+-- začátku sezóny (earned_total − baseline). claimed = JSON list vyzvednutých tierů.
+CREATE TABLE IF NOT EXISTS battlepass (
+    user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    season     TEXT NOT NULL,                -- 'YYYY-MM'
+    baseline   INTEGER NOT NULL DEFAULT 0,   -- earned_total na začátku sezóny pro tohoto hráče
+    claimed    TEXT NOT NULL DEFAULT '[]',   -- JSON list vyzvednutých tierů
+    created_at TEXT NOT NULL,
+    PRIMARY KEY (user_id, season)
+);
+
 -- PvP hry o body: piškvorky (gomoku). 1v1 se sázkou, escrow vkladů, vítěz bere bank.
 CREATE TABLE IF NOT EXISTS games (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
