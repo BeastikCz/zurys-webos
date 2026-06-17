@@ -2018,7 +2018,7 @@ async function loadDaily() {
       : `<button class="btn btn-block" disabled>Další za ${fmtWait(s.next_in_seconds)}</button>`;
     box.innerHTML = `<div class="panel">
       <div class="row-between" style="margin-bottom:14px">
-        <div><div class="section-title" style="margin:0">🔥 Daily Streak</div>
+        <div><div class="section-title" style="margin:0">🔥 Daily Streak <span class="feeds-pass">→ 🎟️ plní Pass</span></div>
           <div class="muted" style="font-size:12.5px;margin-top:5px">${ligaLine}</div></div>
         <span class="ds-badge">DEN ${s.day}/7</span>
       </div>
@@ -2092,7 +2092,7 @@ async function loadBattlePass() {
         <div class="section-title" style="margin:0">🎟️ Farmářský Battle Pass</div>
         <span class="faint" style="font-size:12.5px">Sezóna ${esc(bp.season)} · Tier <b style="color:var(--accent)">${bp.tier}</b>/${bp.max_tier}${bp.claimable ? ` · <b style="color:var(--farm-green)">${bp.claimable} k vyzvednutí!</b>` : ""}</span>
       </div>
-      <p class="muted" style="font-size:12.5px;margin:0 0 12px">Farmi sedláky → odemykej tiery → ber odměny. Reset každý měsíc. <span class="faint">(${fmtPts(bp.into)} / ${fmtPts(bp.tier_xp)} do dalšího tieru)</span></p>
+      <p class="muted" style="font-size:12.5px;margin:0 0 12px">Vše co nasbíráš — <b>streak, questy, kolo, výhry</b> — tě posouvá v passu. Reset každý měsíc. <span class="faint">(${fmtPts(bp.into)} / ${fmtPts(bp.tier_xp)} do dalšího tieru)</span></p>
       <div class="bp-prog"><i style="width:${bp.pct}%"></i></div>
       <div class="bp-track">${nodes}</div>
     </div>`;
@@ -2198,7 +2198,7 @@ async function loadQuests() {
       return `<div class="section-title" style="margin-top:16px">${icon} ${title}</div><div class="quest-list">${list.map(questRowHTML).join("")}</div>`;
     };
     box.innerHTML = `<div class="panel">
-      <div class="section-title" style="margin-top:0">📋 Úkoly <span class="faint" style="font-weight:400;font-size:13px">– plň a ber sedláky navíc</span></div>
+      <div class="section-title" style="margin-top:0">📋 Úkoly <span class="faint" style="font-weight:400;font-size:13px">– plň a ber sedláky navíc</span> <span class="feeds-pass">→ 🎟️ plní Pass</span></div>
       ${sec("daily", "Denní úkoly", "☀️")}${sec("weekly", "Týdenní úkoly", "📅")}
     </div>`;
   } catch (e) { box.innerHTML = ""; }

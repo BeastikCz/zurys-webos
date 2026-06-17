@@ -1716,6 +1716,13 @@ body::before { display: none !important; }
 .bp-claim:hover { filter: brightness(1.08); transform: translateY(-1px); }
 @keyframes bpPulse { 0%,100% { box-shadow: 0 0 0 1px var(--accent-glow), 0 0 18px -10px var(--accent-glow); } 50% { box-shadow: 0 0 0 1px var(--accent), 0 0 30px -6px var(--accent-glow); } }
 
+/* propojení: denní aktivita → Battle Pass */
+.feeds-pass {
+  font-size: 10.5px; font-weight: 800; color: var(--accent);
+  background: rgba(255,180,35,.12); border: 1px solid rgba(255,180,35,.3);
+  border-radius: 999px; padding: 2px 8px; margin-left: 6px; vertical-align: middle; white-space: nowrap;
+}
+
 /* 3) oheň/ember glow na daily streak kartě */
 #dailyCard .panel { animation: streakEmber 3.2s ease-in-out infinite; }
 @keyframes streakEmber {
