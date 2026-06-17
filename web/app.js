@@ -3399,7 +3399,7 @@ async function adminUsers() {
         <button class="btn btn-ghost" type="submit">Hledat</button>
         <a class="btn btn-ghost" href="/api/admin/export/users.csv" title="Export všech uživatelů: zůstatek, utraceno, nasbíráno, registrace">📥 CSV</a>
       </form>
-      <div class="table-wrap"><table class="tbl"><thead><tr><th>Uživatel</th><th>${isAdmin ? "Kick / IP" : "Kick"}</th><th>Role</th><th>Body</th><th>Upravit body</th><th>Stav</th></tr></thead><tbody>
+      <div class="table-wrap"><table class="tbl"><thead><tr><th>Uživatel</th><th>${isAdmin ? "Kick / IP" : "Kick"}</th><th>Role</th><th title="Úroveň z celkem nafarmeného (earned_total). Nepočítá gambling ani suby.">Úroveň</th><th>Body</th><th>Upravit body</th><th>Stav</th></tr></thead><tbody>
       ${list.map((u) => `<tr>
         <td><div style="display:flex;align-items:center;gap:9px">${avatarHTML(u.username, u.avatar_url)}<b>${esc(u.username)}</b></div>${userAdminTools(u, isAdmin)}</td>
         <td class="faint" style="font-size:12.5px">${u.kick_username ? "🟢 " + esc(u.kick_username) : (isAdmin ? esc(u.email || "—") : "—")}${isAdmin ? "<br>" + (u.last_ip ? `<span class="code-pill">${esc(u.last_ip)}</span>${u.ip_count > 1 ? ` <span class="faint">(${u.ip_count} IP)</span>` : ""}` : "<span class='faint'>bez IP</span>") : ""}</td>
@@ -3409,6 +3409,7 @@ async function adminUsers() {
         <div style="display:flex;gap:6px;margin-top:7px;flex-wrap:wrap">
           ${[["is_sub", "SUB"], ["is_vip", "VIP"], ["is_og", "OG"]].map(([key, lbl]) => `<button type="button" data-action="user-flag-toggle" data-id="${u.id}" data-flag="${key}" class="flag-chip${u[key] ? " on" : ""}" title="Odznak ${lbl} – klikni pro zapnutí/vypnutí">${lbl}</button>`).join("")}
         </div>` : roleBadge(u.role) + " " + subVipBadges(u)}</td>
+        <td title="Nafarmeno celkem (XP). Do dalšího levelu chybí ${Number(Math.max(0, (u.level_span || 0) - (u.level_into || 0))).toLocaleString("cs-CZ")} XP."><b style="color:var(--accent);font-size:13px;white-space:nowrap">⭐ ${u.level || 1}</b><br><span class="faint" style="font-size:11px;white-space:nowrap">${Number(u.earned_total || 0).toLocaleString("cs-CZ")} XP</span></td>
         <td><b style="color:var(--kick)">${fmtPts(u.points)}</b></td>
         <td><div style="display:flex;gap:6px;align-items:center">
           <input class="input" style="width:84px;padding:6px 8px" type="number" id="pts_${u.id}" placeholder="±body">
