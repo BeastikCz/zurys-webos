@@ -147,6 +147,41 @@ def leaderboard_weekly(conn: sqlite3.Connection = Depends(db_dep)):
     return data
 
 
+_season_cache = {"at": 0.0, "data": None}
+
+
+@router.get("/leaderboard/season")
+def leaderboard_season(conn: sqlite3.Connection = Depends(db_dep)):
+    """Sezónní žebříček: kdo NASBÍRAL nejvíc sedláků tento MĚSÍC (reset 1. dne v měsíci).
+    Read-only z points_log – nic neresetuje, zůstatky zůstávají. Cache 60 s."""
+    import time
+    from datetime import datetime, timezone
+    nowm = time.monotonic()
+    if _season_cache["data"] is not None and nowm - _season_cache["at"] < _WEEKLY_TTL:
+        return _season_cache["data"]
+    now = datetime.now(timezone.utc)
+    start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0).isoformat()
+    rows = conn.execute(
+        "SELECT u.id, u.username, u.avatar_url, u.role, u.is_sub, u.is_vip, u.is_og, "
+        "  u.cos_name, u.cos_frame, u.cos_banner, SUM(l.change) AS gained "
+        "FROM points_log l JOIN users u ON u.id = l.user_id "
+        "WHERE l.change > 0 AND l.created_at >= ? "
+        "GROUP BY l.user_id ORDER BY gained DESC, u.username ASC LIMIT 50",
+        (start,),
+    ).fetchall()
+    data = {
+        "season": now.strftime("%Y-%m"),
+        "rows": [{
+            "rank": i + 1, "username": r["username"], "avatar_url": r["avatar_url"],
+            "gained": r["gained"], "role": r["role"],
+            "is_sub": bool(r["is_sub"]), "is_vip": bool(r["is_vip"]), "is_og": bool(r["is_og"]),
+            "cos": cosmetics.resolve(r),
+        } for i, r in enumerate(rows)],
+    }
+    _season_cache.update(at=nowm, data=data)
+    return data
+
+
 @router.get("/profile/public")
 def public_profile(nick: str = Query("", max_length=64),
                    viewer: sqlite3.Row = Depends(require_user),
