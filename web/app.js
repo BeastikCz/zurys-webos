@@ -2055,20 +2055,12 @@ function pageBonusy() {
     <div class="page-head with-mascot"><img class="page-mascot" src="/sedlak-cut.png" alt=""><div class="ph-text"><h1>🎁 Denní odměny</h1><p class="muted">Vyzvedni si streak a zatoč kolem štěstí – každý den nové sedláky! 🍀</p></div></div>
     <div id="chatGoal" style="margin-bottom:18px"></div>
     <div id="subGoal" style="margin-bottom:18px"></div>
-    <div class="bonus-grid">
-      <div id="dailyCard"></div>
-      <div id="wheelCard"></div>
-    </div>
-    <div id="calCard" style="margin-top:18px"></div>
-    <div id="bpCard" style="margin-top:18px"></div>
-    <div id="partnersCard" style="margin-top:18px"></div>
-    <div id="questsCard" style="margin-top:18px"></div>`;
-  loadDaily();
-  loadWheel();
-  loadLoginCal();
+    <div id="bpCard"></div>
+    <div id="wheelCard" style="margin-top:18px"></div>
+    <div id="partnersCard" style="margin-top:18px"></div>`;
   loadBattlePass();
+  loadWheel();
   loadPartnerLinks();
-  loadQuests();
   loadCommunityGoal();
   loadSubGoal();
   dropTimer = setInterval(() => { if (!document.hidden) { loadCommunityGoal(); loadSubGoal(); } }, 12000);
@@ -2078,7 +2070,14 @@ function pageBonusy() {
 async function loadBattlePass() {
   const box = document.getElementById("bpCard"); if (!box) return;
   try {
-    const bp = await api("/battlepass");
+    const [bp, daily] = await Promise.all([api("/battlepass"), api("/daily/status").catch(() => null)]);
+    let dailyHtml = "";
+    if (daily) {
+      const rew = (daily.reward_now || 0) * (daily.mult || 1);
+      dailyHtml = daily.can_claim
+        ? `<button class="btn btn-primary btn-block" data-action="bp-daily" style="margin:0 0 14px">🔥 Vyzvednout denní bonus: +${fmtPts(rew)} (den ${daily.day}/7)</button>`
+        : `<div class="bp-daily-done">🔥 Denní bonus dnes vyzvednut (den ${daily.day}/7) · vrať se zítra</div>`;
+    }
     const nodes = bp.tiers.map((t) => {
       const cls = t.claimed ? "bp-claimed" : (t.reached ? "bp-ready" : "bp-locked");
       const inner = t.claimed ? "✓"
@@ -2094,7 +2093,8 @@ async function loadBattlePass() {
         <div class="section-title" style="margin:0">🎟️ Farmářský Battle Pass</div>
         <span class="faint" style="font-size:12.5px">Sezóna ${esc(bp.season)} · Tier <b style="color:var(--accent)">${bp.tier}</b>/${bp.max_tier}${bp.claimable ? ` · <b style="color:var(--farm-green)">${bp.claimable} k vyzvednutí!</b>` : ""}</span>
       </div>
-      <p class="muted" style="font-size:12.5px;margin:0 0 12px">Vše co nasbíráš — <b>streak, questy, kolo, výhry</b> — tě posouvá v passu. Reset každý měsíc. <span class="faint">(${fmtPts(bp.into)} / ${fmtPts(bp.tier_xp)} do dalšího tieru)</span></p>
+      <p class="muted" style="font-size:12.5px;margin:0 0 12px">Vše co nasbíráš — <b>denní bonus, kolo, výhry, sledování</b> — tě posouvá v passu. Reset každý měsíc. <span class="faint">(${fmtPts(bp.into)} / ${fmtPts(bp.tier_xp)} do dalšího tieru)</span></p>
+      ${dailyHtml}
       <div class="bp-prog"><i style="width:${bp.pct}%"></i></div>
       <div class="bp-track">${nodes}</div>
     </div>`;
@@ -2105,6 +2105,16 @@ async function claimBpTier(tier) {
     const r = await api("/battlepass/claim", { method: "POST", body: { tier: parseInt(tier, 10) } });
     if (state.user) state.user.points = r.balance;
     toast(`🎟️ Tier ${r.tier} vyzvednut! +${fmtPts(r.reward)} 🌾`, "success");
+    try { confettiBurst(); } catch (e) {}
+    renderHeader(); loadBattlePass();
+  } catch (e) { toast(e.message, "error"); }
+}
+
+async function claimBpDaily() {     // denní bonus folded do Battle Passu (reuse /daily/claim)
+  try {
+    const r = await api("/daily/claim", { method: "POST" });
+    if (state.user) state.user.points = r.balance;
+    toast(r.message, "success");
     try { confettiBurst(); } catch (e) {}
     renderHeader(); loadBattlePass();
   } catch (e) { toast(e.message, "error"); }
@@ -5050,6 +5060,7 @@ function handleAction(action, el) {
     case "wl-save": saveWagerLimit(); break;
     case "claim-quest": claimQuest(el.dataset.key); break;
     case "bp-claim": claimBpTier(el.dataset.tier); break;
+    case "bp-daily": claimBpDaily(); break;
     case "cal-claim": claimCalMs(el.dataset.ms); break;
     case "claim-partner": claimPartnerLink(el.dataset.id, el.dataset.url); break;
     case "cos-buy": buyCosmetic(el.dataset.key); break;
