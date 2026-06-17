@@ -206,7 +206,7 @@ function clearCart() { state.cart = []; saveCart(); renderHeader(); }
 
 /* ---------------- Router ---------------- */
 const NAV = [
-  ["shop", "Shop"], ["leaderboard", "Leaderboard"], ["exchange", "Exchange"], ["faq", "FAQ"], ["redeem", "Redeem"],
+  ["shop", "Shop"], ["leaderboard", "Žebříček"], ["exchange", "Směnárna"], ["faq", "FAQ"], ["redeem", "Kód"],
 ];
 function parseRoute() { const h = location.hash.replace(/^#\/?/, "").split("?")[0]; const [name, param] = h.split("/"); return { name: name || "shop", param }; }
 function currentRoute() { return parseRoute().name; }
@@ -292,7 +292,7 @@ function renderHeader() {
   const route = currentRoute();
   const u = state.user;
   document.body.classList.toggle("logged-in", !!u);   /* na mobilu uvolní místo v topbaru (skryje wordmark) */
-  const items = [["shop", "Shop"], ["bonusy", "Bonusy"], ["zahrada", "Zahrádka"], ["leaderboard", "Leaderboard"], ["exchange", "Exchange"], ["games", "Hry"], ["predikce", "Predikce"]];
+  const items = [["shop", "Shop"], ["bonusy", "Bonusy"], ["zahrada", "Zahrádka"], ["leaderboard", "Žebříček"], ["exchange", "Směnárna"], ["games", "Hry"], ["predikce", "Predikce"]];
   const navDot = (k) => (k === "bonusy" && u && bonusReady) ? `<span class="nav-dot" title="Máš nevyzvednutou odměnu!"></span>` : "";
   const navLinks = items.map(([k, l]) => `<a href="#/${k}" class="nav-link ${route === k ? "active" : ""}">${l}${navDot(k)}</a>`).join("")
     + (isStaff(u) ? `<a href="#/admin" class="nav-link ${route === "admin" ? "active" : ""}">${u.role === "admin" ? "Admin" : "Panel"}</a>` : "");
@@ -643,7 +643,7 @@ function productCardHTML(p) {
     ? `background-image:url('${esc(p.image_url)}');background-size:contain;background-repeat:no-repeat;background-position:center`
     : `background: radial-gradient(circle at 50% 38%, ${rhex}33, transparent 68%), linear-gradient(180deg, var(--surface-2), var(--bg-2))`;
   const periodTxt = PERIOD_LABEL[p.period] || "";
-  const typeLine = `${isRaffle ? ("TOMBOLA" + (periodTxt ? " · " + periodTxt : "")) : "INSTANT REWARD"}${rlabel ? " · " + rlabel : ""}`;
+  const typeLine = `${isRaffle ? ("TOMBOLA" + (periodTxt ? " · " + periodTxt : "")) : "OKAMŽITÁ ODMĚNA"}${rlabel ? " · " + rlabel : ""}`;
 
   let progress = "";
   if (isRaffle && !p.unlimited && p.stock > 0) {
@@ -1140,7 +1140,7 @@ function animateCounts(root) {
 }
 async function pageLeaderboard() {
   const view = $("#view");
-  view.innerHTML = `<div class="page-head" style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap"><div class="ph-mascotgroup"><img class="page-mascot" src="/sedlak-cut.png" alt=""><div><h1>🏆 Leaderboard</h1><p class="muted">Nejlepší sběrači sedláků.</p></div></div><a class="btn btn-ghost btn-sm" href="#/sin-slavy">📣 Síň slávy</a></div><div id="lb">${skeletonCards(1)}</div>`;
+  view.innerHTML = `<div class="page-head" style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap"><div class="ph-mascotgroup"><img class="page-mascot" src="/sedlak-cut.png" alt=""><div><h1>🏆 Žebříček</h1><p class="muted">Nejlepší sběrači sedláků.</p></div></div><a class="btn btn-ghost btn-sm" href="#/sin-slavy">📣 Síň slávy</a></div><div id="lb">${skeletonCards(1)}</div>`;
   try {
     const rows = await api("/leaderboard?limit=100");
     const myName = state.user && state.user.username;
@@ -1320,7 +1320,7 @@ async function pageUserProfile(nick) {
   const view = $("#view");
   const name = decodeURIComponent(nick || "");
   if (!name) { navigate("leaderboard"); return; }
-  view.innerHTML = `<div class="page-head"><a href="#/leaderboard" class="btn btn-ghost btn-sm">← Leaderboard</a></div><div id="up">${skeletonCards(1)}</div>`;
+  view.innerHTML = `<div class="page-head"><a href="#/leaderboard" class="btn btn-ghost btn-sm">← Žebříček</a></div><div id="up">${skeletonCards(1)}</div>`;
   try {
     const p = await api("/profile/public?nick=" + encodeURIComponent(name));
     const league = userTier(p.rank);
@@ -1449,7 +1449,7 @@ function badgesSectionHTML(badges) {
 async function pageExchange() {
   const view = $("#view");
   view.innerHTML = `
-    <div class="page-head with-mascot"><img class="page-mascot" src="/sedlak-cut.png" alt=""><div class="ph-text"><h1>💱 Exchange</h1><p class="muted">Pošli sedláky kamarádům nebo uplatni promo kód od streamera.</p></div></div>
+    <div class="page-head with-mascot"><img class="page-mascot" src="/sedlak-cut.png" alt=""><div class="ph-text"><h1>💱 Směnárna</h1><p class="muted">Pošli sedláky kamarádům nebo uplatni promo kód od streamera.</p></div></div>
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(310px,1fr));gap:18px;margin-bottom:24px">${giftCardHTML()}${redeemCardHTML()}</div>
     <div id="exWrap">${skeletonCards(2)}</div>`;
   try {
@@ -1550,7 +1550,7 @@ const FAQ = [
   ["Jak funguje košík?", "Do košíku můžeš přidat víc odměn a koupit je najednou – body se odečtou za celý součet a vytvoří se objednávky."],
   ["Jak funguje tombola?", "U tomboly si kupuješ tikety. Čím víc tiketů, tím větší šance. Streamer pak vylosuje výherce z účastníků."],
   ["Co se stane po nákupu?", "Vytvoří se objednávka se stavem „čeká na vyřízení”. Streamer ji následně vyřídí (např. ti předá odměnu)."],
-  ["Jak uplatním kód?", "V sekci <a href='#/redeem' style='color:var(--accent-2)'>Exchange → Uplatnit kód</a> zadej kód. Platný a nepoužitý kód ti připíše body nebo odemkne odměnu."],
+  ["Jak uplatním kód?", "V sekci <a href='#/redeem' style='color:var(--accent-2)'>Směnárna → Uplatnit kód</a> zadej kód. Platný a nepoužitý kód ti připíše body nebo odemkne odměnu."],
 ];
 function pageFaq() {
   const view = $("#view");
@@ -1572,7 +1572,7 @@ function pageRules() {
       <div class="section-title" style="margin-top:0">🪙 Body (sedláci)</div>
       <ul ${ul}>
         <li>Sedláci jsou <b>jen odměna za aktivitu</b> (sledování streamu, chat, denní bonus, dropy). <b>Nedají se koupit za peníze</b> a <b>nemají peněžní hodnotu</b>.</li>
-        <li>Sedláci patří k tvému účtu a <b>nevyplácí se v penězích</b>. Můžeš je <b>darovat jinému divákovi</b> (Exchange) — ale ne na účet ze stejné sítě/zařízení (anti-farma).</li>
+        <li>Sedláci patří k tvému účtu a <b>nevyplácí se v penězích</b>. Můžeš je <b>darovat jinému divákovi</b> (Směnárna) — ale ne na účet ze stejné sítě/zařízení (anti-farma).</li>
       </ul>
       <div class="section-title">🎁 Odměny a výplata</div>
       <ul ${ul}>
@@ -4576,7 +4576,7 @@ async function adminSecurity() {
         <span class="faint" style="margin-left:auto;font-size:12px">${adminState.auditOffset + 1}–${adminState.auditOffset + audit.rows.length} z ${audit.total}</span>
       </div>
 
-      <div class="section-title" style="margin-top:26px">🎁 Dary v Exchange <span class="faint" style="font-size:13px">– kdo komu poslal sedláky (celkem ${gifts.total})</span></div>
+      <div class="section-title" style="margin-top:26px">🎁 Dary ve Směnárně <span class="faint" style="font-size:13px">– kdo komu poslal sedláky (celkem ${gifts.total})</span></div>
       <div class="table-wrap"><table class="tbl"><thead><tr><th>Od koho</th><th>Komu</th><th>Sedláků</th><th>Kdy</th></tr></thead><tbody>
         ${gifts.rows.length ? gifts.rows.map((g) => `<tr>
           <td><b>${uLink(g.from)}</b></td>
