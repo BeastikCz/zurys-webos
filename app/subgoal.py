@@ -93,6 +93,26 @@ def record_gifter(conn, user_id: int, n: int, in_hh: bool) -> None:
         (_today(), user_id, n, hh, n, hh))
 
 
+def _announce_async(text: str) -> None:
+    """Hláška do Kick chatu v BACKGROUND threadu s VLASTNÍM conn. Kick API je synchronní HTTP –
+    v request threadu na sdíleném conn drží write lock a blokuje jediný worker → výpadek
+    (stalo se 2026-06-13; predikce/autodrop to taky řeší threadem). Handler se vrátí hned."""
+    import threading
+
+    def _bg():
+        try:
+            from .db import get_conn
+            from . import kickbot
+            c = get_conn()
+            try:
+                kickbot.send_message(c, text, kind="system")
+            finally:
+                c.close()
+        except Exception:
+            pass
+    threading.Thread(target=_bg, daemon=True).start()
+
+
 def _fire(conn, cfg) -> None:
     """Atomicky claimni výplatu (jen jednou za den) a rozdej JEN dnešním gifterům z happy hour."""
     cur = conn.execute(
@@ -112,17 +132,10 @@ def _fire(conn, cfg) -> None:
             [(uid, reward, now_iso()) for uid in ids])
     n = len(ids)
     conn.commit()
-    try:
-        from . import kickbot
-        if n > 0:
-            who = "gifter" if n == 1 else "gifterů"
-            kickbot.send_message(
-                conn, f"🟣 KOMUNITA SPLNILA SUB CÍL! {n} {who} z happy hour bere +{reward} sedláků! "
-                      f"Díky za gift suby! 🎁🌾", kind="system")
-        else:
-            kickbot.send_message(
-                conn, "🟣 SUB CÍL SPLNĚN! Dnes ale nikdo nedaroval sub v happy hour, "
-                      "takže odměna propadá – příště giftněte během happy hour! 🎁", kind="system")
-    except Exception:
-        import traceback
-        traceback.print_exc()
+    if n > 0:
+        who = "gifter" if n == 1 else "gifterů"
+        _announce_async(f"🟣 KOMUNITA SPLNILA SUB CÍL! {n} {who} z happy hour bere +{reward} sedláků! "
+                        f"Díky za gift suby! 🎁🌾")
+    else:
+        _announce_async("🟣 SUB CÍL SPLNĚN! Dnes ale nikdo nedaroval sub v happy hour, "
+                        "takže odměna propadá – příště giftněte během happy hour! 🎁")

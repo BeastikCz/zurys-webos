@@ -71,6 +71,26 @@ def tick(conn) -> None:
         _fire(conn, cfg)
 
 
+def _announce_async(text: str) -> None:
+    """Hláška do Kick chatu v BACKGROUND threadu s VLASTNÍM conn. Kick API je synchronní HTTP –
+    v request threadu na sdíleném conn drží write lock a blokuje jediný worker → výpadek
+    (stalo se 2026-06-13; predikce/autodrop to taky řeší threadem). Handler se vrátí hned."""
+    import threading
+
+    def _bg():
+        try:
+            from .db import get_conn
+            from . import kickbot
+            c = get_conn()
+            try:
+                kickbot.send_message(c, text, kind="system")
+            finally:
+                c.close()
+        except Exception:
+            pass
+    threading.Thread(target=_bg, daemon=True).start()
+
+
 def _fire(conn, cfg) -> None:
     """Atomicky claimni výplatu (jen jednou za den) a rozdej ji všem dnešním chat-přispěvatelům."""
     cur = conn.execute(
@@ -89,11 +109,5 @@ def _fire(conn, cfg) -> None:
     n = conn.execute(
         "SELECT COUNT(*) c FROM activity_state WHERE day = ? AND chat_today > 0", (today,)).fetchone()["c"]
     conn.commit()
-    try:
-        from . import kickbot
-        kickbot.send_message(
-            conn, f"🎉 CHAT NAPLNIL DNEŠNÍ CÍL! {n} aktivních diváků právě bere +{reward} sedláků! "
-                  f"Díky že kecáte! 💬🌾", kind="system")
-    except Exception:
-        import traceback
-        traceback.print_exc()
+    _announce_async(f"🎉 CHAT NAPLNIL DNEŠNÍ CÍL! {n} aktivních diváků právě bere +{reward} sedláků! "
+                    f"Díky že kecáte! 💬🌾")

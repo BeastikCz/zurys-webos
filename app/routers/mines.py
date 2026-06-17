@@ -148,7 +148,7 @@ def reveal(data: MinesRevealIn, user: sqlite3.Row = Depends(require_user),
         raise HTTPException(status_code=400, detail="Pole už je odkryté.")
     layout = json.loads(g["layout"] or "[]")
     if tile in layout:
-        conn.execute("UPDATE mines_games SET status='busted', ended_at=? WHERE id=?", (now_iso(), g["id"]))
+        conn.execute("UPDATE mines_games SET status='busted', ended_at=? WHERE id=? AND status='active'", (now_iso(), g["id"]))
         conn.commit()
         g = conn.execute("SELECT * FROM mines_games WHERE id=?", (g["id"],)).fetchone()
         st = _state(conn, g, True)
@@ -159,9 +159,10 @@ def reveal(data: MinesRevealIn, user: sqlite3.Row = Depends(require_user),
     safe = GRID - g["mines"]
     if len(revealed) >= safe:                # full clear → auto cashout
         payout = _payout(g["bet"], len(revealed), g["mines"])
-        add_points(conn, user["id"], payout, f"Mines výhra – full clear ({g['mines']} bomb)")
-        conn.execute("UPDATE mines_games SET revealed=?, status='cashed', payout=?, ended_at=? WHERE id=?",
-                     (json.dumps(revealed), payout, now_iso(), g["id"]))
+        cur = conn.execute("UPDATE mines_games SET revealed=?, status='cashed', payout=?, ended_at=? WHERE id=? AND status='active'",
+                           (json.dumps(revealed), payout, now_iso(), g["id"]))
+        if cur.rowcount == 1:        # vyhráli jsme závod o settle → vyplať jen jednou (anti double-pay)
+            add_points(conn, user["id"], payout, f"Mines výhra – full clear ({g['mines']} bomb)")
         conn.commit()
         g = conn.execute("SELECT * FROM mines_games WHERE id=?", (g["id"],)).fetchone()
         fresh = conn.execute("SELECT points FROM users WHERE id=?", (user["id"],)).fetchone()
@@ -182,9 +183,10 @@ def cashout(user: sqlite3.Row = Depends(require_user), conn: sqlite3.Connection 
         raise HTTPException(status_code=400, detail="Odkryj aspoň jedno pole, než cashneš.")
     mult = _mult(len(revealed), g["mines"])
     payout = _payout(g["bet"], len(revealed), g["mines"])
-    add_points(conn, user["id"], payout, f"Mines cashout (×{round(mult, 2)})")
-    conn.execute("UPDATE mines_games SET status='cashed', payout=?, ended_at=? WHERE id=?",
-                 (payout, now_iso(), g["id"]))
+    cur = conn.execute("UPDATE mines_games SET status='cashed', payout=?, ended_at=? WHERE id=? AND status='active'",
+                       (payout, now_iso(), g["id"]))
+    if cur.rowcount == 1:            # vyhráli jsme závod o settle → vyplať jen jednou (anti double-pay)
+        add_points(conn, user["id"], payout, f"Mines cashout (×{round(mult, 2)})")
     conn.commit()
     g = conn.execute("SELECT * FROM mines_games WHERE id=?", (g["id"],)).fetchone()
     fresh = conn.execute("SELECT points FROM users WHERE id=?", (user["id"],)).fetchone()
