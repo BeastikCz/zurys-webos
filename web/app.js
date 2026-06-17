@@ -1375,6 +1375,7 @@ async function loadCosmetics() {
       let btn;
       if (it.equipped) btn = `<button class="btn btn-success btn-sm btn-block" data-action="cos-equip" data-key="${it.key}">✓ Nasazeno · sundat</button>`;
       else if (it.owned) btn = `<button class="btn btn-primary btn-sm btn-block" data-action="cos-equip" data-key="${it.key}">Nasadit</button>`;
+      else if (it.grant_only) btn = `<button class="btn btn-ghost btn-sm btn-block" disabled title="Nedá se koupit – musíš si ho zasloužit">🏆 Jen pro šampiony</button>`;
       else btn = `<button class="btn btn-ghost btn-sm btn-block" data-action="cos-buy" data-key="${it.key}"><span class="coin"></span> ${Number(it.cost).toLocaleString("cs-CZ")}</button>`;
       return `<div class="cos-card${it.equipped ? " equipped" : ""}">${preview}
         <div class="cos-meta"><b>${esc(it.name)}</b>${sub}</div>
@@ -2137,31 +2138,41 @@ async function loadBattlePass() {
     }
     const nodes = bp.tiers.map((t) => {
       const cls = t.claimed ? "bp-claimed" : (t.reached ? "bp-ready" : "bp-locked");
-      const inner = t.claimed ? "✓"
+      const free = t.claimed ? "✓"
         : (t.reached ? `<button class="bp-claim" data-action="bp-claim" data-tier="${t.tier}">+${fmtPts(t.reward)}</button>`
           : `🔒 ${fmtPts(t.reward)}`);
-      return `<div class="bp-node ${cls}${t.milestone ? " bp-milestone" : ""}" title="Tier ${t.tier} · +${fmtPts(t.reward)} sedláků">
+      let prem;
+      if (t.premium_claimed) prem = "✓";
+      else if (!bp.is_premium) prem = "🔒";
+      else if (t.reached) prem = `<button class="bp-claim bp-claim-prem" data-action="bp-claim-premium" data-tier="${t.tier}">+${fmtPts(t.premium_reward)}</button>`;
+      else prem = `🔒 ${fmtPts(t.premium_reward)}`;
+      return `<div class="bp-node ${cls}${t.milestone ? " bp-milestone" : ""}" title="Tier ${t.tier}">
         <div class="bp-tier">${t.milestone ? "⭐ " : ""}${t.tier}</div>
-        <div class="bp-rew">${inner}</div>
+        <div class="bp-rew">${free}</div>
+        <div class="bp-rew bp-rew-prem" title="💜 Prémium (jen sub): +${fmtPts(t.premium_reward)}">${prem}</div>
       </div>`;
     }).join("");
+    const premBanner = bp.is_premium
+      ? `<div class="bp-prem bp-prem-on">💜 Prémiová řada aktivní — bereš <b>3× odměny</b>!${bp.claimable_premium ? ` <b style="color:var(--farm-green)">${bp.claimable_premium} k vyzvednutí</b>` : ""}</div>`
+      : `<div class="bp-prem bp-prem-off">💜 <b>Subni na Kicku</b> a odemkni <b>prémiovou řadu</b> — 3× větší odměny za každý tier (spodní řada 🔒).</div>`;
     box.innerHTML = `<div class="panel" style="overflow:hidden">
       <div class="row-between" style="flex-wrap:wrap;gap:8px;margin-bottom:6px">
         <div class="section-title" style="margin:0">🎟️ Farmářský Battle Pass</div>
         <span class="faint" style="font-size:12.5px">Sezóna ${esc(bp.season)} · Tier <b style="color:var(--accent)">${bp.tier}</b>/${bp.max_tier}${bp.claimable ? ` · <b style="color:var(--farm-green)">${bp.claimable} k vyzvednutí!</b>` : ""}</span>
       </div>
-      <p class="muted" style="font-size:12.5px;margin:0 0 12px">Vše co nasbíráš — <b>denní bonus, kolo, výhry, sledování</b> — tě posouvá v passu. Reset každý měsíc. <span class="faint">(${fmtPts(bp.into)} / ${fmtPts(bp.tier_xp)} do dalšího tieru)</span></p>
+      <p class="muted" style="font-size:12.5px;margin:0 0 10px">Vše co nasbíráš — <b>denní bonus, kolo, výhry, sledování</b> — tě posouvá v passu. Reset každý měsíc. <span class="faint">(${fmtPts(bp.into)} / ${fmtPts(bp.tier_xp)} do dalšího tieru)</span></p>
+      ${premBanner}
       ${dailyHtml}
       <div class="bp-prog"><i style="width:${bp.pct}%"></i></div>
       <div class="bp-track">${nodes}</div>
     </div>`;
   } catch (e) { box.innerHTML = ""; }
 }
-async function claimBpTier(tier) {
+async function claimBpTier(tier, premium) {
   try {
-    const r = await api("/battlepass/claim", { method: "POST", body: { tier: parseInt(tier, 10) } });
+    const r = await api("/battlepass/claim", { method: "POST", body: { tier: parseInt(tier, 10), premium: !!premium } });
     if (state.user) state.user.points = r.balance;
-    toast(`🎟️ Tier ${r.tier} vyzvednut! +${fmtPts(r.reward)} 🌾`, "success");
+    toast(`${premium ? "💜 PRÉMIUM tier" : "🎟️ Tier"} ${r.tier} vyzvednut! +${fmtPts(r.reward)} 🌾`, "success");
     try { confettiBurst(); } catch (e) {}
     renderHeader(); loadBattlePass();
   } catch (e) { toast(e.message, "error"); }
@@ -5065,6 +5076,7 @@ function handleAction(action, el) {
     case "prestige-buy": prestigeBuy(parseInt(el.dataset.cost, 10), parseInt(el.dataset.lvl, 10)); break;
     case "wl-save": saveWagerLimit(); break;
     case "bp-claim": claimBpTier(el.dataset.tier); break;
+    case "bp-claim-premium": claimBpTier(el.dataset.tier, true); break;
     case "bp-daily": claimBpDaily(); break;
     case "grd-pick": grdPick(el.dataset.crop); break;
     case "grd-plant": grdPlant(el.dataset.plot); break;

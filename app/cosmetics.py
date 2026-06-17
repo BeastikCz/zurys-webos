@@ -54,6 +54,8 @@ CATALOG = [
     {"key": "frame_neon",     "type": "frame", "name": "Neon puls",        "cost": 22000, "rarity": "covert",     "sub": False, "cls": "cf-neon"},
     {"key": "frame_rainbow",  "type": "frame", "name": "Duhový prsten",    "cost": 55000, "rarity": "legendary",  "sub": False, "cls": "cf-rainbow"},
     {"key": "frame_fire",     "type": "frame", "name": "Rotující oheň",    "cost": 60000, "rarity": "legendary",  "sub": False, "cls": "cf-fire"},
+    # ---- Exkluzivní (nelze koupit, jen vyhrát) ----
+    {"key": "frame_champion", "type": "frame", "name": "Šampion sezóny 👑", "cost": 0, "rarity": "legendary", "sub": False, "cls": "cf-champion", "grant_only": True},
 ]
 
 # Zrušené kousky (v1: profil bannery vypadaly špatně) → cena, pro JEDNORÁZOVÝ refund komu je
@@ -104,6 +106,7 @@ def list_for_user(conn, user_row) -> dict:
         items.append({
             "key": c["key"], "type": c["type"], "name": c["name"], "cost": c["cost"],
             "rarity": c["rarity"], "sub": c["sub"], "cls": c["cls"],
+            "grant_only": bool(c.get("grant_only")),
             "owned": c["key"] in owned,
             "equipped": eq.get(c["type"]) == c["key"],
         })
@@ -115,6 +118,8 @@ def buy(conn, user_row, key: str) -> dict:
     item = _BY_KEY.get(key)
     if not item:
         raise ValueError("Tahle kosmetika neexistuje.")
+    if item.get("grant_only"):
+        raise ValueError("Tenhle kousek se nedá koupit – musíš si ho zasloužit! 🏆")
     uid = user_row["id"]
     if conn.execute("SELECT 1 FROM cosmetic_owns WHERE user_id = ? AND item_key = ?",
                     (uid, key)).fetchone():

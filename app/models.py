@@ -191,8 +191,9 @@ class QuestClaimIn(BaseModel):
 
 
 class BattlePassClaimIn(BaseModel):
-    """Vyzvednutí odměny za odemčený tier farmářského Battle Passu."""
+    """Vyzvednutí odměny za odemčený tier farmářského Battle Passu (premium = sub-only řada)."""
     tier: int = Field(..., ge=1, le=100)
+    premium: bool = False
 
 
 class LoginCalClaimIn(BaseModel):

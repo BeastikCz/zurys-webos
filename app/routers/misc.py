@@ -473,7 +473,7 @@ def battlepass_claim(data: BattlePassClaimIn, user: sqlite3.Row = Depends(requir
                      conn: sqlite3.Connection = Depends(db_dep)):
     """Vyzvedne odměnu za odemčený tier (server ověří odemčení)."""
     from .. import battlepass
-    r = battlepass.claim(conn, user, data.tier)
+    r = battlepass.claim(conn, user, data.tier, getattr(data, "premium", False))
     if not r.get("ok"):
         raise HTTPException(status_code=400, detail=r.get("error", "Tier nelze vyzvednout."))
     return r

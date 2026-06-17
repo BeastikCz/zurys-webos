@@ -68,3 +68,32 @@ def test_battlepass_api(client):
     assert r.status_code == 200 and r.json()["ok"]
     # neodemčený tier → 400
     assert client.post("/api/battlepass/claim", json={"tier": 9}, headers=h).status_code == 400
+
+
+def test_battlepass_premium(client):
+    """Prémiová (sub-only) řada: 3× odměna, jen pro suby, nezávislá na free řadě."""
+    from app.db import get_conn
+    from app import battlepass
+    conn = get_conn()
+    try:
+        uid = _mk(conn, earned=0)
+        conn.commit()
+        sub = {"id": uid, "is_sub": 1, "role": "user"}
+        non = {"id": uid, "is_sub": 0, "role": "user"}
+        st = battlepass.status(conn, sub)                 # baseline = 0 (earned=0)
+        conn.execute("UPDATE users SET earned_total = 6000 WHERE id=?", (uid,))   # → 2 tiery odemčené
+        conn.commit()
+        st = battlepass.status(conn, sub)
+        assert st["is_premium"] is True
+        assert st["tiers"][0]["premium_reward"] == battlepass.tier_reward(1) * 3
+        # non-sub NEsmí claimnout premium
+        assert battlepass.claim(conn, non, 1, premium=True)["ok"] is False
+        # sub claimne premium tier 1 → 3× odměna
+        r = battlepass.claim(conn, sub, 1, premium=True)
+        assert r["ok"] and r["premium"] and r["reward"] == battlepass.premium_reward(1)
+        # znovu premium tier 1 → fail (už vyzvednuto)
+        assert battlepass.claim(conn, sub, 1, premium=True)["ok"] is False
+        # free řada tier 1 je nezávislá → pořád jde claimnout
+        assert battlepass.claim(conn, sub, 1, premium=False)["ok"] is True
+    finally:
+        conn.close()

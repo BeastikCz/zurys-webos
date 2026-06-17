@@ -23,58 +23,86 @@ def tier_reward(tier: int) -> int:
     return 800 if tier % 5 == 0 else 200
 
 
+def premium_reward(tier: int) -> int:
+    """Prémiová odměna (jen pro suby) – 3× základ. Motivace subnout."""
+    return tier_reward(tier) * 3
+
+
+def _is_premium(user) -> bool:
+    """Sub (nebo admin) má prémiovou řadu odemčenou."""
+    try:
+        return bool(user["is_sub"]) or user["role"] == "admin"
+    except (KeyError, IndexError, TypeError):
+        return False
+
+
 def _earned(conn, uid: int) -> int:
     r = conn.execute("SELECT earned_total FROM users WHERE id = ?", (uid,)).fetchone()
     return (r["earned_total"] if r else 0) or 0
 
 
 def _row(conn, uid: int):
-    """(baseline, claimed_list) pro aktuální sezónu; při prvním přístupu řádek založí."""
+    """(baseline, claimed, claimed_premium) pro aktuální sezónu; při prvním přístupu řádek založí."""
     season = _season()
-    row = conn.execute("SELECT baseline, claimed FROM battlepass WHERE user_id = ? AND season = ?",
+    row = conn.execute("SELECT baseline, claimed, claimed_premium FROM battlepass WHERE user_id = ? AND season = ?",
                        (uid, season)).fetchone()
     if row is None:
         base = _earned(conn, uid)
         conn.execute(
-            "INSERT INTO battlepass (user_id, season, baseline, claimed, created_at) "
-            "VALUES (?, ?, ?, '[]', ?) ON CONFLICT(user_id, season) DO NOTHING",
+            "INSERT INTO battlepass (user_id, season, baseline, claimed, claimed_premium, created_at) "
+            "VALUES (?, ?, ?, '[]', '[]', ?) ON CONFLICT(user_id, season) DO NOTHING",
             (uid, season, base, now_iso()))
         conn.commit()
-        return base, []
-    return row["baseline"], json.loads(row["claimed"] or "[]")
+        return base, [], []
+    return row["baseline"], json.loads(row["claimed"] or "[]"), json.loads(row["claimed_premium"] or "[]")
 
 
 def status(conn, user) -> dict:
-    """Stav passu pro UI: aktuální tier, postup a seznam tierů s odměnami/stavem."""
-    base, claimed = _row(conn, user["id"])
+    """Stav passu pro UI: aktuální tier, postup a seznam tierů s odměnami/stavem (free + premium)."""
+    base, claimed, claimed_p = _row(conn, user["id"])
     xp = max(0, _earned(conn, user["id"]) - base)
     tier = min(N_TIERS, xp // TIER_XP)
     into = (xp - tier * TIER_XP) if tier < N_TIERS else TIER_XP
     pct = round(into * 100 / TIER_XP) if tier < N_TIERS else 100
-    tiers = [{"tier": t, "reward": tier_reward(t), "reached": t <= tier,
-              "claimed": t in claimed, "milestone": t % 5 == 0} for t in range(1, N_TIERS + 1)]
+    prem = _is_premium(user)
+    tiers = [{"tier": t, "reward": tier_reward(t), "premium_reward": premium_reward(t),
+              "reached": t <= tier, "claimed": t in claimed, "premium_claimed": t in claimed_p,
+              "milestone": t % 5 == 0} for t in range(1, N_TIERS + 1)]
     return {"season": _season(), "tier": int(tier), "max_tier": N_TIERS, "xp": int(xp),
-            "tier_xp": TIER_XP, "pct": pct, "into": int(into), "tiers": tiers,
-            "claimable": sum(1 for t in tiers if t["reached"] and not t["claimed"])}
+            "tier_xp": TIER_XP, "pct": pct, "into": int(into), "tiers": tiers, "is_premium": prem,
+            "claimable": sum(1 for t in tiers if t["reached"] and not t["claimed"]),
+            "claimable_premium": sum(1 for t in tiers if prem and t["reached"] and not t["premium_claimed"])}
 
 
-def claim(conn, user, tier: int) -> dict:
-    """Vyzvedne odměnu za odemčený a dosud nevyzvednutý tier. Idempotentní přes claimed."""
+def claim(conn, user, tier: int, premium: bool = False) -> dict:
+    """Vyzvedne odměnu za odemčený a dosud nevyzvednutý tier (free, nebo premium = jen sub).
+    Idempotentní přes claimed / claimed_premium. Server ověří odemčení i sub status."""
     from .deps import add_points
     season = _season()
-    base, claimed = _row(conn, user["id"])
+    base, claimed, claimed_p = _row(conn, user["id"])
     reached = max(0, _earned(conn, user["id"]) - base) // TIER_XP
     if tier < 1 or tier > N_TIERS:
         return {"ok": False, "error": "Neplatný tier."}
     if tier > reached:
         return {"ok": False, "error": "Tenhle tier ještě nemáš odemčený. 💪"}
-    if tier in claimed:
-        return {"ok": False, "error": "Tenhle tier už máš vyzvednutý. 🎁"}
-    claimed.append(tier)
-    conn.execute("UPDATE battlepass SET claimed = ? WHERE user_id = ? AND season = ?",
-                 (json.dumps(sorted(claimed)), user["id"], season))
-    reward = tier_reward(tier)
-    add_points(conn, user["id"], reward, f"Battle Pass tier {tier} 🎟️")
+    if premium:
+        if not _is_premium(user):
+            return {"ok": False, "error": "Prémiová řada je jen pro suby. 💜"}
+        if tier in claimed_p:
+            return {"ok": False, "error": "Prémiový tier už máš vyzvednutý. 🎁"}
+        claimed_p.append(tier)
+        conn.execute("UPDATE battlepass SET claimed_premium = ? WHERE user_id = ? AND season = ?",
+                     (json.dumps(sorted(claimed_p)), user["id"], season))
+        reward = premium_reward(tier)
+        add_points(conn, user["id"], reward, f"Battle Pass PRÉMIUM tier {tier} 💜🎟️")
+    else:
+        if tier in claimed:
+            return {"ok": False, "error": "Tenhle tier už máš vyzvednutý. 🎁"}
+        claimed.append(tier)
+        conn.execute("UPDATE battlepass SET claimed = ? WHERE user_id = ? AND season = ?",
+                     (json.dumps(sorted(claimed)), user["id"], season))
+        reward = tier_reward(tier)
+        add_points(conn, user["id"], reward, f"Battle Pass tier {tier} 🎟️")
     conn.commit()
     bal = conn.execute("SELECT points FROM users WHERE id = ?", (user["id"],)).fetchone()["points"]
-    return {"ok": True, "reward": reward, "balance": bal, "tier": tier}
+    return {"ok": True, "reward": reward, "balance": bal, "tier": tier, "premium": premium}

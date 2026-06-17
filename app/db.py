@@ -653,6 +653,7 @@ _MIGRATIONS = [
     ("users", "fav_game", "TEXT"),     # vypíchnutá oblíbená hra (showcase)
     ("users", "prestige", "INTEGER NOT NULL DEFAULT 0"),   # prestige level (spálené sedláky = status, anti-inflace sink)
     ("users", "earned_total", "INTEGER NOT NULL DEFAULT 0"),   # celkem za život NAFARMENO (jen kladné přírůstky) → základ pro XP/level
+    ("battlepass", "claimed_premium", "TEXT NOT NULL DEFAULT '[]'"),   # prémiová (sub-only) řada Battle Passu – JSON list vyzvednutých tierů
     # Responsible gaming – denní limit sázek (Tipsport-style). 0/NULL = bez limitu.
     ("users", "wager_limit", "INTEGER"),                   # aktuální denní strop sázek
     ("users", "wager_limit_pending", "INTEGER"),           # navýšení čeká na zítřek (snížit jde hned)

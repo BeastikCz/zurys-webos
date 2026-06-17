@@ -8,7 +8,7 @@ from fastapi import FastAPI, Request, Depends, HTTPException
 from fastapi.responses import JSONResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
-from . import ipban, ddos, alerts, maintenance, navaja_import, awp_import
+from . import ipban, ddos, alerts, maintenance, navaja_import, awp_import, season_award
 from .backup import start_backup_daemon
 from .autodrop import start_autodrop_daemon
 from .live_events import start_live_events_daemon
@@ -171,6 +171,16 @@ finally:
 #         print(f"[awp] uprava {_a['key']}: {_a['nick']} +{_a['added']}/-{_a['removed']}")
 # finally:
 #     _aw.close()
+
+# Sezónní šampioni: na přelomu měsíce grantne TOP 3 minulé sezóny exkluzivní rámeček.
+# Flag-gated + start-baseline (bez retroaktivity) – první grant až po konci sezóny, ve které se nasadilo.
+_sc = get_conn()
+try:
+    _scr = season_award.run(_sc)
+    if _scr.get("awarded"):
+        print(f"[season] sampioni {_scr.get('season')}: ramecek pro {_scr['awarded']} hracu")
+finally:
+    _sc.close()
 
 # Jednorázově: hry dány mimo provoz → vrať zamčené vklady (otevřené+rozehrané piškvorky, otevřené duely).
 # Revert (až hry zase pojedou): GAMES_OFF=False níže + smaž flag 'games_off_refund_v1'.

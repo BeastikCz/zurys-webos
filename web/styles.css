@@ -1488,3 +1488,14 @@ body::before { display: none !important; }
 .wg-reopen { background: none; border: none; color: var(--accent); font: inherit; cursor: pointer; padding: 0; }
 .wg-reopen:hover { text-decoration: underline; }
 @media (max-width: 560px) { .modal.modal-wg { max-width: 100%; } .wg-mascot { width: 56px; height: 56px; } .wg-title { font-size: 18px; } }
+
+/* Battle Pass – prémiová (sub-only) řada */
+.bp-prem { font-size: 12px; font-weight: 700; border-radius: 12px; padding: 9px 12px; margin: 0 0 12px; }
+.bp-prem-on { color: #d9b3ff; background: rgba(168,85,247,.14); border: 1px solid rgba(168,85,247,.4); }
+.bp-prem-off { color: var(--text-dim); background: rgba(168,85,247,.07); border: 1px solid rgba(168,85,247,.25); }
+.bp-rew-prem { border-top: 1px dashed rgba(168,85,247,.35); margin-top: 4px; padding-top: 6px; color: #c98bff; }
+.bp-claim-prem { background: linear-gradient(135deg,#b06bff,#8a3ffb) !important; color: #fff !important; box-shadow: 0 4px 12px -4px rgba(168,85,247,.6) !important; }
+
+/* Šampion sezóny – exkluzivní rámeček avataru (jen grant) */
+.avatar.cf-champion { box-shadow: 0 0 0 2px #ffd23f, 0 0 14px -1px rgba(255,200,40,.8); animation: cf-champ 2s ease-in-out infinite; }
+@keyframes cf-champ { 0%,100% { box-shadow: 0 0 0 2px #ffd23f, 0 0 12px -2px rgba(255,200,40,.7); } 50% { box-shadow: 0 0 0 2.5px #fff0a8, 0 0 22px 0 rgba(255,210,63,.95); } }
