@@ -110,4 +110,4 @@ def _fire(conn, cfg) -> None:
         "SELECT COUNT(*) c FROM activity_state WHERE day = ? AND chat_today > 0", (today,)).fetchone()["c"]
     conn.commit()
     _announce_async(f"🎉 CHAT NAPLNIL DNEŠNÍ CÍL! {n} aktivních diváků právě bere +{reward} sedláků! "
-                    f"Díky že kecáte! 💬🌾")
+                    f"Děkujeme, že si s námi povídáte! 💬🌾")

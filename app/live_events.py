@@ -65,8 +65,8 @@ def _announce_async(mins: int, mult: float) -> None:
             c = get_conn()
             try:
                 kickbot.send_message(
-                    c, f"🔥 HAPPY HOUR! Příštích {mins} min jsou sedláci ×{mult:g} za sledování i chat — "
-                       f"koukej a piš na zurys.live! 🌾⚡", kind="live")
+                    c, f"🔥 HAPPY HOUR! Příštích {mins} min jsou sedláci ×{mult:g} za sledování i chat – "
+                       f"sleduj a piš na zurys.live! 🌾⚡", kind="live")
             finally:
                 c.close()
         except Exception:
@@ -132,8 +132,8 @@ def _check(conn) -> None:
         try:
             kickbot.send_message(
                 conn,
-                f"🔴 Jedeme LIVE! Příštích {mins} min jsou sedláci ×{mult:g} "
-                f"za sledování i chat — koukej a piš na zurys.live 🌾⚡",
+                f"🔴 Jsme LIVE! Příštích {mins} min jsou sedláci ×{mult:g} "
+                f"za sledování i chat – sleduj a piš na zurys.live 🌾⚡",
                 kind="live",
             )
         except Exception:

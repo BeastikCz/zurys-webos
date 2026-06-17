@@ -51,20 +51,20 @@ def claim_drop(data: DropClaimIn, request: Request, user: sqlite3.Row = Depends(
 
     # --- ANTI-BOT vrstva 1: explicitní jasné kontroly s konkrétními hláškami ---
     if (data.hp or "").strip():                         # honeypot vyplněn = bot
-        raise HTTPException(status_code=400, detail="Neplatný požadavek.")
+        raise HTTPException(status_code=400, detail="Neplatný požadavek. 🤔")
     sig = conn.execute(
         "SELECT webdriver, fp_hash FROM client_signals WHERE user_id = ? ORDER BY id DESC LIMIT 1",
         (user["id"],)).fetchone()
     if not sig or not sig["fp_hash"]:                   # žádný otisk = přímé API / bot
-        raise HTTPException(status_code=400, detail="Ověř se v prohlížeči (načti stránku) a zkus znovu.")
+        raise HTTPException(status_code=400, detail="Ověř se prosím v prohlížeči (načti stránku) a zkus to znovu.")
     if sig["webdriver"]:                                # automatizovaný prohlížeč
-        raise HTTPException(status_code=403, detail="Automatizovaný prohlížeč není povolen.")
+        raise HTTPException(status_code=403, detail="Automatizovaný prohlížeč není povolený.")
     if (data.dwell or 0) < DROP_MIN_DWELL_MS:           # claim moc rychle po zobrazení
-        raise HTTPException(status_code=400, detail="Moc rychle ⚡ – počkej na zobrazení dropu.")
+        raise HTTPException(status_code=400, detail="Příliš rychle. ⚡ Počkej, až se drop zobrazí.")
 
     # --- ANTI-BOT vrstva 2: risk score (kombinace IP/účet/VPN/form timing/rapid) ---
     check_or_block(conn, user, request, context="claim", t0_ms=data.t0,
-                   block_msg="Drop zablokován ochranou proti botům.")
+                   block_msg="Drop jsme zablokovali ochranou proti botům. 🛡️")
 
     # --- ANTI-BOT vrstva 3: per-zařízení limity (proti přepínání účtů) ---
     fp = sig["fp_hash"]
@@ -72,7 +72,7 @@ def claim_drop(data: DropClaimIn, request: Request, user: sqlite3.Row = Depends(
     wait = fp_drop_cooldown_remaining(conn, fp)
     if wait:
         raise HTTPException(status_code=429,
-                            detail=f"Z tohoto zařízení už drop padl – počkej {wait} s. ⏳")
+                            detail=f"Z tohoto zařízení už drop padl, počkej prosím {wait} s. ⏳")
 
     # --- ANTI-BOT vrstva 4: cooldown nových účtů ---
     if is_new_account(user):
@@ -80,7 +80,7 @@ def claim_drop(data: DropClaimIn, request: Request, user: sqlite3.Row = Depends(
         if used >= NEW_ACCOUNT_MAX_CLAIMS:
             raise HTTPException(
                 status_code=429,
-                detail=f"Nové účty (<24 h) mají limit {NEW_ACCOUNT_MAX_CLAIMS} dropů. Zatím {used}.",
+                detail=f"Nové účty (mladší 24 h) mají limit {NEW_ACCOUNT_MAX_CLAIMS} dropů. Zatím máš {used}.",
             )
 
     ip = client_ip(request)
@@ -90,7 +90,7 @@ def claim_drop(data: DropClaimIn, request: Request, user: sqlite3.Row = Depends(
         (code,),
     ).fetchone()
     if not d:
-        raise HTTPException(status_code=400, detail="Žádný takový live drop. Zkontroluj kód z chatu. ⚡")
+        raise HTTPException(status_code=400, detail="Takový live drop neběží. Zkontroluj kód z chatu. ⚡")
 
     # (Limit „1 chyt na IP/zařízení na drop" VYPNUT na přání – drop si může chytit kdokoliv,
     #  i víc účtů ze stejné IP/zařízení. Zůstává 1 chyt na UŽIVATELE na drop + anti-bot vrstvy.)
@@ -110,7 +110,7 @@ def claim_drop(data: DropClaimIn, request: Request, user: sqlite3.Row = Depends(
         ).fetchone()
         conn.commit()
         if mine:
-            raise HTTPException(status_code=400, detail=f"Tenhle drop už jsi chytil (pozice {mine['position']}).")
+            raise HTTPException(status_code=400, detail=f"Tento drop už jsi chytil (pozice {mine['position']}). 🙂")
         raise HTTPException(status_code=400, detail="Už je rozebráno! 😢 Příště buď rychlejší. ⚡")
 
     position = conn.execute(

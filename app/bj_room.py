@@ -65,7 +65,7 @@ def create(conn, uid, username):
             code = c
             break
     if not code:
-        raise ValueError("Nepodařilo se založit stůl, zkus to znovu.")
+        raise ValueError("Stůl se nepodařilo založit, zkus to prosím znovu.")
     ts = now_iso()
     cur = conn.execute(
         "INSERT INTO bj_rooms (code, host_id, status, created_at, updated_at) VALUES (?,?,'betting',?,?)",
@@ -80,11 +80,11 @@ def create(conn, uid, username):
 def join(conn, uid, username, code):
     room = _room_by_code(conn, (code or "").strip().upper())
     if not room or room["status"] == "closed":
-        raise ValueError("Stůl neexistuje (zkontroluj kód).")
+        raise ValueError("Takový stůl neexistuje – zkontroluj prosím kód.")
     if _seat(conn, room["id"], uid):
         return _public(conn, room, uid)
     if len(_seats(conn, room["id"])) >= MAX_SEATS:
-        raise ValueError("Stůl je plný.")
+        raise ValueError("Stůl je už plný.")
     ts = now_iso()
     conn.execute("INSERT INTO bj_seats (room_id, user_id, joined_at, seen_at) VALUES (?,?,?,?)",
                  (room["id"], uid, ts, ts))
@@ -97,7 +97,7 @@ def state(conn, uid, room_id):
     if not room:
         raise ValueError("Stůl neexistuje.")
     if not _seat(conn, room_id, uid):
-        raise ValueError("Nesedíš u tohohle stolu.")
+        raise ValueError("U tohoto stolu nesedíš.")
     return _public(conn, room, uid)
 
 
@@ -113,17 +113,17 @@ def place_bet(conn, uid, room_id, amount):
     if not room:
         raise ValueError("Stůl neexistuje.")
     if room["status"] != "betting":
-        raise ValueError("Teď nejde sázet (kolo běží).")
+        raise ValueError("Teď není možné sázet – kolo už běží.")
     s = _seat(conn, room_id, uid)
     if not s:
-        raise ValueError("Nesedíš u tohohle stolu.")
+        raise ValueError("U tohoto stolu nesedíš.")
     if s["state"] == "ready":
-        raise ValueError("Sázku už máš. Počkej na rozdání.")
+        raise ValueError("Sázku už máš zadanou. Počkej prosím na rozdání.")
     amount = int(amount)
     if amount < MIN_BET or amount > MAX_BET:
         raise ValueError(f"Sázka musí být {MIN_BET}–{MAX_BET} sedláků.")
     if not try_debit(conn, uid, amount, "Blackjack stůl – sázka 🃏"):
-        raise ValueError("Nemáš dost sedláků.")
+        raise ValueError("Nemáš dostatek sedláků.")
     conn.execute("UPDATE bj_seats SET bet=?, state='ready' WHERE id=?", (amount, s["id"]))
     conn.commit()
     return _public(conn, _room(conn, room_id), uid)
@@ -134,12 +134,12 @@ def deal(conn, uid, room_id):
     if not room:
         raise ValueError("Stůl neexistuje.")
     if room["host_id"] != uid:
-        raise ValueError("Rozdat může jen host stolu.")
+        raise ValueError("Rozdat karty může jen host stolu.")
     if room["status"] != "betting":
-        raise ValueError("Teď nejde rozdat.")
+        raise ValueError("Teď není možné rozdávat.")
     ready = [s for s in _seats(conn, room_id) if s["state"] == "ready" and s["bet"] > 0]
     if not ready:
-        raise ValueError("Nikdo zatím nevsadil.")
+        raise ValueError("Zatím nikdo nevsadil.")
     deck = _shoe()
     pos = 0
     dealer = [deck[pos], deck[pos + 1]]
@@ -162,10 +162,10 @@ def deal(conn, uid, room_id):
 def hit(conn, uid, room_id):
     room = _room(conn, room_id)
     if not room or room["status"] != "playing":
-        raise ValueError("Teď nejde hrát.")
+        raise ValueError("Teď není možné hrát.")
     s = _seat(conn, room_id, uid)
     if not s or s["state"] != "acting":
-        raise ValueError("Nemáš co hrát.")
+        raise ValueError("Teď nejsi na tahu.")
     deck = json.loads(room["deck"])
     hand = json.loads(s["hand"])
     hand.append(_draw(conn, room_id, deck))
@@ -181,10 +181,10 @@ def hit(conn, uid, room_id):
 def stand(conn, uid, room_id):
     room = _room(conn, room_id)
     if not room or room["status"] != "playing":
-        raise ValueError("Teď nejde hrát.")
+        raise ValueError("Teď není možné hrát.")
     s = _seat(conn, room_id, uid)
     if not s or s["state"] != "acting":
-        raise ValueError("Nemáš co hrát.")
+        raise ValueError("Teď nejsi na tahu.")
     conn.execute("UPDATE bj_seats SET state='stood', acted_at=? WHERE id=?", (now_iso(), s["id"]))
     conn.commit()
     _maybe_resolve(conn, room_id)
@@ -196,7 +196,7 @@ def next_round(conn, uid, room_id):
     if not room:
         raise ValueError("Stůl neexistuje.")
     if room["host_id"] != uid:
-        raise ValueError("Nové kolo spustí jen host.")
+        raise ValueError("Nové kolo může spustit jen host stolu.")
     if room["status"] not in ("done", "betting"):
         raise ValueError("Kolo ještě běží.")
     conn.execute("UPDATE bj_seats SET bet=0, hand='[]', state='idle', result=NULL, payout=0, acted_at=NULL WHERE room_id=?",
@@ -228,7 +228,7 @@ def leave(conn, uid, room_id):
 
 def chat_send(conn, uid, username, room_id, msg):
     if not _seat(conn, room_id, uid):
-        raise ValueError("Nesedíš u tohohle stolu.")
+        raise ValueError("U tohoto stolu nesedíš.")
     msg = (msg or "").strip()[:200]
     if msg:
         conn.execute("INSERT INTO bj_chat (room_id, user_id, username, msg, created_at) VALUES (?,?,?,?,?)",

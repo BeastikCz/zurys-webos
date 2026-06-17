@@ -109,9 +109,9 @@ def start(data: MinesStartIn, user: sqlite3.Row = Depends(require_user),
     rate_limit(f"mines:start:{user['id']}", 120, 60)   # strop jen proti botům (~2 hry/s); pro hráče neviditelné
     require_can_gamble(user)                 # sebevyloučení ze sázek
     if _mines_banned(conn, user["id"]):      # cílený admin ban jen na Mines
-        raise HTTPException(status_code=403, detail="Máš od adminů zákaz hraní Mines. Zbytek webu ti funguje normálně.")
+        raise HTTPException(status_code=403, detail="Hraní Mines máš od adminů zakázané. Zbytek webu ti funguje normálně.")
     if _active(conn, user["id"]):
-        raise HTTPException(status_code=400, detail="Máš rozehranou hru – dohraj ji nebo cashni.")
+        raise HTTPException(status_code=400, detail="Máš rozehranou hru – nejdřív ji dohraj nebo si vyber výhru (cashout).")
     bet, mines = data.bet, data.mines
     if bet < 1 or bet > MAX_BET:
         raise HTTPException(status_code=400, detail=f"Sázka musí být 1–{MAX_BET} sedláků.")
@@ -119,7 +119,7 @@ def start(data: MinesStartIn, user: sqlite3.Row = Depends(require_user),
         raise HTTPException(status_code=400, detail=f"Počet bomb musí být {MIN_MINES}–24.")
     check_wager_limit(conn, user, bet)               # responsible gaming: denní limit sázek
     if not try_debit(conn, user["id"], bet, f"Mines sázka ({mines} bomb)"):
-        raise HTTPException(status_code=400, detail=f"Nemáš dost sedláků (sázka {bet}).")
+        raise HTTPException(status_code=400, detail=f"Nemáš dostatek sedláků (sázka je {bet}).")
     ss, sh, cs, nonce = _fair_consume(conn, user["id"])
     layout = fairness.mine_positions(ss, cs, nonce, GRID, mines)
     conn.execute("UPDATE users SET fair_nonce = fair_nonce + 1 WHERE id=?", (user["id"],))
@@ -139,13 +139,13 @@ def reveal(data: MinesRevealIn, user: sqlite3.Row = Depends(require_user),
     rate_limit(f"mines:reveal:{user['id']}", 600, 30)   # strop jen proti botům (~20 odkrytí/s); pro hráče neviditelné
     g = _active(conn, user["id"])
     if not g:
-        raise HTTPException(status_code=400, detail="Nemáš rozehranou hru.")
+        raise HTTPException(status_code=400, detail="Nemáš žádnou rozehranou hru.")
     tile = data.tile
     if tile < 0 or tile >= GRID:
-        raise HTTPException(status_code=400, detail="Neplatné pole.")
+        raise HTTPException(status_code=400, detail="Neplatné políčko.")
     revealed = json.loads(g["revealed"] or "[]")
     if tile in revealed:
-        raise HTTPException(status_code=400, detail="Pole už je odkryté.")
+        raise HTTPException(status_code=400, detail="Tohle políčko je už odkryté.")
     layout = json.loads(g["layout"] or "[]")
     if tile in layout:
         conn.execute("UPDATE mines_games SET status='busted', ended_at=? WHERE id=? AND status='active'", (now_iso(), g["id"]))
@@ -177,10 +177,10 @@ def reveal(data: MinesRevealIn, user: sqlite3.Row = Depends(require_user),
 def cashout(user: sqlite3.Row = Depends(require_user), conn: sqlite3.Connection = Depends(db_dep)):
     g = _active(conn, user["id"])
     if not g:
-        raise HTTPException(status_code=400, detail="Nemáš rozehranou hru.")
+        raise HTTPException(status_code=400, detail="Nemáš žádnou rozehranou hru.")
     revealed = json.loads(g["revealed"] or "[]")
     if not revealed:
-        raise HTTPException(status_code=400, detail="Odkryj aspoň jedno pole, než cashneš.")
+        raise HTTPException(status_code=400, detail="Než si vybereš výhru, odkryj aspoň jedno políčko.")
     mult = _mult(len(revealed), g["mines"])
     payout = _payout(g["bet"], len(revealed), g["mines"])
     cur = conn.execute("UPDATE mines_games SET status='cashed', payout=?, ended_at=? WHERE id=? AND status='active'",

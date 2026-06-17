@@ -661,7 +661,7 @@ def _decode_image_dataurl(s: str):
     except Exception:
         raise HTTPException(status_code=400, detail="Poškozená data obrázku.")
     if not raw or len(raw) > _MAX_IMG_BYTES:
-        raise HTTPException(status_code=400, detail=f"Obrázek je moc velký (max {_MAX_IMG_BYTES // (1024 * 1024)} MB).")
+        raise HTTPException(status_code=400, detail=f"Obrázek je příliš velký (nejvýše {_MAX_IMG_BYTES // (1024 * 1024)} MB).")
     return raw, ext
 
 
@@ -887,7 +887,7 @@ def change_user_points(user_id: int, data: UserPointsIn, request: Request,
     if not reason:
         raise HTTPException(status_code=400, detail="Uveď důvod úpravy bodů (kvůli audit logu).")
     if admin["role"] == ROLE_MOD and abs(int(data.change)) > MOD_POINTS_MAX:
-        raise HTTPException(status_code=403, detail=f"Moderátor smí upravit nejvýš ±{MOD_POINTS_MAX} sedláků na jeden zásah.")
+        raise HTTPException(status_code=403, detail=f"Moderátor smí upravit nejvýše ±{MOD_POINTS_MAX} sedláků najednou.")
     add_points(conn, user_id, data.change, reason)
     record_audit(conn, admin, request, "user.points", f"#{user_id} {target['username']}",
                  f"{'+' if data.change > 0 else ''}{data.change} PTS – {reason}")
@@ -903,7 +903,7 @@ def set_user_admin_meta(user_id: int, data: UserAdminMetaIn, request: Request,
                         admin: sqlite3.Row = Depends(require_admin)):
     target = conn.execute("SELECT username FROM users WHERE id = ?", (user_id,)).fetchone()
     if not target:
-        raise HTTPException(status_code=404, detail="UĹľivatel nenalezen.")
+        raise HTTPException(status_code=404, detail="Uživatel nenalezen.")
     old = conn.execute("SELECT watchlisted, note FROM admin_user_meta WHERE user_id = ?", (user_id,)).fetchone()
     watchlisted = bool(old["watchlisted"]) if old else False
     note = old["note"] if old else ""
@@ -1040,7 +1040,7 @@ def _create_manual_order(conn, username, product_name, product_id, points_spent,
     `count` = kolik objednávek (ticketů) vytvořit. Body se dopočítají z ceny odměny (jinak 0)."""
     uname = (username or "").strip().lstrip("@")
     if len(uname) < 2:
-        raise ValueError("Chybí nebo příliš krátký nick.")
+        raise ValueError("Nick chybí nebo je příliš krátký.")
     key = uname.lower()
     target = conn.execute(
         "SELECT id, username FROM users WHERE LOWER(kick_username) = ? OR LOWER(username) = ? "
@@ -1061,7 +1061,7 @@ def _create_manual_order(conn, username, product_name, product_id, points_spent,
         if p:
             pid, cost = p["id"], p["cost_points"]
     if not pname:
-        raise ValueError("Chybí odměna/důvod.")
+        raise ValueError("Chybí odměna nebo důvod.")
     pts = points_spent if (points_spent and points_spent > 0) else (cost or 0)   # body = cena odměny
     cnt = max(1, min(50, int(count or 1)))
     note = (note or "").strip()

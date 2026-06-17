@@ -87,7 +87,7 @@ def product_detail(product_id: int, conn: sqlite3.Connection = Depends(db_dep)):
         f"SELECT p.*, {_TICKETS} FROM products p WHERE p.id = ? AND p.active = 1", (product_id,)
     ).fetchone()
     if not row:
-        raise HTTPException(status_code=404, detail="Odměna nenalezena.")
+        raise HTTPException(status_code=404, detail="Tuto odměnu jsme nenašli. 🤔")
     return _apply_disc(product_public(row), shop_discount_pct(conn))
 
 
@@ -101,7 +101,7 @@ def purchase(data: PurchaseIn, user: sqlite3.Row = Depends(require_user),
     if user["points"] < total:
         raise HTTPException(
             status_code=400,
-            detail=f"Nemáš dost bodů. Potřebuješ {total} b, máš {user['points']} b.",
+            detail=f"Nemáš dostatek bodů. Potřebuješ {total} b a máš {user['points']} b.",
         )
     order_ids = apply_purchase(conn, user, [(data.product_id, 1)])
     fresh = conn.execute("SELECT points FROM users WHERE id = ?", (user["id"],)).fetchone()
@@ -113,7 +113,7 @@ def purchase(data: PurchaseIn, user: sqlite3.Row = Depends(require_user),
         "order_ids": order_ids,
         "balance": fresh["points"],
         "product": product_public(product),
-        "message": f"Koupeno: {product['name']} za {total} b. Objednávka čeká na vyřízení.",
+        "message": f"🛒 Koupeno: {product['name']} za {total} b. Objednávka čeká na vyřízení.",
     }
 
 

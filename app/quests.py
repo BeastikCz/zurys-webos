@@ -20,7 +20,7 @@ QUESTS_ENABLED = True
 # CÍLE (targets) zvednuté: týdenní mají zabrat celý týden (ne den), denní mají dávat
 # poctivý poměr cena/výkon (víc práce za stejnou odměnu = míň inflace na úsilí).
 QUESTS = [
-    {"key": "d_drop", "period": "daily",  "name": "Drop lovec",    "desc": "Chytni 3 dropy",                      "stat": "drops",   "target": 3,    "reward": 100},
+    {"key": "d_drop", "period": "daily",  "name": "Lovec dropů",   "desc": "Chytni 3 dropy",                      "stat": "drops",   "target": 3,    "reward": 100},
     {"key": "d_duel", "period": "daily",  "name": "Vítěz dne",     "desc": "Vyhraj 5 PvP duelů",                  "stat": "pvp_won", "target": 5,    "reward": 100},
     {"key": "d_earn", "period": "daily",  "name": "Sedlák dříč",   "desc": "Vydělej 700 sedláků koukáním/chatem na streamu 📺", "stat": "earned",  "target": 700,  "reward": 150},
     {"key": "d_bet",  "period": "daily",  "name": "Sázkař",        "desc": "Podej 5 sázek v predikci",            "stat": "bets",    "target": 5,    "reward": 80},

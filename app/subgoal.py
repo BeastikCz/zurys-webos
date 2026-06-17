@@ -135,7 +135,7 @@ def _fire(conn, cfg) -> None:
     if n > 0:
         who = "gifter" if n == 1 else "gifterů"
         _announce_async(f"🟣 KOMUNITA SPLNILA SUB CÍL! {n} {who} z happy hour bere +{reward} sedláků! "
-                        f"Díky za gift suby! 🎁🌾")
+                        f"Děkujeme za gift suby! 🎁🌾")
     else:
-        _announce_async("🟣 SUB CÍL SPLNĚN! Dnes ale nikdo nedaroval sub v happy hour, "
-                        "takže odměna propadá – příště giftněte během happy hour! 🎁")
+        _announce_async("🟣 SUB CÍL SPLNĚN! Dnes ale nikdo nedaroval sub během happy hour, "
+                        "takže odměna propadá – příště věnujte gift sub během happy hour! 🎁")

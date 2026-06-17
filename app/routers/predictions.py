@@ -173,12 +173,12 @@ def place_bet(pid: int, data: PredictionBetIn,
     ).fetchone()
     if existing and existing["option_id"] != data.option_id:
         raise HTTPException(status_code=400,
-                            detail="Už jsi vsadil na jinou možnost – nelze sázet na obě strany.")
+                            detail="Už jsi vsadil na jinou možnost – sázet na obě strany nejde.")
     # atomický escrow – nejde do mínusu ani při souběhu
     check_wager_limit(conn, user, data.amount)       # responsible gaming: denní limit sázek
     if not try_debit(conn, user["id"], data.amount, f"Predikce #{pid} – sázka"):
         raise HTTPException(status_code=400,
-                            detail=f"Nemáš dost bodů. Sázka {data.amount}, máš {user['points']}.")
+                            detail=f"Nemáš dostatek bodů. Sázka je {data.amount}, ty máš {user['points']}.")
     if existing:
         conn.execute("UPDATE prediction_bets SET amount = amount + ? WHERE id = ?",
                      (data.amount, existing["id"]))
@@ -218,9 +218,9 @@ def create_prediction(data: PredictionCreateIn, request: Request,
     q = data.question.strip()
     if data.lock_seconds > 0:
         mins = max(1, round(data.lock_seconds / 60))
-        _pred_announce(f"🎯 Nová predikce: {q} — sázejte na zurys.live! Sázky se zavřou za {mins} min ⏳🌾")
+        _pred_announce(f"🎯 Nová predikce: {q} — sázej na zurys.live! Sázky se zavřou za {mins} min. ⏳🌾")
     else:
-        _pred_announce(f"🎯 Nová predikce: {q} — sázejte na zurys.live! 🌾")
+        _pred_announce(f"🎯 Nová predikce: {q} — sázej na zurys.live! 🌾")
     return _pred_public(conn, _get_pred(conn, pid), staff["id"])
 
 
@@ -302,9 +302,9 @@ def resolve_prediction(pid: int, data: PredictionResolveIn, request: Request,
     conn.commit()
     if total > 0:
         if win_pool == 0:
-            _pred_announce(f"🎯 Výsledek: {p['question']} → ✅ {opt['label']}! Nikdo netrefil — vklady vráceny.")
+            _pred_announce(f"🎯 Výsledek: {p['question']} → ✅ {opt['label']}! Nikdo netipnul správně — vklady jsme vrátili. 🪙")
         else:
-            _pred_announce(f"🎯 Výsledek: {p['question']} → ✅ {opt['label']}! {paid_winners} výherců si rozdělilo {total} sedláků 🌾")
+            _pred_announce(f"🎯 Výsledek: {p['question']} → ✅ {opt['label']}! {paid_winners} výherců si rozdělilo {total} sedláků. 🌾")
     return _pred_public(conn, _get_pred(conn, pid), staff["id"])
 
 
@@ -316,7 +316,7 @@ def reresolve_prediction(pid: int, data: PredictionResolveIn, request: Request,
     Funguje JEN na už 'resolved'. Může způsobit záporný zůstatek (kdo si špatnou výhru už utratil)."""
     p = _get_pred(conn, pid)
     if p["status"] != "resolved":
-        raise HTTPException(status_code=400, detail="Re-resolve jde jen na už vyhodnocenou predikci.")
+        raise HTTPException(status_code=400, detail="Opravit výsledek jde jen u už vyhodnocené predikce.")
     opt = conn.execute(
         "SELECT * FROM prediction_options WHERE id = ? AND prediction_id = ?", (data.option_id, pid)
     ).fetchone()

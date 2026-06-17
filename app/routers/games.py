@@ -343,7 +343,7 @@ def create_game(data: GameCreateIn, user: sqlite3.Row = Depends(require_user),
                 conn: sqlite3.Connection = Depends(db_dep)):
     require_can_gamble(user)                # sebevyloučení ze sázek (Tipsport-style)
     if games_capped(conn, user):
-        raise HTTPException(status_code=429, detail="Dnes už máš nahraný denní strop z her 🎲 – zkus to zítra.")
+        raise HTTPException(status_code=429, detail="Pro dnešek už máš denní strop ze her vyčerpaný 🎲 Zkus to prosím zítra.")
     if GAMES_MAINTENANCE:
         raise HTTPException(status_code=503, detail="Hry jsou v údržbě – brzy se vrátí (chystáme 9×9). 🔧")
     rate_limit(f"game:create:{user['id']}", 10, 60)
@@ -352,12 +352,12 @@ def create_game(data: GameCreateIn, user: sqlite3.Row = Depends(require_user),
         "SELECT COUNT(*) AS c FROM games WHERE p1_id=? AND status='open'", (user["id"],)
     ).fetchone()["c"]
     if openc >= 3:
-        raise HTTPException(status_code=400, detail="Máš moc otevřených her (max 3). Zruš nějakou.")
+        raise HTTPException(status_code=400, detail="Máš příliš mnoho otevřených her (nejvýše 3). Některou prosím zruš.")
     # atomický escrow – nejde do mínusu ani při souběhu
     check_wager_limit(conn, user, data.stake)        # responsible gaming: denní limit sázek
     if not try_debit(conn, user["id"], data.stake, "Sázka – piškvorky (vklad)"):
         raise HTTPException(status_code=400,
-                            detail=f"Nemáš dost bodů. Sázka {data.stake}, máš {user['points']}.")
+                            detail=f"Nemáš dostatek bodů. Sázka je {data.stake}, ty máš {user['points']}.")
     ts = now_iso()
     cur = conn.execute(
         "INSERT INTO games (type, status, stake, board, turn, p1_id, move_count, created_at, updated_at) "
@@ -374,7 +374,7 @@ def join_game(gid: int, request: Request, user: sqlite3.Row = Depends(require_us
               conn: sqlite3.Connection = Depends(db_dep)):
     require_can_gamble(user)                # sebevyloučení ze sázek (Tipsport-style)
     if games_capped(conn, user):
-        raise HTTPException(status_code=429, detail="Dnes už máš nahraný denní strop z her 🎲 – zkus to zítra.")
+        raise HTTPException(status_code=429, detail="Pro dnešek už máš denní strop ze her vyčerpaný 🎲 Zkus to prosím zítra.")
     if GAMES_MAINTENANCE:
         raise HTTPException(status_code=503, detail="Hry jsou v údržbě – brzy se vrátí (chystáme 9×9). 🔧")
     rate_limit(f"game:join:{user['id']}", 20, 60)
@@ -382,18 +382,18 @@ def join_game(gid: int, request: Request, user: sqlite3.Row = Depends(require_us
     if g["status"] != "open":
         raise HTTPException(status_code=400, detail="Tahle hra už není volná.")
     if g["p1_id"] == user["id"]:
-        raise HTTPException(status_code=400, detail="Tohle je tvoje hra – počkej na soupeře.")
+        raise HTTPException(status_code=400, detail="Tohle je tvoje hra – počkej prosím na soupeře.")
     # anti-farma: dva NE-admin účty ze stejné IP/zařízení proti sobě nesmí
     p1 = conn.execute("SELECT role FROM users WHERE id=?", (g["p1_id"],)).fetchone()
     both_non_admin = user["role"] != ROLE_ADMIN and (not p1 or p1["role"] != ROLE_ADMIN)
     if both_non_admin and _same_person(conn, g["p1_id"], user["id"]):
         raise HTTPException(status_code=403,
-                            detail="Nemůžeš hrát sám proti sobě (stejná IP/zařízení jako zakladatel).")
+                            detail="Nemůžeš hrát sám proti sobě (stejná IP nebo zařízení jako zakladatel).")
     # atomický escrow vkladu
     check_wager_limit(conn, user, g["stake"])        # responsible gaming: denní limit sázek
     if not try_debit(conn, user["id"], g["stake"], "Sázka – piškvorky (vklad)"):
         raise HTTPException(status_code=400,
-                            detail=f"Nemáš dost bodů. Sázka {g['stake']}, máš {user['points']}.")
+                            detail=f"Nemáš dostatek bodů. Sázka je {g['stake']}, ty máš {user['points']}.")
     # obsazení slotu je atomické (WHERE status='open'); když to nezabralo, byl někdo rychlejší
     cur = conn.execute(
         "UPDATE games SET status='active', p2_id=?, last_move_at=?, active_at=?, updated_at=? WHERE id=? AND status='open'",
@@ -402,7 +402,7 @@ def join_game(gid: int, request: Request, user: sqlite3.Row = Depends(require_us
     if cur.rowcount == 0:
         add_points(conn, user["id"], g["stake"], f"Vrácení vkladu – hra #{gid} už obsazená")
         conn.commit()
-        raise HTTPException(status_code=409, detail="Tahle hra už není volná – někdo byl rychlejší. Vklad vrácen.")
+        raise HTTPException(status_code=409, detail="Tahle hra už není volná – někdo byl rychlejší. Vklad ti vracíme. 🪙")
     conn.commit()
     g = _get_game(conn, gid)
     return _game_public(conn, g, user["id"])
@@ -415,19 +415,19 @@ def make_move(gid: int, data: GameMoveIn, user: sqlite3.Row = Depends(require_us
     g = _resolve_timeouts(conn, _get_game(conn, gid))
     me = 1 if g["p1_id"] == user["id"] else (2 if g["p2_id"] == user["id"] else 0)
     if not me:
-        raise HTTPException(status_code=403, detail="Nejsi hráč téhle hry.")
+        raise HTTPException(status_code=403, detail="Nejsi hráčem téhle hry.")
     if g["status"] != "active":
         return _game_public(conn, g, user["id"])   # mezitím vypršel čas → vrať dohraný stav
     if g["turn"] != me:
         raise HTTPException(status_code=400, detail="Nejsi na tahu.")
     if _seconds_since(g["last_move_at"]) < MIN_MOVE_S:
-        raise HTTPException(status_code=400, detail="Tah moc rychlý — počkej chvíli (ochrana proti botům).")
+        raise HTTPException(status_code=400, detail="Tah byl příliš rychlý – chvilku prosím počkej (ochrana proti botům).")
     cell = data.cell
     if cell < 0 or cell >= BOARD * BOARD:
-        raise HTTPException(status_code=400, detail="Políčko mimo plochu.")
+        raise HTTPException(status_code=400, detail="Políčko je mimo hrací plochu.")
     board = g["board"]
     if board[cell] != ".":
-        raise HTTPException(status_code=400, detail="Tohle políčko je obsazené.")
+        raise HTTPException(status_code=400, detail="Tohle políčko je už obsazené.")
     sym = str(me)
     board = board[:cell] + sym + board[cell + 1:]
     mc = g["move_count"] + 1
@@ -462,7 +462,7 @@ def cancel_game(gid: int, user: sqlite3.Row = Depends(require_user),
                 conn: sqlite3.Connection = Depends(db_dep)):
     g = _get_game(conn, gid)
     if g["p1_id"] != user["id"]:
-        raise HTTPException(status_code=403, detail="Zrušit může jen zakladatel.")
+        raise HTTPException(status_code=403, detail="Zrušit hru může jen její zakladatel.")
     if g["status"] != "open":
         raise HTTPException(status_code=400, detail="Tuhle hru už nejde zrušit.")
     add_points(conn, g["p1_id"], g["stake"], f"Zrušená hra #{gid} – vrácení vkladu")
@@ -477,14 +477,14 @@ def claim_timeout(gid: int, user: sqlite3.Row = Depends(require_user),
     """Soupeř dlouho netáhl → nárokuj výhru."""
     g = _get_game(conn, gid)
     if g["status"] != "active":
-        raise HTTPException(status_code=400, detail="Hra neběží.")
+        raise HTTPException(status_code=400, detail="Hra právě neběží.")
     me = 1 if g["p1_id"] == user["id"] else (2 if g["p2_id"] == user["id"] else 0)
     if not me:
-        raise HTTPException(status_code=403, detail="Nejsi hráč téhle hry.")
+        raise HTTPException(status_code=403, detail="Nejsi hráčem téhle hry.")
     if g["turn"] == me:
-        raise HTTPException(status_code=400, detail="Jsi na tahu ty, ne soupeř.")
+        raise HTTPException(status_code=400, detail="Na tahu jsi ty, ne soupeř.")
     if _seconds_since(g["last_move_at"]) <= _move_limit(g):
-        raise HTTPException(status_code=400, detail="Soupeř má ještě čas na tah.")
+        raise HTTPException(status_code=400, detail="Soupeř má na tah ještě čas.")
     _finish(conn, g, me)
     conn.commit()
     return _game_public(conn, _get_game(conn, gid), user["id"])
@@ -577,7 +577,7 @@ def duel_create(data: DuelCreateIn, user: sqlite3.Row = Depends(require_user),
                 conn: sqlite3.Connection = Depends(db_dep)):
     require_can_gamble(user)                # sebevyloučení ze sázek (Tipsport-style)
     if games_capped(conn, user):
-        raise HTTPException(status_code=429, detail="Dnes už máš nahraný denní strop z her 🎲 – zkus to zítra.")
+        raise HTTPException(status_code=429, detail="Pro dnešek už máš denní strop ze her vyčerpaný 🎲 Zkus to prosím zítra.")
     rate_limit(f"duel:cd:{user['id']}", 1, 3)      # cooldown: max 1 duel akce za 3 s (anti-spam)
     rate_limit(f"duel:create:{user['id']}", 10, 60)
     if data.type not in DUEL_TYPES:
@@ -589,11 +589,11 @@ def duel_create(data: DuelCreateIn, user: sqlite3.Row = Depends(require_user),
     openc = conn.execute("SELECT COUNT(*) AS c FROM duels WHERE p1_id=? AND status='open'",
                          (user["id"],)).fetchone()["c"]
     if openc >= 3:
-        raise HTTPException(status_code=400, detail="Máš moc otevřených výzev (max 3). Zruš nějakou.")
+        raise HTTPException(status_code=400, detail="Máš příliš mnoho otevřených výzev (nejvýše 3). Některou prosím zruš.")
     check_wager_limit(conn, user, data.stake)        # responsible gaming: denní limit sázek
     if not try_debit(conn, user["id"], data.stake, f"{_DUEL_LABEL[data.type]} – vklad"):
         raise HTTPException(status_code=400,
-                            detail=f"Nemáš dost bodů. Sázka {data.stake}, máš {user['points']}.")
+                            detail=f"Nemáš dostatek bodů. Sázka je {data.stake}, ty máš {user['points']}.")
     ts = now_iso()
     cur = conn.execute(
         "INSERT INTO duels (type, status, stake, p1_id, created_at, updated_at) VALUES (?, 'open', ?, ?, ?, ?)",
@@ -608,7 +608,7 @@ def duel_join(did: int, request: Request, user: sqlite3.Row = Depends(require_us
               conn: sqlite3.Connection = Depends(db_dep)):
     require_can_gamble(user)                # sebevyloučení ze sázek (Tipsport-style)
     if games_capped(conn, user):
-        raise HTTPException(status_code=429, detail="Dnes už máš nahraný denní strop z her 🎲 – zkus to zítra.")
+        raise HTTPException(status_code=429, detail="Pro dnešek už máš denní strop ze her vyčerpaný 🎲 Zkus to prosím zítra.")
     rate_limit(f"duel:cd:{user['id']}", 1, 3)      # cooldown: max 1 duel akce za 3 s (anti-spam)
     rate_limit(f"duel:join:{user['id']}", 20, 60)
     d = conn.execute("SELECT * FROM duels WHERE id=?", (did,)).fetchone()
@@ -617,22 +617,22 @@ def duel_join(did: int, request: Request, user: sqlite3.Row = Depends(require_us
     if d["status"] != "open":
         raise HTTPException(status_code=400, detail="Tahle výzva už není volná.")
     if d["p1_id"] == user["id"]:
-        raise HTTPException(status_code=400, detail="Tohle je tvoje výzva – počkej na soupeře.")
+        raise HTTPException(status_code=400, detail="Tohle je tvoje výzva – počkej prosím na soupeře.")
     p1 = conn.execute("SELECT role FROM users WHERE id=?", (d["p1_id"],)).fetchone()
     both_non_admin = user["role"] != ROLE_ADMIN and (not p1 or p1["role"] != ROLE_ADMIN)
     if both_non_admin and _same_person(conn, d["p1_id"], user["id"]):
         raise HTTPException(status_code=403,
-                            detail="Nemůžeš hrát sám proti sobě (stejná IP/zařízení jako vyzyvatel).")
+                            detail="Nemůžeš hrát sám proti sobě (stejná IP nebo zařízení jako vyzyvatel).")
     check_wager_limit(conn, user, d["stake"])        # responsible gaming: denní limit sázek
     if not try_debit(conn, user["id"], d["stake"], f"{_DUEL_LABEL[d['type']]} – vklad"):
         raise HTTPException(status_code=400,
-                            detail=f"Nemáš dost bodů. Sázka {d['stake']}, máš {user['points']}.")
+                            detail=f"Nemáš dostatek bodů. Sázka je {d['stake']}, ty máš {user['points']}.")
     cur = conn.execute("UPDATE duels SET p2_id=?, status='active', updated_at=? WHERE id=? AND status='open'",
                        (user["id"], now_iso(), did))
     if cur.rowcount == 0:
         add_points(conn, user["id"], d["stake"], f"Duel #{did} už obsazen – vrácení vkladu")
         conn.commit()
-        raise HTTPException(status_code=409, detail="Někdo byl rychlejší. Vklad vrácen.")
+        raise HTTPException(status_code=409, detail="Někdo byl rychlejší. Vklad ti vracíme. 🪙")
     _resolve_duel(conn, did)        # coinflip/dice se vyhodnotí hned
     conn.commit()
     return _duel_public(conn, conn.execute("SELECT * FROM duels WHERE id=?", (did,)).fetchone(), user["id"])
@@ -645,7 +645,7 @@ def duel_cancel(did: int, user: sqlite3.Row = Depends(require_user),
     if not d:
         raise HTTPException(status_code=404, detail="Duel nenalezen.")
     if d["p1_id"] != user["id"]:
-        raise HTTPException(status_code=403, detail="Zrušit může jen vyzyvatel.")
+        raise HTTPException(status_code=403, detail="Zrušit výzvu může jen ten, kdo ji vytvořil.")
     if d["status"] != "open":
         raise HTTPException(status_code=400, detail="Tuhle výzvu už nejde zrušit.")
     add_points(conn, d["p1_id"], d["stake"], f"Zrušená výzva (duel #{did}) – vrácení vkladu")

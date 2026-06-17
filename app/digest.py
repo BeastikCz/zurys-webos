@@ -67,7 +67,7 @@ def _econ_week(conn):
     if young:
         lines.append(f"   ℹ️ Inflace {h['inflation_pct']} % zatím nevypovídá (web běží < 7 dní).")
     elif h["inflation_pct"] >= thr:
-        lines.append(f"   ⚠️ INFLACE +{h['inflation_pct']} % / 7 dní (práh {thr} %)! Zvaž zdražení v shopu nebo míň faucetů.")
+        lines.append(f"   ⚠️ INFLACE +{h['inflation_pct']} % / 7 dní (práh {thr} %)! Zvaž zdražení v shopu nebo méně faucetů.")
         ping = True
     else:
         lines.append(f"   ✅ Inflace +{h['inflation_pct']} % / 7 dní (práh {thr} %).")

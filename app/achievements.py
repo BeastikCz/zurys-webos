@@ -25,7 +25,7 @@ BADGES = [
     {"key": "loyal",       "emoji": "🔥", "name": "Věrný divák",  "desc": "Denní série 7 / 30 / 100 dní",              "stat": "streak",   "tiers": [7, 30, 100]},
     {"key": "millionaire", "emoji": "💎", "name": "Milionář",     "desc": "Vydělej celkem 1 000 000 sedláků",          "stat": "earned",   "tiers": [1_000_000]},
     {"key": "patron",      "emoji": "🎖️", "name": "Mecenáš",      "desc": "Utrať celkem 25k / 100k / 250k v shopu",    "stat": "spent",    "tiers": [25_000, 100_000, 250_000]},
-    {"key": "rich",        "emoji": "🧀", "name": "Boháč",        "desc": "Měj 100 000 sedláků na účtu naráz",         "stat": "balance",  "tiers": [100_000]},
+    {"key": "rich",        "emoji": "🧀", "name": "Boháč",        "desc": "Měj 100 000 sedláků na účtu najednou",      "stat": "balance",  "tiers": [100_000]},
     {"key": "lucky",       "emoji": "🎟️", "name": "Šťastlivec",   "desc": "Vyhraj v tombole",                          "stat": "raffle",   "tiers": [1]},
     {"key": "champion",    "emoji": "🏆", "name": "Šampion",      "desc": "Buď #1 na žebříčku",                        "stat": "is_rank1", "tiers": [1]},
     {"key": "unlucky",     "emoji": "🃏", "name": "Smolař",       "desc": "Prohraj 10 PvP (klobouk dolů 🎩)",          "stat": "pvp_lost", "tiers": [10]},
@@ -172,7 +172,7 @@ def scan_rankups(conn) -> int:
         for uname, league in announces[:5]:        # max 5/cyklus, ať to nespamuje chat
             try:
                 kickbot.send_message(
-                    conn, f"🏆 {uname} právě postoupil do ligy {_LEAGUE_LABEL.get(league, league)}! Gratulace! 🎉",
+                    conn, f"🏆 {uname} právě postoupil do ligy {_LEAGUE_LABEL.get(league, league)}! Gratulujeme! 🎉",
                     kind="system")
             except Exception:
                 traceback.print_exc()

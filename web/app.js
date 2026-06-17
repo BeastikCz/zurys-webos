@@ -53,7 +53,7 @@ function countdown(iso) {
   return `${m}M ${sec}S`;
 }
 function requireTypedConfirm(message, phrase = "POTVRDIT") {
-  const value = prompt(`${message}\n\nPro potvrzeni napis: ${phrase}`, "");
+  const value = prompt(`${message}\n\nPro potvrzení napiš: ${phrase}`, "");
   return value === phrase;
 }
 function hashStr(s) { let h = 0; for (let i = 0; i < s.length; i++) { h = (h << 5) - h + s.charCodeAt(i); h |= 0; } return Math.abs(h); }
@@ -341,7 +341,7 @@ async function refreshStreamDot() {
     if (s && s.live) {
       el.className = "stream-dot stream-dot--live";
       if (txt) txt.textContent = "LIVE";
-      el.title = "Stream právě běží — klikni a koukni! 🔴";
+      el.title = "Stream právě běží — klikni a podívej se! 🔴";
       el.href = s.channel ? `https://kick.com/${s.channel}` : "#";
     } else {
       el.className = "stream-dot stream-dot--off";
@@ -364,7 +364,7 @@ function pageShop() {
     <div id="dropBanner"></div>
     <div class="da-head shop-hero"><img src="/sedlak-cut.png" class="hero-sedlak" alt="Sedlák" />
       <div><h1>Zurys <span class="accent">Shop</span></h1>
-      <p>Utrať nasbírané sedláky za prémiové skiny a odměny — instantky, limitky i tomboly. 🌾</p></div></div>
+      <p>Utrať nasbírané sedláky za prémiové skiny a odměny — instantní odměny, limitky i tomboly. 🌾</p></div></div>
     <div id="happyBanner"></div>
     <div id="soldFeed"></div>
     <div id="shopHero"></div>
@@ -405,7 +405,7 @@ async function loadCommunityGoal() {
         <span class="cgoal-rew">Odměna <b>+${fmtPts(g.reward)}</b> všem aktivním 🌾</span>
       </div>
       <div class="cgoal-bar"><span style="width:${pct}%"></span></div>
-      <div class="cgoal-sub">${g.progress} / ${g.target} · ${g.done ? "rozdáno všem, co dnes kecali! 🎁" : "kecejte v chatu a naplňte to společně! 🚀"}</div>
+      <div class="cgoal-sub">${g.progress} / ${g.target} · ${g.done ? "rozdáno všem, kdo dnes psali v chatu! 🎁" : "pište v chatu a naplňte to společně! 🚀"}</div>
     </div>`;
   } catch (e) { box.innerHTML = ""; }
 }
@@ -422,7 +422,7 @@ async function loadSubGoal() {
         <span class="cgoal-rew">Odměna <b>+${fmtPts(g.reward)}</b> gifterům z happy hour 🎁</span>
       </div>
       <div class="cgoal-bar"><span style="width:${pct}%"></span></div>
-      <div class="cgoal-sub">${g.progress} / ${g.target} subů · ${g.done ? "rozdáno dnešním gifterům z happy hour! 🎁" : "subněte / giftněte a naplňte to společně! 🟣"}</div>
+      <div class="cgoal-sub">${g.progress} / ${g.target} subů · ${g.done ? "rozdáno dnešním gifterům z happy hour! 🎁" : "subněte nebo giftněte a naplňte to společně! 🟣"}</div>
     </div>`;
   } catch (e) { box.innerHTML = ""; }
 }
@@ -713,7 +713,7 @@ function fairWeightedIndex(digestHex, weights) {
 let _fairData = null;
 function pageFair() {
   if (!state.user) { navigate("connect"); return; }
-  $("#view").innerHTML = `<div class="page-head"><h1>🔐 Provably fair</h1><p class="muted">Ověř si, že hry nejsou rigged. Výsledek = <code>HMAC(server&nbsp;seed, client&nbsp;seed:nonce)</code>. Hash server seedu zveřejníme PŘEDEM — po rotaci ti seed odhalíme a ty si vše přepočítáš sám.</p></div><div id="fairBox">${skeletonCards(1)}</div>`;
+  $("#view").innerHTML = `<div class="page-head"><h1>🔐 Provably fair</h1><p class="muted">Ověř si, že hry nejsou zmanipulované. Výsledek = <code>HMAC(server&nbsp;seed, client&nbsp;seed:nonce)</code>. Hash server seedu zveřejníme PŘEDEM — po rotaci ti seed odhalíme a ty si vše přepočítáš sám.</p></div><div id="fairBox">${skeletonCards(1)}</div>`;
   loadFair();
 }
 async function loadFair(revealed) {
@@ -734,7 +734,7 @@ async function loadFair(revealed) {
         <div class="section-title" style="margin-top:0">🎡 Posledních ${wheelRows.length} zatočení kola</div>
         <div class="field"><label>Server seed na ověření (vlož odhalený)</label><input class="input" id="fairVerifySeed" placeholder="odhalený server seed…" value="${esc(revealed || "")}"></div>
         <button class="btn btn-ghost btn-sm" data-action="fair-verify" style="margin:8px 0 14px">✅ Ověřit všechna</button>
-        <div id="fairRows">${wheelRows.map((r, i) => `<div class="fair-log-row"><span class="faint">nonce #${r.nonce}</span> · client <code>${esc(r.client_seed)}</code> → <b>${Number(d.wheel_amounts[r.result]).toLocaleString("cs-CZ")} sedláků</b> <span class="fair-check" id="fchk${i}"></span></div>`).join("") || `<div class="muted">Zatím jsi netočil kolem. Zatoč na Bonusech a vrať se ověřit. 🎡</div>`}</div>
+        <div id="fairRows">${wheelRows.map((r, i) => `<div class="fair-log-row"><span class="faint">nonce #${r.nonce}</span> · client <code>${esc(r.client_seed)}</code> → <b>${Number(d.wheel_amounts[r.result]).toLocaleString("cs-CZ")} sedláků</b> <span class="fair-check" id="fchk${i}"></span></div>`).join("") || `<div class="muted">Zatím jsi netočil kolem. Roztoč ho na Bonusech a vrať se to ověřit. 🎡</div>`}</div>
       </div>`;
   } catch (e) { const b = $("#fairBox"); if (b) b.innerHTML = `<div class="empty">${esc(e.message)}</div>`; }
 }
@@ -780,7 +780,7 @@ function gambleBlockBanner() {
 function pagePredikce() {
   const view = $("#view");
   view.innerHTML = `
-    <div class="da-head"><h1>Pred<span class="accent">ikce</span> <span class="live-dot" title="Sázky se aktualizují živě">🔴 LIVE</span></h1><p>Vsaď sedláky na výsledek (CS2 🔫). Výherci si rozdělí celý bank. Sázky tečou živě — nemusíš refreshovat.</p></div>
+    <div class="da-head"><h1>Pred<span class="accent">ikce</span> <span class="live-dot" title="Sázky se aktualizují živě">🔴 LIVE</span></h1><p>Vsaď sedláky na výsledek (CS2 🔫). Výherci si rozdělí celý bank. Sázky se aktualizují živě — nemusíš obnovovat stránku.</p></div>
     ${gambleBlockBanner()}
     <div id="predList">${skeletonCards(2)}</div>`;
   loadPredictions();
@@ -999,7 +999,7 @@ async function openProduct(id) {
     actionBtn = `<button class="btn btn-primary" data-action="buy" data-id="${p.id}">${buyLabel}</button>
                  <button class="btn btn-ghost" data-action="add-cart" data-id="${p.id}">➕ Do košíku</button>`;
   } else if (c.reason === "login") {
-    actionBtn = `<button class="btn btn-kick" data-action="connect">🟢 Připoj Kick účet pro nákup</button>`;
+    actionBtn = `<button class="btn btn-kick" data-action="connect">🟢 Pro nákup připoj svůj Kick účet</button>`;
   } else if (c.reason === "ended") {
     actionBtn = `<button class="btn" disabled>⏳ ${isRaffle ? "Čeká na vylosování" : "Akce skončila"}</button>`;
   } else if (c.reason === "sub") {
@@ -1298,7 +1298,7 @@ async function dmStaffInbox() {
     const rows = await api("/dm/admin/threads");
     refreshMe();
     const box = $("#dmBox"); if (!box) return;
-    if (!rows.length) { box.innerHTML = `<div class="empty"><div class="big">📭</div>Zatím žádná vlákna. Otevři něčí profil → „✉️ Napsat zprávu".</div>`; return; }
+    if (!rows.length) { box.innerHTML = `<div class="empty"><div class="big">📭</div>Zatím žádná vlákna. Otevři něčí profil → „✉️ Napsat zprávu”.</div>`; return; }
     box.innerHTML = `<div class="dm-inbox">${rows.map((r) => `<a class="dm-trow" href="#/zpravy/${r.user_id}">${avatarHTML(r.username, r.avatar_url)}<div class="dm-trow-body"><div class="dm-trow-top"><b>${esc(r.username)}</b> ${roleBadge(r.role)}${r.unread ? `<span class="dm-badge">${r.unread} nové</span>` : ""}</div><div class="dm-trow-last">${r.last_from_staff ? "Ty: " : ""}${esc((r.last_body || "").slice(0, 90))}</div></div><span class="faint" style="white-space:nowrap">${timeAgo(r.last_at)}</span></a>`).join("")}</div>`;
   } catch (e) { const b = $("#dmBox"); if (b) b.innerHTML = `<div class="empty">${esc(e.message)}</div>`; }
 }
@@ -1459,7 +1459,7 @@ async function pageExchange() {
       const c = canBuy(p);
       let btn;
       if (c.ok) btn = `<button class="btn btn-primary btn-block" data-action="buy" data-id="${p.id}">Směnit za ${fmtPts(p.cost_points)}</button>`;
-      else if (c.reason === "login") btn = `<button class="btn btn-kick btn-block" data-action="connect">🟢 Připoj Kick</button>`;
+      else if (c.reason === "login") btn = `<button class="btn btn-kick btn-block" data-action="connect">🟢 Připoj se přes Kick</button>`;
       else if (c.reason === "points") btn = `<button class="btn btn-block" disabled>Nemáš dost bodů</button>`;
       else btn = `<button class="btn btn-block" disabled>Nedostupné</button>`;
       return `<div class="card ex-card">
@@ -1546,10 +1546,10 @@ async function doRedeem() {
 const FAQ = [
   ["Jak získám body?", "Body jsou věrnostní měna – dostáváš je od streamera (admina) za sledování, aktivitu nebo uplatnění kódů. <b>Body se nedají koupit za peníze.</b>"],
   ["Co si můžu za body koupit?", "Najdeš to v sekci <a href='#/shop' style='color:var(--accent-2)'>Shop</a> – od pozdravů na streamu přes Discord role až po fyzické odměny a tomboly."],
-  ["Co znamená „Jen sub“ a „Jen VIP“?", "Některé odměny jsou jen pro předplatitele (sub) nebo VIP diváky. Koupit je může pouze uživatel s danou rolí."],
+  ["Co znamená „Jen sub” a „Jen VIP”?", "Některé odměny jsou jen pro předplatitele (sub) nebo VIP diváky. Koupit je může pouze uživatel s danou rolí."],
   ["Jak funguje košík?", "Do košíku můžeš přidat víc odměn a koupit je najednou – body se odečtou za celý součet a vytvoří se objednávky."],
   ["Jak funguje tombola?", "U tomboly si kupuješ tikety. Čím víc tiketů, tím větší šance. Streamer pak vylosuje výherce z účastníků."],
-  ["Co se stane po nákupu?", "Vytvoří se objednávka se stavem „čeká na vyřízení“. Streamer ji následně vyřídí (např. ti předá odměnu)."],
+  ["Co se stane po nákupu?", "Vytvoří se objednávka se stavem „čeká na vyřízení”. Streamer ji následně vyřídí (např. ti předá odměnu)."],
   ["Jak uplatním kód?", "V sekci <a href='#/redeem' style='color:var(--accent-2)'>Exchange → Uplatnit kód</a> zadej kód. Platný a nepoužitý kód ti připíše body nebo odemkne odměnu."],
 ];
 function pageFaq() {
@@ -1593,7 +1593,7 @@ function pageRules() {
       <div class="section-title">📌 Závěrem</div>
       <ul ${ul}>
         <li>Pravidla se můžou <b>změnit</b> (vylepšení nebo reakce na zneužití). Velké změny streamer oznámí.</li>
-        <li>Dotazy? Streamer na <b>kick.com/zurys1337</b>, nebo mrkni do <a href="#/faq">FAQ</a>.</li>
+        <li>Dotazy? Streamer na <b>kick.com/zurys1337</b>, nebo se podívej do <a href="#/faq">FAQ</a>.</li>
       </ul>
     </div>`;
 }
@@ -1780,7 +1780,7 @@ function pageCart() {
   const total = cartTotal();
   const afford = state.user ? state.user.points >= total : false;
   let checkoutBtn;
-  if (!state.user) checkoutBtn = `<button class="btn btn-kick btn-block" data-action="connect">🟢 Připoj Kick pro nákup</button>`;
+  if (!state.user) checkoutBtn = `<button class="btn btn-kick btn-block" data-action="connect">🟢 Pro nákup se připoj přes Kick</button>`;
   else if (!afford) checkoutBtn = `<button class="btn btn-block" disabled>Nemáš dost bodů (máš ${fmtPts(state.user.points)})</button>`;
   else checkoutBtn = `<button class="btn btn-primary btn-block" data-action="checkout">Koupit vše za ${fmtPts(total)}</button>`;
 
@@ -1867,7 +1867,7 @@ function pageProfile() {
       <p class="muted" style="margin:2px 0 12px;font-size:13px;line-height:1.55">
         Vlož svůj <b>Steam trade odkaz</b> — podle něj ti streamer pošle vyhrané skiny.
         Najdeš ho na Steamu → <b>Inventory</b> → <b>Trade Offers</b> →
-        <b>„Who can send me Trade Offers?"</b> → dole zkopíruj celý odkaz.
+        <b>„Who can send me Trade Offers?”</b> → dole zkopíruj celý odkaz.
       </p>
       <div class="field">
         <label>Tvůj trade link</label>
@@ -2021,7 +2021,7 @@ function pageBonusy() {
       <div class="page-head with-mascot"><img class="page-mascot" src="/sedlak-cut.png" alt=""><div class="ph-text"><h1>🎁 Denní odměny</h1><p class="muted">Streak bonus a kolo štěstí – sedláci zdarma každý den.</p></div></div>
       <div class="panel" style="text-align:center;padding:36px 20px">
         <div style="font-size:42px;margin-bottom:8px">🎡</div>
-        <div class="section-title" style="margin:0 0 6px">Připoj se a ber denní odměny</div>
+        <div class="section-title" style="margin:0 0 6px">Připoj se a získávej denní odměny</div>
         <p class="muted" style="font-size:13.5px;max-width:430px;margin:0 auto 18px">Každý den si vyzvedni streak bonus a zatoč kolem štěstí o sedláky – až 🎰 <b style="color:#e8b923">JACKPOT 3000</b>!</p>
         <button class="btn btn-kick" data-action="connect">🟢 Připojit přes Kick</button>
       </div>`;
@@ -2287,7 +2287,7 @@ async function loadPartnerLinks() {
         else if (flashActive && l.claimed) { cta = openLink(l); sub = "✓ Z tohoto flash kola už máš. Počkej na další ⚡"; }
         else { cta = openLink(l); sub = "⚡ Flash bonus — sleduj chat a klikni, až naběhne!"; }
       } else {
-        if (l.claimable) { cta = takeBtn(l, `Otevřít a vzít +${fmtPts(l.reward)} ↗`); sub = "Klikni, mrkni na našeho partnera a vezmi si sedláky 🤝"; }
+        if (l.claimable) { cta = takeBtn(l, `Otevřít a vzít +${fmtPts(l.reward)} ↗`); sub = "Klikni, podívej se na našeho partnera a vezmi si sedláky 🤝"; }
         else { cta = openLink(l); sub = "✓ Odměnu už máš — odkaz můžeš otevřít znovu."; }
       }
       const cls = l.claimable ? " ready" : (l.claimed ? " done" : "");
@@ -2303,7 +2303,7 @@ async function loadPartnerLinks() {
       ? `<div style="background:rgba(232,185,35,.14);border:1px solid #e8b923;border-radius:10px;padding:8px 12px;margin-bottom:10px;font-weight:700;color:#e8b923">⚡ FLASH BONUS běží! <span id="flashCountdown" style="font-weight:500;color:var(--text)"></span></div>`
       : "";
     box.innerHTML = `<div class="panel">
-      <div class="section-title" style="margin-top:0">🤝 Partneři <span class="faint" style="font-weight:400;font-size:13px">– mrkni na naše sponzory a ber sedláky</span></div>
+      <div class="section-title" style="margin-top:0">🤝 Partneři <span class="faint" style="font-weight:400;font-size:13px">– podívej se na naše sponzory a získej sedláky</span></div>
       ${banner}
       <div class="quest-list">${links.map(row).join("")}</div>
     </div>`;
@@ -2460,7 +2460,7 @@ function riskBadge(risk) {
   const r = risk || { score: 0, level: "ok", reasons: [] };
   const cls = r.level === "danger" ? "risk-danger" : r.level === "warn" ? "risk-warn" : "risk-ok";
   const txt = r.level === "danger" ? "RISK" : r.level === "warn" ? "POZOR" : "OK";
-  const title = (r.reasons || []).join(", ") || "bez signalu";
+  const title = (r.reasons || []).join(", ") || "bez signálu";
   return `<span class="risk-badge ${cls}" title="${esc(title)}">${txt} ${r.score || 0}</span>`;
 }
 function userMini(u) {
@@ -2480,17 +2480,17 @@ function economyDashboardHTML(e) {
   if (!e) return "";
   const row = (u, val, lbl) => `<div class="mini-row"><b>${esc(u.username)}</b><span>${Number(val || 0).toLocaleString("cs-CZ")} ${lbl}</span></div>`;
   return `<div class="panel" style="margin-bottom:16px">
-    <div class="section-title" style="margin-top:0">Ekonomika - prehled</div>
+    <div class="section-title" style="margin-top:0">Ekonomika – přehled</div>
     <div class="stat-grid">
-      ${statBox(Number(e.points_total || 0).toLocaleString("cs-CZ"), "Sedlaci v obehu", "accent")}
-      ${statBox("+" + Number(e.day.minted || 0).toLocaleString("cs-CZ"), "Vytvoreno 24h", "accent")}
-      ${statBox("-" + Number(e.day.burned || 0).toLocaleString("cs-CZ"), "Spaleno 24h", "warn")}
-      ${statBox(Number(e.day.net || 0).toLocaleString("cs-CZ"), "Net 24h", e.day.net > 0 ? "warn" : "accent")}
+      ${statBox(Number(e.points_total || 0).toLocaleString("cs-CZ"), "Sedláci v oběhu", "accent")}
+      ${statBox("+" + Number(e.day.minted || 0).toLocaleString("cs-CZ"), "Vytvořeno 24 h", "accent")}
+      ${statBox("-" + Number(e.day.burned || 0).toLocaleString("cs-CZ"), "Spáleno 24 h", "warn")}
+      ${statBox(Number(e.day.net || 0).toLocaleString("cs-CZ"), "Net 24 h", e.day.net > 0 ? "warn" : "accent")}
     </div>
     <div class="dash-columns">
-      <div><b>Top zisk 24h</b>${(e.top_earners || []).length ? e.top_earners.map((u) => row(u, u.gained, "zisk")).join("") : `<div class="empty">Zadny zisk.</div>`}</div>
-      <div><b>Top zustatky 🐋</b>${(e.top_holders || []).map((u) => row(u, u.points, "pts")).join("")}</div>
-      <div><b>Top utraceci 💸</b>${(e.top_spenders || []).length ? e.top_spenders.map((u) => row(u, u.spent, "utr")).join("") : `<div class="empty">Zatim nikdo.</div>`}</div>
+      <div><b>Top zisk 24 h</b>${(e.top_earners || []).length ? e.top_earners.map((u) => row(u, u.gained, "zisk")).join("") : `<div class="empty">Žádný zisk.</div>`}</div>
+      <div><b>Top zůstatky 🐋</b>${(e.top_holders || []).map((u) => row(u, u.points, "pts")).join("")}</div>
+      <div><b>Top utráceči 💸</b>${(e.top_spenders || []).length ? e.top_spenders.map((u) => row(u, u.spent, "utr")).join("") : `<div class="empty">Zatím nikdo.</div>`}</div>
     </div>
   </div>`;
 }
@@ -2563,24 +2563,24 @@ async function adminOverview() {
   try {
     const d = await api("/admin/overview");
     box.innerHTML = `
-      <div class="toolbar"><button class="btn btn-ghost btn-sm" data-action="overview-refresh">↻ Obnovit</button><span class="faint">Rychly admin prehled za poslednich 24 hodin.</span></div>
+      <div class="toolbar"><button class="btn btn-ghost btn-sm" data-action="overview-refresh">↻ Obnovit</button><span class="faint">Rychlý admin přehled za posledních 24 hodin.</span></div>
       <div class="stat-grid">
-        ${statBox(d.stats24.new_users, "Novych uctu")}
-        ${statBox(d.stats24.orders, "Objednavek 24h")}
-        ${statBox(d.stats24.pending_orders, "Ceka vyridit", d.stats24.pending_orders ? "warn" : "")}
-        ${statBox(d.stats24.drop_claims, "Drop claimu")}
-        ${statBox("+" + Number(d.stats24.earned).toLocaleString("cs-CZ"), "Zisk bodu", "accent")}
-        ${statBox("-" + Number(d.stats24.spent).toLocaleString("cs-CZ"), "Spaleno", "warn")}
+        ${statBox(d.stats24.new_users, "Nových účtů")}
+        ${statBox(d.stats24.orders, "Objednávek 24 h")}
+        ${statBox(d.stats24.pending_orders, "Čeká vyřídit", d.stats24.pending_orders ? "warn" : "")}
+        ${statBox(d.stats24.drop_claims, "Drop claimů")}
+        ${statBox("+" + Number(d.stats24.earned).toLocaleString("cs-CZ"), "Zisk bodů", "accent")}
+        ${statBox("-" + Number(d.stats24.spent).toLocaleString("cs-CZ"), "Spáleno", "warn")}
       </div>
       <div id="topchatPanel"></div>
-      <div class="section-title" style="margin-top:22px">Checklist pred akci</div>
+      <div class="section-title" style="margin-top:22px">Checklist před akcí</div>
       ${checklistHTML(d.checklist)}
       <div class="dash-columns" style="margin-top:18px">
-        <div class="panel"><div class="section-title" style="margin-top:0">Podezrele ucty</div>${d.risky.length ? d.risky.map(userMini).join("") : `<div class="empty">Nic vyrazne podezreleho.</div>`}</div>
-        <div class="panel"><div class="section-title" style="margin-top:0">Watchlist</div>${d.watchlist.length ? d.watchlist.map(userMini).join("") : `<div class="empty">Watchlist je prazdny.</div>`}</div>
+        <div class="panel"><div class="section-title" style="margin-top:0">Podezřelé účty</div>${d.risky.length ? d.risky.map(userMini).join("") : `<div class="empty">Nic výrazně podezřelého.</div>`}</div>
+        <div class="panel"><div class="section-title" style="margin-top:0">Watchlist</div>${d.watchlist.length ? d.watchlist.map(userMini).join("") : `<div class="empty">Watchlist je prázdný.</div>`}</div>
       </div>
       ${economyDashboardHTML(d.economy)}
-      <div class="panel"><div class="section-title" style="margin-top:0">Posledni admin akce</div>
+      <div class="panel"><div class="section-title" style="margin-top:0">Poslední admin akce</div>
         ${auditTimeline(d.recent_audit || [])}
       </div>`;
     loadTopchatterCard();
@@ -2595,7 +2595,7 @@ async function loadTopchatterCard() {
       ? s.today_top3.map((t, i) => `<div class="row-between" style="padding:4px 0">
           <span>${medal[i] || ""} <b>${esc(t.username)}</b> <span class="faint">· ${t.msgs} 💬</span></span>
           <b style="color:var(--accent-2)">+${fmtPts(t.reward)}</b></div>`).join("")
-      : `<div class="empty">Dnes zatím nikdo nekecal.</div>`;
+      : `<div class="empty">Dnes zatím nikdo nepsal.</div>`;
     box.innerHTML = `<div class="panel" style="margin-top:18px">
       <div class="row-between"><div class="section-title" style="margin:0">🗣️ Top Chatteři dne</div>
         ${s.already_paid_today
@@ -2606,7 +2606,7 @@ async function loadTopchatterCard() {
   } catch (e) { box.innerHTML = ""; }
 }
 async function payTopchatter() {
-  if (!requireTypedConfirm("Vyplatit dnesni TOP 3 chattery ted? (3000/2000/1000). Zamkne aktualni poradi a 1x denne.", "VYPLATIT")) return;
+  if (!requireTypedConfirm("Vyplatit dnešní TOP 3 chattery teď? (3000/2000/1000). Zamkne aktuální pořadí a jen 1× denně.", "VYPLATIT")) return;
   try {
     const r = await api("/admin/topchatter/pay", { method: "POST" });
     if (r.ok) toast(`✅ Vyplaceno ${r.count}× — ${(r.winners || []).map((w) => w.username + " (+" + w.reward + ")").join(", ")}`, "success");
@@ -2744,7 +2744,7 @@ async function uploadCoinIcon() {
   const file = f && f.files && f.files[0];
   if (!file) return;
   const info = $("#coinInfo");
-  if (file.size > 6 * 1024 * 1024) { toast("Obrázek je moc velký (max 6 MB).", "error"); f.value = ""; return; }
+  if (file.size > 6 * 1024 * 1024) { toast("Obrázek je příliš velký (max 6 MB).", "error"); f.value = ""; return; }
   if (info) info.textContent = "⏳ Nahrávám…";
   try {
     const dataUrl = await new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = () => rej(new Error("Nešlo načíst soubor.")); r.readAsDataURL(file); });
@@ -2821,11 +2821,11 @@ async function adminEconomy() {
         </div>
         <div class="faint" style="font-size:12.5px;margin-bottom:8px">Režim detekce (kick.com/zurys1337):</div>
         <div class="toolbar">${modeBtn("auto", "Auto (Kick API)")} ${modeBtn("on", "Vždy zapnuto")} ${modeBtn("off", "Vždy vypnuto")}</div>
-        ${lv.mode === "auto" && !lv.detectable ? `<div style="font-size:12.5px;margin-top:10px;color:#e0a857">⚠️ Auto-detekce potřebuje <b>připojeného reálného bota</b> (Kick API). Dokud není, počítá se jako offline — nebo přepni na „Vždy zapnuto", když jsi live.</div>` : ""}
+        ${lv.mode === "auto" && !lv.detectable ? `<div style="font-size:12.5px;margin-top:10px;color:#e0a857">⚠️ Auto-detekce potřebuje <b>připojeného reálného bota</b> (Kick API). Dokud není, počítá se jako offline — nebo přepni na „Vždy zapnuto”, když jsi live.</div>` : ""}
       </div>
       <div class="panel" style="margin-bottom:16px">
         <div class="section-title" style="margin-top:0">🔴 Happy hour — sleva na shop</div>
-        <p class="muted" style="font-size:13px;margin-bottom:14px">Dočasná sleva na <b>všechny nákupy</b> v shopu — táhne diváky utrácet (a koukat živě, když dáš „jen když live"). 0 % = vypnuto. ${hh.active_now ? `<b style="color:#46d369">Teď aktivní: −${hh.active_now} %</b>` : `<span class="faint">Teď: vypnuto</span>`}</p>
+        <p class="muted" style="font-size:13px;margin-bottom:14px">Dočasná sleva na <b>všechny nákupy</b> v shopu — láká diváky utrácet (a sledovat živě, když dáš „jen když live”). 0 % = vypnuto. ${hh.active_now ? `<b style="color:#46d369">Teď aktivní: −${hh.active_now} %</b>` : `<span class="faint">Teď: vypnuto</span>`}</p>
         <div class="eco-row"><div><b>Sleva (%)</b><br><span class="faint" style="font-size:12px">0–90 % (0 = vypnuto)</span></div><input class="input" id="shop_disc_pct" type="number" min="0" max="90" value="${hh.pct}" style="width:92px"></div>
         ${ecoToggle("shop_disc_live_only", "Jen když je LIVE", "Sleva platí jen během streamu (víc concurrent diváků)", hh.live_only)}
         ${ecoToggle("shop_disc_sub_2x", "2× body za subs a gift subs 🟣", "Během happy hour dají subscribe, resub i gift sub dvojnásob sedláků. Sdílí přepínač jen-když-live. Funguje i bez slevy na shop.", hh.sub_2x)}
@@ -2910,7 +2910,7 @@ async function loadAdminPartners() {
     const flBadge = fl.active ? `<span style="color:#e8b923;font-weight:700">⚡ BĚŽÍ teď</span>`
       : (fl.pflash_enabled ? "zapnuto, čeká na náhodný spoušť" : "vypnuto");
     box.innerHTML = `<div class="panel">
-      <div class="section-title" style="margin-top:0">🤝 Partnerské odkazy <span class="faint" style="font-weight:400;font-size:13px">– „klikni a ber" bonus v Bonusech</span></div>
+      <div class="section-title" style="margin-top:0">🤝 Partnerské odkazy <span class="faint" style="font-weight:400;font-size:13px">– „klikni a ber” bonus v Bonusech</span></div>
       <p class="muted" style="font-size:12.5px;margin-bottom:14px"><b>1× navždy</b> = každý vyzvedne jednou. <b>⚡ Flash</b> = jen během náhodného okna (nastav níž). Ověřuje se klik (ne návštěva cíle). ⚠️ U affiliate pozor na ToS.</p>
       ${links.map(rowHTML).join("") || `<div class="faint" style="margin-bottom:10px">Zatím žádný odkaz. Přidej první níž. 👇</div>`}
       <div class="eco-sep">➕ Přidat odkaz</div>
@@ -2923,8 +2923,8 @@ async function loadAdminPartners() {
       </div>
     </div>
     <div class="panel" style="margin-top:12px">
-      <div class="section-title" style="margin-top:0">⚡ Flash bonus <span class="faint" style="font-weight:400;font-size:13px">– náhodná obnova „flash" odkazů + bot do chatu</span></div>
-      <p class="muted" style="font-size:12.5px;margin-bottom:12px">Když zapnuto a jsi <b>LIVE</b>, v náhodném intervalu se „flash" odkazy obnoví a bot to napíše do chatu. Stav: ${flBadge} · <b>${fl.flash_links}</b> flash odkazů.</p>
+      <div class="section-title" style="margin-top:0">⚡ Flash bonus <span class="faint" style="font-weight:400;font-size:13px">– náhodná obnova „flash” odkazů + bot do chatu</span></div>
+      <p class="muted" style="font-size:12.5px;margin-bottom:12px">Když zapnuto a jsi <b>LIVE</b>, v náhodném intervalu se „flash” odkazy obnoví a bot to napíše do chatu. Stav: ${flBadge} · <b>${fl.flash_links}</b> flash odkazů.</p>
       ${ecoToggle("pf_enabled", "Flash zapnutý", "Hlavní vypínač automatického flashe", fl.pflash_enabled)}
       ${ecoToggle("pf_only_live", "Jen když je LIVE", "Neflashuj (a nespamuj chat), když nevysíláš", fl.pflash_only_live)}
       <div class="eco-row"><div><b>Interval OD–DO (min)</b><br><span class="faint" style="font-size:12px">Náhodná pauza mezi flashe</span></div>
@@ -2993,7 +2993,7 @@ async function savePartnerFlash() {
 async function triggerPartnerFlash() {
   try {
     const r = await api("/admin/economy/partner-flash/trigger", { method: "POST" });
-    if (r.ok) toast("⚡ Flash kolo spuštěno! Bot to hodil do chatu.", "success");
+    if (r.ok) toast("⚡ Flash kolo spuštěno! Bot to napsal do chatu.", "success");
     else toast(r.error || "Nepodařilo se spustit.", "error");
     loadAdminPartners();
   } catch (e) { toast(e.message, "error"); }
@@ -3200,7 +3200,7 @@ function productForm(p) {
         <div class="field"><label>Typ</label><select class="select" id="pf_type">${types}</select></div>
       </div>
       <div class="field"><label>🎁 Perioda giveaway (hlavně pro Tombolu, volitelné)</label><select class="select" id="pf_period">${periods}</select>
-        <span class="faint" style="font-size:11px">Štítek pro přehled — Denní/Týdenní/Měsíční/Roční/Random. Odměnu neukončuje (na to je „K dispozici do").</span>
+        <span class="faint" style="font-size:11px">Štítek pro přehled — Denní/Týdenní/Měsíční/Roční/Random. Odměnu neukončuje (na to je „K dispozici do”).</span>
       </div>
       <div class="field"><label>🎟️ Tombola: max ticketů na osobu (0 = neomezeno)</label>
         <input class="input" id="pf_maxpct" type="number" min="0" max="10000" value="${p.max_per_person_pct || 0}">
@@ -3208,7 +3208,7 @@ function productForm(p) {
       </div>
       <div class="field"><label>⏳ K dispozici do (volitelné – časovač na kartě)</label>
         <input class="input" id="pf_ends" type="datetime-local" value="${isoToLocalInput(p.ends_at)}">
-        <span class="faint" style="font-size:11px">Necháš prázdné = bez limitu. Po vypršení už nejde koupit a karta ukáže „UKONČENO".</span>
+        <span class="faint" style="font-size:11px">Necháš prázdné = bez limitu. Po vypršení už nejde koupit a karta ukáže „UKONČENO”.</span>
       </div>
       <div class="field-row">
         <label class="check"><input type="checkbox" id="pf_subs" ${p.subs_only ? "checked" : ""}> Jen pro suby</label>
@@ -3244,7 +3244,7 @@ async function lookupSkinImage() {
   try {
     const r = await api("/admin/products/skin-lookup", { method: "POST", body: { name } });
     if (!r.ok || !r.image_url) {
-      if (info) info.innerHTML = "⚠️ Přesná shoda nenalezena. Napiš název <b>přesně jako na Steam marketu</b> (vč. opotřebení, např. „AK-47 | Redline (Field-Tested)“). Když Steam zrovna omezuje dotazy, zkus to za chvíli znovu — nebo vlož URL obrázku ručně.";
+      if (info) info.innerHTML = "⚠️ Přesná shoda nenalezena. Napiš název <b>přesně jako na Steam marketu</b> (vč. opotřebení, např. „AK-47 | Redline (Field-Tested)”). Když Steam zrovna omezuje dotazy, zkus to za chvíli znovu — nebo vlož URL obrázku ručně.";
       return;
     }
     $("#pf_image").value = r.image_url;
@@ -3275,7 +3275,7 @@ async function searchSkins() {
   try {
     const r = await api("/admin/products/skin-search", { method: "POST", body: { query: q } });
     const res = r.results || [];
-    if (!res.length) { box.innerHTML = `<div class="faint" style="padding:8px">Nic nenalezeno. Zkus jinak (např. jen „asiimov", „karambit").</div>`; return; }
+    if (!res.length) { box.innerHTML = `<div class="faint" style="padding:8px">Nic nenalezeno. Zkus jinak (např. jen „asiimov”, „karambit”).</div>`; return; }
     box.innerHTML = res.map((s) => `
       <button type="button" class="skin-card" data-action="skin-pick" data-name="${esc(s.name)}" data-image="${esc(s.image)}" title="${esc(s.name)}">
         <img src="${esc(s.image)}" loading="lazy" alt=""><span>${esc(s.name)}</span></button>`).join("");
@@ -3298,7 +3298,7 @@ async function uploadImageFile() {
   const file = f && f.files && f.files[0];
   if (!file) return;
   const info = $("#pf_skininfo");
-  if (file.size > 6 * 1024 * 1024) { toast("Obrázek je moc velký (max 6 MB).", "error"); f.value = ""; return; }
+  if (file.size > 6 * 1024 * 1024) { toast("Obrázek je příliš velký (max 6 MB).", "error"); f.value = ""; return; }
   if (info) info.innerHTML = "⏳ Nahrávám…";
   try {
     const dataUrl = await new Promise((res, rej) => {
@@ -3318,7 +3318,7 @@ async function uploadImageFile() {
   }
 }
 async function deleteProduct(id) {
-  if (!requireTypedConfirm("Smazani odmeny je nevratne a muze ovlivnit shop.", "SMAZAT")) return;
+  if (!requireTypedConfirm("Smazání odměny je nevratné a může ovlivnit shop.", "SMAZAT")) return;
   try { await api("/admin/products/" + id, { method: "DELETE" }); toast("Smazáno.", "info"); loadAdminStats(); adminProducts(); }
   catch (e) { toast(e.message, "error"); }
 }
@@ -3329,7 +3329,7 @@ function userAdminTools(u, isAdmin) {
   return `<div class="user-admin-tools">
     ${riskBadge(u.risk)}
     <button class="mini-btn ${u.watchlisted ? "on" : ""}" data-action="user-watch" data-id="${u.id}" data-on="${u.watchlisted ? 1 : 0}" title="Watchlist">★</button>
-    <button class="mini-btn ${u.admin_note ? "on" : ""}" data-action="user-note" data-id="${u.id}" data-name="${esc(u.username)}" data-note="${esc(u.admin_note || "")}" title="Admin poznamka">✎</button>
+    <button class="mini-btn ${u.admin_note ? "on" : ""}" data-action="user-note" data-id="${u.id}" data-name="${esc(u.username)}" data-note="${esc(u.admin_note || "")}" title="Admin poznámka">✎</button>
   </div>${u.admin_note ? `<div class="admin-note-preview">${esc(u.admin_note)}</div>` : ""}`;
 }
 async function banCluster(idsCsv, label) {
@@ -3391,7 +3391,7 @@ async function adminUsers() {
 }
 async function setUserRole(id, role) {
   if (["admin", "broadcaster", "mod"].includes(role)
-      && !requireTypedConfirm(`Chystas se dat uzivateli citlivou roli: ${role}.`, "ROLE")) {
+      && !requireTypedConfirm(`Chystáš se dát uživateli citlivou roli: ${role}.`, "ROLE")) {
     adminUsers();
     return;
   }
@@ -3432,7 +3432,7 @@ async function confirmUserPoints(el) {
   const reason = (document.getElementById("ptsReason")?.value || "").trim();
   if (!reason) { toast("Uveď důvod úpravy (do audit logu).", "error"); document.getElementById("ptsReason")?.focus(); return; }
   if (Math.abs(change) >= 10000
-      && !requireTypedConfirm(`Velka uprava: ${change > 0 ? "+" : ""}${change} sedlaku.`, "BODY")) return;
+      && !requireTypedConfirm(`Velká úprava: ${change > 0 ? "+" : ""}${change} sedláků.`, "BODY")) return;
   try {
     await api(`/admin/users/${id}/points`, { method: "POST", body: { change, reason } });
     closeModal();
@@ -3446,23 +3446,23 @@ async function toggleUserWatch(el) {
   const on = el.dataset.on !== "1";
   try {
     await api(`/admin/users/${id}/admin-meta`, { method: "POST", body: { watchlisted: on } });
-    toast(on ? "Pridano na watchlist." : "Odebrano z watchlistu.", on ? "success" : "info");
+    toast(on ? "Přidáno na watchlist." : "Odebráno z watchlistu.", on ? "success" : "info");
     adminUsers();
   } catch (e) { toast(e.message, "error"); }
 }
 function openUserNote(el) {
   const id = parseInt(el.dataset.id, 10);
   openModal(`<div class="modal-body">
-    <h2>Admin poznamka</h2>
+    <h2>Admin poznámka</h2>
     <p class="muted" style="margin:6px 0 12px">${esc(el.dataset.name || "")}</p>
     <textarea class="input" id="adminNoteText" rows="6" maxlength="1000">${esc(el.dataset.note || "")}</textarea>
-    <button class="btn btn-primary btn-block" data-action="user-note-save" data-id="${id}" style="margin-top:12px">Ulozit poznamku</button>
+    <button class="btn btn-primary btn-block" data-action="user-note-save" data-id="${id}" style="margin-top:12px">Uložit poznámku</button>
   </div>`);
 }
 async function saveUserNote(id) {
   try {
     await api(`/admin/users/${id}/admin-meta`, { method: "POST", body: { note: ($("#adminNoteText")?.value || "") } });
-    toast("Poznamka ulozena.", "success");
+    toast("Poznámka uložena.", "success");
     closeModal();
     adminUsers();
   } catch (e) { toast(e.message, "error"); }
@@ -3494,7 +3494,7 @@ async function adminSubs() {
         <div>💜 <b>Aktivní suby: ${subs.length}</b>${soon ? ` <span class="faint">· ${soon} vyprší do 7 dní</span>` : ""}</div>
         <button class="btn btn-ghost btn-sm" data-action="subs-refresh">↻ Obnovit</button>
       </div>
-      <p class="faint" style="margin:2px 0 12px">Řazeno podle toho, komu vyprší nejdřív. „Ruční / bez data" = zaškrtnuté adminem (nevyprší samo). Příjemci gift subů se logují od teď.</p>
+      <p class="faint" style="margin:2px 0 12px">Řazeno podle toho, komu vyprší nejdřív. „Ruční / bez data” = zaškrtnuté adminem (nevyprší samo). Příjemci gift subů se logují od teď.</p>
       <div class="table-wrap"><table class="tbl">
         <thead><tr><th>Uživatel</th><th>Role</th><th>Vyprší</th><th>Jak získal</th><th>Od kdy</th></tr></thead>
         <tbody>
@@ -3559,7 +3559,7 @@ async function deleteOrder(id) {
   catch (e) { toast(e.message, "error"); }
 }
 async function clearFulfilledOrders() {
-  if (!requireTypedConfirm("Smazes vsechny vyrizene objednavky z historie. Body se nevraci.", "SMAZAT")) return;
+  if (!requireTypedConfirm("Smažeš všechny vyřízené objednávky z historie. Body se nevrací.", "SMAZAT")) return;
   try { const r = await api("/admin/orders/clear-fulfilled", { method: "POST" }); toast(`Smazáno ${r.deleted} vyřízených objednávek.`, "success"); loadAdminStats(); adminOrders(); }
   catch (e) { toast(e.message, "error"); }
 }
@@ -3568,7 +3568,7 @@ async function fulfillAllOrders() {
   const sel = document.querySelector('[data-action="order-product-filter"]');
   const prodLabel = (adminState.orderProduct && sel && sel.options[sel.selectedIndex]) ? sel.options[sel.selectedIndex].text : null;
   const msg = prodLabel
-    ? `Označit VŠECHNY čekající tickety pro „${prodLabel}" jako vyřízené?`
+    ? `Označit VŠECHNY čekající tickety pro „${prodLabel}” jako vyřízené?`
     : "Označit VŠECHNY čekající objednávky (všechny položky) jako vyřízené?";
   if (!confirm(msg)) return;
   try {
@@ -3698,7 +3698,7 @@ async function submitManualOrder() {
   try {
     const r = await api("/admin/orders", { method: "POST", body: { username, product_name, count, note } });
     closeModal();
-    toast(`✅ Vytvořeno ${r.count}× „${product_name}" pro ${r.username} (čeká na vyřízení).`, "success");
+    toast(`✅ Vytvořeno ${r.count}× „${product_name}” pro ${r.username} (čeká na vyřízení).`, "success");
     loadAdminStats(); adminOrders();
   } catch (e) { toast(e.message, "error"); }
 }
@@ -3839,7 +3839,7 @@ async function cancelGameAdmin(id) {
   } catch (e) { toast(e.message, "error"); }
 }
 async function refundGame(kind, id) {
-  if (!requireTypedConfirm("Refund hry: obema hracum se vrati vklad a vitezi se stornuje vyhra (muze ho dat do minusu, kdyz uz utratil).", "REFUND")) return;
+  if (!requireTypedConfirm("Refund hry: oběma hráčům se vrátí vklad a vítězi se stornuje výhra (může ho dát do mínusu, když už utratil).", "REFUND")) return;
   const path = kind === "duel" ? `/admin/games/duels/${id}/refund` : `/admin/games/${id}/refund`;
   try {
     const r = await api(path, { method: "POST" });
@@ -3869,7 +3869,7 @@ async function adminRaffles() {
         ${p.winner ? `<div class="panel gold" style="margin-bottom:12px;padding:10px 12px"><div class="row-between" style="gap:8px;flex-wrap:wrap"><span>🏆 Výherce: <a class="prof-link" href="#/u/${encodeURIComponent(p.winner)}"><b>${esc(p.winner)}</b></a></span><span style="display:flex;gap:6px">${p.winner_id ? `<a class="btn btn-primary btn-sm" href="#/zpravy/${p.winner_id}" title="Napsat výherci zprávu">✉️ Napsat</a>` : ""}<button class="btn btn-ghost btn-sm" data-action="raffle-undo" data-id="${p.id}" title="Smazat výherce – účastníci zůstanou">↩️ Vrátit</button></span></div></div>` : ""}
         <button class="btn btn-primary btn-block" data-action="raffle-draw" data-id="${p.id}" ${p.tickets ? "" : "disabled"}>🎲 ${p.winner ? "Losovat znovu" : "Vylosovat výherce"}</button>
       </div>`;
-    }).join("")}</div>` : `<div class="empty"><div class="big">🎟️</div>Žádné tomboly. Vytvoř odměnu typu „Tombola".</div>`;
+    }).join("")}</div>` : `<div class="empty"><div class="big">🎟️</div>Žádné tomboly. Vytvoř odměnu typu „Tombola”.</div>`;
   } catch (e) { box.innerHTML = `<div class="empty">${esc(e.message)}</div>`; }
 }
 /* --- Tombola: losovací animace ve stylu CS „case opening" --- */
@@ -3979,7 +3979,7 @@ function finishRaffle(reel, target, winner) {
   toast(`Výherce vylosován: ${winner.username} 🎉`, "success");
 }
 async function drawRaffle(id) {
-  if (!requireTypedConfirm("Spoustis ostre losovani tomboly. Vysledek se ulozi do auditu.", "LOSOVAT")) return;
+  if (!requireTypedConfirm("Spouštíš ostré losování tomboly. Výsledek se uloží do auditu.", "LOSOVAT")) return;
   let parts = [];
   try {
     const d = await api(`/shop/raffle/${id}/entries`);
@@ -4176,7 +4176,7 @@ function auditTone(action) {
 }
 function auditTimeline(rows) {
   if (!rows.length) {
-    return `<div class="empty">${adminState.auditAction || adminState.auditAdmin ? "Zadne zaznamy odpovidaji filtru." : "Zatim zadne admin akce."}</div>`;
+    return `<div class="empty">${adminState.auditAction || adminState.auditAdmin ? "Žádné záznamy neodpovídají filtru." : "Zatím žádné admin akce."}</div>`;
   }
   return `<div class="audit-timeline">${rows.map((a) => `<div class="audit-item ${auditTone(a.action)}">
     <div class="audit-dot"></div>
@@ -4237,7 +4237,7 @@ function giftRequestsHTML(giftReqs) {
               <span class="badge badge-vip" style="margin-left:6px">${fmtPts(g.amount)}</span></div>
             <span class="faint" style="font-size:12px">${timeAgo(g.created_at)}</span>
           </div>
-          ${g.note ? `<div class="muted" style="font-size:13px;margin:8px 0 0;font-style:italic">💬 „${esc(g.note)}"</div>` : `<div class="faint" style="font-size:12px;margin:8px 0 0">💬 bez důvodu</div>`}
+          ${g.note ? `<div class="muted" style="font-size:13px;margin:8px 0 0;font-style:italic">💬 „${esc(g.note)}”</div>` : `<div class="faint" style="font-size:12px;margin:8px 0 0">💬 bez důvodu</div>`}
           ${g.shared ? `<div class="muted" style="font-size:12.5px;margin:8px 0 0;color:#ff8a8a">🚩 <b>Stejná IP / zařízení</b> — možný pokus o přelévání bodů (funnel). Zvaž zamítnutí.</div>` : ""}
           <div class="toolbar" style="margin-top:10px">
             <button class="btn btn-primary btn-sm" data-action="gift-approve" data-id="${g.id}" data-label="${esc(g.from)}→${esc(g.to)} ${fmtPts(g.amount)}">✅ Povolit</button>
@@ -4631,7 +4631,7 @@ async function pageModApply() {
   try {
     const s = await api("/mod-apply/status");
     if (s.is_staff) { box.innerHTML = `<div class="panel ok">✅ Už jsi člen týmu. 🛡️</div>`; return; }
-    if (!s.open) { box.innerHTML = `<div class="panel"><div class="empty"><div class="big">🔒</div>Nábor moderátorů je teď zavřený. Mrkni zas příště!</div></div>`; return; }
+    if (!s.open) { box.innerHTML = `<div class="panel"><div class="empty"><div class="big">🔒</div>Nábor moderátorů je teď zavřený. Zkus to zase příště!</div></div>`; return; }
     if (s.applied && s.status === "pending") { box.innerHTML = `<div class="panel ok">⏳ Přihlášku už máš odeslanou — čeká na vyřízení. Ozveme se ti přes 🔔.</div>`; return; }
     if (s.applied && s.status === "accepted") { box.innerHTML = `<div class="panel ok">✅ Tvoje přihláška byla přijata! 🎉 Vítej v týmu.</div>`; return; }
     box.innerHTML = modApplyFormHTML(s.applied && s.status === "rejected");
@@ -4649,7 +4649,7 @@ function modApplyFormHTML(reapply) {
       </div>
       <div class="field-row">
         <div class="field"><label>Hodin týdně</label><input class="input" id="ma_hours" maxlength="40" placeholder="např. 10h"></div>
-        <div class="field"><label>Kdy bývᚹš online?</label><input class="input" id="ma_avail" maxlength="200" placeholder="večery, víkendy…"></div>
+        <div class="field"><label>Kdy býváš online?</label><input class="input" id="ma_avail" maxlength="200" placeholder="večery, víkendy…"></div>
       </div>
       <div class="field"><label>Jak dlouho sleduješ stream?</label><input class="input" id="ma_watch" maxlength="100" placeholder="např. půl roku"></div>
       ${ta("ma_exp", "Moderoval jsi už někde? Kde, jak dlouho?", "Nech prázdné, pokud ne")}
@@ -4716,7 +4716,7 @@ async function adminModApps() {
           <button class="btn btn-ghost btn-sm" data-action="modapp-toggle">${d.open ? "Zavřít nábor" : "Otevřít nábor"}</button>
         </div>
       </div>
-      <div class="faint" style="font-size:12.5px;margin-bottom:16px">Odkaz pro diváky (hoď do Kick chatu): <code style="user-select:all;color:var(--accent)">${location.origin}/#/mod-nabor</code></div>
+      <div class="faint" style="font-size:12.5px;margin-bottom:16px">Odkaz pro diváky (napiš do Kick chatu): <code style="user-select:all;color:var(--accent)">${location.origin}/#/mod-nabor</code></div>
       ${d.pending.length ? d.pending.map((a) => card(a, true)).join("") : `<div class="panel ok">✅ Žádné čekající přihlášky.</div>`}
       ${d.recent.length ? `<div class="section-title" style="margin-top:24px">Vyřízené</div>${d.recent.map((a) => card(a, false)).join("")}` : ""}`;
   } catch (e) { box.innerHTML = `<div class="empty">${esc(e.message)}</div>`; }
@@ -4945,7 +4945,7 @@ function autoDropCardHTML(a) {
       <div class="field"><label>Výherců DO</label><input class="input" id="ad_winners_max" type="number" min="1" value="${wMax}"></div>
     </div>
     <label class="check"><input type="checkbox" id="ad_live" ${a.autodrop_only_live ? "checked" : ""}> Jen když je stream 🔴 LIVE</label>
-    <div class="form-hint" style="margin:6px 0 0;font-size:12px">💡 Nech „DO" = „OD" a hodnota bude fixní (bez náhody).</div>
+    <div class="form-hint" style="margin:6px 0 0;font-size:12px">💡 Nech „DO” = „OD” a hodnota bude fixní (bez náhody).</div>
     <div class="toolbar" style="margin-top:12px">
       <button class="btn ${on ? "btn-danger" : "btn-primary"}" data-action="autodrop-toggle" data-on="${on ? 1 : 0}">${on ? "⏸️ Vypnout auto-drop" : "▶️ Zapnout auto-drop"}</button>
       <button class="btn btn-sm" data-action="autodrop-save">💾 Uložit nastavení</button>
@@ -4984,7 +4984,7 @@ async function adminDrops() {
           </div>
           <button class="btn btn-primary" type="submit">🚀 Spustit drop</button>
         </form>
-        <div class="form-hint" style="margin-top:8px">Po spuštění dostaneš kód → hoď ho do Kick chatu. Diváci ho zadají na webu a nejrychlejší berou body.</div>
+        <div class="form-hint" style="margin-top:8px">Po spuštění dostaneš kód → napiš ho do Kick chatu. Diváci ho zadají na webu a nejrychlejší získají body.</div>
       </div>
       <div class="table-wrap"><table class="tbl"><thead><tr><th>Kód</th><th>Body</th><th>Výherci</th><th>Stav</th><th></th></tr></thead><tbody>
       ${list.length ? list.map((d) => `<tr>
@@ -5004,8 +5004,8 @@ async function createDrop() {
     const r = await api("/admin/drops", { method: "POST", body });
     const posted = r.bot && r.bot.sent && r.bot.real;
     const head = posted
-      ? `<div style="color:#46d369;font-weight:800;margin:10px 0 4px">✅ Bot už hodil kód do chatu!</div><p class="muted" style="margin:2px 0 10px;font-size:13px">Kód (pro kontrolu):</p>`
-      : `<p class="muted" style="margin:10px 0">⚠️ Bot kód neposlal — hoď ho do chatu ručně:</p>`;
+      ? `<div style="color:#46d369;font-weight:800;margin:10px 0 4px">✅ Bot už kód napsal do chatu!</div><p class="muted" style="margin:2px 0 10px;font-size:13px">Kód (pro kontrolu):</p>`
+      : `<p class="muted" style="margin:10px 0">⚠️ Bot kód neposlal — napiš ho do chatu ručně:</p>`;
     const errLine = (!posted && r.bot && r.bot.error)
       ? `<div class="faint" style="font-size:11px;margin-top:8px;color:#e07a7a">Důvod: ${esc(String(r.bot.error).slice(0, 140))}</div>` : "";
     openModal(`<div class="modal-body" style="text-align:center">
@@ -5038,7 +5038,7 @@ function welcomeGuide() {
   const u = state.user;
   const steps = [
     ["📺", "Sleduj stream", "Za sledování Zurys streamu ti automaticky naskakují <b>sedláci</b> 🌾 — stačí mít web otevřený."],
-    ["🛒", "Utrať v Shopu", "Sedláky vyměníš za <b>skiny a odměny</b> — instantky i tomboly o velké ceny."],
+    ["🛒", "Utrať v Shopu", "Sedláky vyměníš za <b>skiny a odměny</b> — instantní odměny i tomboly o velké ceny."],
     ["🌱", "Zasaď v Zahrádce", "Zasaď semínko, počkej až doroste a <b>skliď víc sedláků</b>. Ozdob si farmu dekoracemi."],
     ["🎟️", "Plň Battle Pass", "Vše co naděláš tě posouvá v <b>sezónním Battle Passu</b> — denní bonus, kolo štěstí i odměny za tiery."],
     ["🎮", "Hraj a sázej", "Miny, duely, blackjack, predikce — zariskuj o <b>velké výhry</b> (férově, provably-fair)."],
@@ -5346,7 +5346,7 @@ let _bjRoom = null, _bjRoomId = null, _bjPoll = null;
 async function pageBjRoom(param) {
   if (!state.user) { navigate("connect"); return; }
   if (_bjPoll) { clearInterval(_bjPoll); _bjPoll = null; }
-  $("#view").innerHTML = `<div class="page-head"><h1>🃏 Soukromý stůl</h1><p class="muted">Blackjack mezi kámošema — jen na pozvánku. 🔒</p></div><div id="bjRoomWrap">${skeletonCards(1)}</div>`;
+  $("#view").innerHTML = `<div class="page-head"><h1>🃏 Soukromý stůl</h1><p class="muted">Blackjack mezi kamarády — jen na pozvánku. 🔒</p></div><div id="bjRoomWrap">${skeletonCards(1)}</div>`;
   _bjRoom = null; _bjRoomId = null;
   try {
     if (param && /^BJ/i.test(param)) {
@@ -5593,8 +5593,8 @@ function renderMines(d) {
     let banner = "";
     if (ended) {
       banner = g.status === "cashed"
-        ? `<div class="panel ok" style="margin-bottom:14px">💰 Vyhráls <b>${fmtPts(g.payout)}</b>! (×${g.mult.toFixed(2)})</div>`
-        : `<div class="panel bad" style="margin-bottom:14px">💥 Bomba! Přišels o sázku ${fmtPts(g.bet)}. Příště líp! 🌾</div>`;
+        ? `<div class="panel ok" style="margin-bottom:14px">💰 Vyhrál jsi <b>${fmtPts(g.payout)}</b>! (×${g.mult.toFixed(2)})</div>`
+        : `<div class="panel bad" style="margin-bottom:14px">💥 Bomba! Přišel jsi o sázku ${fmtPts(g.bet)}. Příště to vyjde! 🌾</div>`;
     }
     const opts = Array.from({ length: 21 }, (_, i) => i + 4).map((n) => `<option value="${n}" ${n === _minesMines ? "selected" : ""}>${n} 💣</option>`).join("");
     box.innerHTML = `
@@ -5749,7 +5749,7 @@ function showDuelReveal(d, onClose) {
   ov.addEventListener("click", (e) => { if (e.target === ov) close(); });
   const finish = () => {
     ov.querySelector("#drRes").innerHTML = won
-      ? `<span class="dr-win">🏆 VYHRÁLS! +${fmtPts(d.pot)} sedláků</span>`
+      ? `<span class="dr-win">🏆 VYHRÁL JSI! +${fmtPts(d.pot)} sedláků</span>`
       : `<span class="dr-lose">💀 Prohrál jsi ${fmtPts(d.stake)}</span>`;
     if (won) { sndWin(); confettiBurst(); } else { sndLose(); }
     const b = ov.querySelector("#drClose"); b.style.display = ""; b.addEventListener("click", close);

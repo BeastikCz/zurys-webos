@@ -165,7 +165,7 @@ def validate_items(conn: sqlite3.Connection, user: sqlite3.Row,
         if p["stock"] == 0:
             return 0, f"Odměna „{p['name']}“ není skladem."
         if p["stock"] != UNLIMITED_STOCK and qty > p["stock"]:
-            return 0, f"Odměny „{p['name']}“ není tolik skladem (zbývá {p['stock']})."
+            return 0, f"Tolik kusů odměny „{p['name']}“ není skladem (zbývá {p['stock']})."
         # Tombola: limit ticketů na osobu (PŘÍMÝ POČET, 0 = neomezeno).
         # (Sloupec se historicky jmenuje max_per_person_pct, ale teď je to absolutní počet.)
         cap = (p["max_per_person_pct"] if "max_per_person_pct" in p.keys() else 0) or 0
@@ -175,8 +175,8 @@ def validate_items(conn: sqlite3.Connection, user: sqlite3.Row,
                 (product_id, user["id"]),
             ).fetchone()["c"]
             if mine + qty > cap:
-                return 0, (f"Do této tomboly si můžeš koupit max {cap} ticketů na osobu "
-                           f"– máš jich {mine}.")
+                return 0, (f"Do této tomboly si můžeš koupit nejvýše {cap} ticketů "
+                           f"– zatím jich máš {mine}.")
         # CS skiny (nože/zbraně/rukavice) – bez vyplněného Steam trade linku nelze koupit
         # (jinak by objednávka nešla vyřídit; navíc tření pro odhazovací/bot účty).
         if needs_trade_link(p["category"]) and not _has_trade_link(user):

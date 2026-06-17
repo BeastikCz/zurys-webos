@@ -97,11 +97,11 @@ class PredictionCreateIn(BaseModel):
     def _opts(cls, v):
         cleaned = [str(o).strip() for o in (v or []) if str(o).strip()]
         if len(cleaned) < 2:
-            raise ValueError("Zadej aspoň 2 možnosti.")
+            raise ValueError("Zadej alespoň 2 možnosti.")
         if len(cleaned) > 4:
-            raise ValueError("Max 4 možnosti.")
+            raise ValueError("Možnosti mohou být nejvýše 4.")
         if any(len(o) > 60 for o in cleaned):
-            raise ValueError("Možnost je moc dlouhá (max 60 znaků).")
+            raise ValueError("Možnost je příliš dlouhá (nejvýše 60 znaků).")
         return cleaned
 
 

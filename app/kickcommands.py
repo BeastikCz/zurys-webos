@@ -26,9 +26,9 @@ def _balance(conn, uname) -> str:
     key = (uname or "").strip().lstrip("@").lower()
     row = conn.execute("SELECT username, points FROM users WHERE kick_username = ?", (key,)).fetchone()
     if not row:
-        return f"@{uname}, ještě tě tu nevidím — připoj se na zurys.live a sbírej sedláky! 🌾"
+        return f"@{uname}, ještě tě tu nevidím – připoj se na zurys.live a sbírej sedláky! 🌾"
     rank = conn.execute("SELECT COUNT(*) + 1 AS r FROM users WHERE points > ?", (row["points"],)).fetchone()["r"]
-    return f"@{uname}, máš {_fmt(row['points'])} sedláků (Rank #{rank}) 🌾"
+    return f"@{uname}, máš {_fmt(row['points'])} sedláků (pořadí #{rank}) 🌾"
 
 
 def _leaderboard(conn) -> str:
@@ -37,16 +37,16 @@ def _leaderboard(conn) -> str:
         return "Žebříček je zatím prázdný. 🌾"
     medals = ["🥇", "🥈", "🥉"]
     parts = [f"{medals[i]} {r['username']} ({_fmt(r['points'])})" for i, r in enumerate(rows)]
-    return "🏆 " + " · ".join(parts) + " — celý žebříček na zurys.live"
+    return "🏆 " + " · ".join(parts) + " – celý žebříček najdeš na zurys.live"
 
 
 def _drop(conn) -> str:
     d = conn.execute("SELECT * FROM drops WHERE active = 1 ORDER BY id DESC LIMIT 1").fetchone()
     if not d:
-        return "Teď neběží žádný drop — sleduj chat, ať ti neuteče! 👀"
+        return "Právě neběží žádný drop – sleduj chat, ať ti neuteče! 👀"
     taken = conn.execute("SELECT COUNT(*) AS c FROM drop_claims WHERE drop_id = ?", (d["id"],)).fetchone()["c"]
     left = max(0, d["max_winners"] - taken)
-    return f"🎁 Drop běží! {_fmt(d['points'])} sedláků, zbývá {left} míst — zadej kód z chatu na zurys.live! ⚡"
+    return f"🎁 Drop právě běží! {_fmt(d['points'])} sedláků, zbývá {left} míst – zadej kód z chatu na zurys.live! ⚡"
 
 
 def _prediction(conn) -> str:
@@ -54,9 +54,9 @@ def _prediction(conn) -> str:
         "SELECT * FROM predictions WHERE status IN ('open','locked') ORDER BY id DESC LIMIT 1"
     ).fetchone()
     if not p:
-        return "Teď neběží žádná predikce. 🎯"
+        return "Právě neběží žádná predikce. 🎯"
     st = "otevřená 🟢" if p["status"] == "open" else "uzamčená 🔒"
-    return f"🎯 Predikce ({st}): {p['question']} — vsaď sedláky na zurys.live"
+    return f"🎯 Predikce ({st}): {p['question']} – vsaď sedláky na zurys.live"
 
 
 _ALIASES = {
@@ -87,7 +87,7 @@ def handle(conn, uname, content) -> Optional[str]:
     if cmd == "lb":
         return _leaderboard(conn)
     if cmd == "shop":
-        return "🛒 Utrať sedláky za skiny a odměny na zurys.live! 👑"
+        return "🛒 Utrať své sedláky za skiny a odměny na zurys.live! 👑"
     if cmd == "drop":
         return _drop(conn)
     if cmd == "pred":

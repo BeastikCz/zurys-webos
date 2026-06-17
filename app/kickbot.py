@@ -336,8 +336,8 @@ def _moderation(conn: sqlite3.Connection, target_kick_id, method: str, extra: di
         # nejčastěji je to MODERÁTOR nebo BROADCASTER (ty Kick přes API zabanovat nedovolí).
         if method == "POST" and e.code == 400:
             return {"ok": False, "mod_block": True,
-                    "error": "Kick přes API nezabanuje moderátora ani broadcastera. Sundej mu "
-                             "nejdřív MOD roli na Kicku (nebo ho zabav ručně v Kick chatu) – web ban i tak platí."}
+                    "error": "Kick přes API nezabanuje moderátora ani broadcastera. Nejprve mu "
+                             "odeber roli moderátora na Kicku (nebo ho zabanuj ručně v Kick chatu) – ban na webu i tak platí."}
         return {"ok": False, "error": _http_err(e)}
     except Exception as e:
         return {"ok": False, "error": _http_err(e)}
@@ -361,8 +361,8 @@ def moderate_unban(conn: sqlite3.Connection, target_kick_id) -> dict:
 
 def drop_announcement(code: str, points: int, max_winners: int) -> str:
     """Text oznámení dropu do chatu (styl ZurysBota)."""
-    return (f"🎁 DROP TIME! Prvních {max_winners} hráčů zadá kód {code} na "
-            f"zurys.live a získá {points} sedláků! GO 👑")
+    return (f"🎁 ČAS NA DROP! Prvních {max_winners} hráčů zadá kód {code} na "
+            f"zurys.live a získá {points} sedláků! Šup do toho! 👑")
 
 
 def post_drop(conn: sqlite3.Connection, code: str, points: int, max_winners: int) -> dict:

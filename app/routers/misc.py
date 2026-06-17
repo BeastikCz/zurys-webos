@@ -36,9 +36,9 @@ def me_self_exclude(data: SelfExcludeIn, user: sqlite3.Row = Depends(require_use
         raise HTTPException(status_code=400, detail="Neplatná délka vyloučení.")
     cur = self_excluded_until(user)
     if cur == "permanent":
-        raise HTTPException(status_code=400, detail="Už máš trvalé sebevyloučení – nelze měnit.")
+        raise HTTPException(status_code=400, detail="Už máš trvalé sebevyloučení, to už nelze měnit.")
     if cur and newval != "permanent" and newval <= cur:
-        raise HTTPException(status_code=400, detail="Vyloučení nejde zkrátit ani zrušit – jen prodloužit. 🔒")
+        raise HTTPException(status_code=400, detail="Sebevyloučení nejde zkrátit ani zrušit, jde ho jen prodloužit. 🔒")
     conn.execute("UPDATE users SET gamble_block_until = ? WHERE id = ?", (newval, user["id"]))
     conn.commit()
     return {"gamble_block_until": newval}
@@ -189,13 +189,13 @@ def public_profile(nick: str = Query("", max_length=64),
     """Veřejný profil uživatele se statistikami (pro každého přihlášeného). Bez IP/e-mailu."""
     key = (nick or "").strip().lstrip("@").lower()
     if not key:
-        raise HTTPException(status_code=400, detail="Zadej uživatele.")
+        raise HTTPException(status_code=400, detail="Zadej prosím uživatele. 🙂")
     u = conn.execute(
         "SELECT * FROM users WHERE LOWER(username) = ? OR LOWER(kick_username) = ? "
         "ORDER BY (kick_username IS NOT NULL) DESC LIMIT 1", (key, key),
     ).fetchone()
     if not u:
-        raise HTTPException(status_code=404, detail="Uživatel nenalezen.")
+        raise HTTPException(status_code=404, detail="Takového uživatele jsme nenašli. 🤔")
     uid = u["id"]
     rank = user_rank(conn, u["points"], u["username"])
     league_key, league_mult = tier_for_rank(rank)
@@ -415,18 +415,18 @@ def mod_apply_submit(data: ModApplyIn, user: sqlite3.Row = Depends(require_user)
                      conn: sqlite3.Connection = Depends(db_dep)):
     """Odešle přihlášku na moderátora. Jedna čekající na uživatele."""
     if get_setting(conn, "modapp_open", "1") != "1":
-        raise HTTPException(status_code=403, detail="Nábor moderátorů je právě zavřený. 🔒")
+        raise HTTPException(status_code=403, detail="Nábor moderátorů je právě uzavřený. 🔒")
     if user["role"] in ("mod", "admin", "broadcaster"):
-        raise HTTPException(status_code=400, detail="Už jsi člen týmu. 🙂")
+        raise HTTPException(status_code=400, detail="Už jsi členem týmu. 🙂")
     if conn.execute("SELECT id FROM mod_applications WHERE user_id = ? AND status = 'pending' LIMIT 1",
                     (user["id"],)).fetchone():
-        raise HTTPException(status_code=400, detail="Přihlášku už máš odeslanou – čeká na vyřízení. ⏳")
+        raise HTTPException(status_code=400, detail="Přihlášku už máš odeslanou a čeká na vyřízení. ⏳")
     rate_limit(f"modapply:{user['id']}", 3, 3600)   # anti-spam
     conn.execute(
         "INSERT INTO mod_applications (user_id, answers, status, created_at) VALUES (?, ?, 'pending', ?)",
         (user["id"], json.dumps(data.model_dump(), ensure_ascii=False), now_iso()))
     conn.commit()
-    return {"ok": True, "message": "🛡️ Přihláška odeslána! Ozveme se ti přes zvoneček. Díky! 🌾"}
+    return {"ok": True, "message": "🛡️ Přihláška odeslána! Ozveme se ti přes zvoneček. Díky moc! 🌾"}
 
 
 @router.get("/top-chatters")
@@ -453,7 +453,7 @@ def quests_claim(data: QuestClaimIn, user: sqlite3.Row = Depends(require_user),
     """Vyzvedne odměnu za splněný úkol (server ověří splnění, nevěří klientovi)."""
     from ..quests import claim_quest, QUESTS_ENABLED
     if not QUESTS_ENABLED:
-        raise HTTPException(status_code=400, detail="Úkoly jsou dočasně mimo provoz. 🛠️")
+        raise HTTPException(status_code=400, detail="Úkoly jsou dočasně mimo provoz. 🛠️ Zkus to prosím později.")
     try:
         return claim_quest(conn, user["id"], data.key)
     except ValueError as e:
@@ -475,7 +475,7 @@ def battlepass_claim(data: BattlePassClaimIn, user: sqlite3.Row = Depends(requir
     from .. import battlepass
     r = battlepass.claim(conn, user, data.tier, getattr(data, "premium", False))
     if not r.get("ok"):
-        raise HTTPException(status_code=400, detail=r.get("error", "Tier nelze vyzvednout."))
+        raise HTTPException(status_code=400, detail=r.get("error", "Tento tier teď vyzvednout nejde."))
     return r
 
 
@@ -515,7 +515,7 @@ def cosmetics_buy(data: CosmeticIn, user: sqlite3.Row = Depends(require_user),
         raise HTTPException(status_code=400, detail=str(e))
     bal = conn.execute("SELECT points FROM users WHERE id = ?", (user["id"],)).fetchone()["points"]
     return {"ok": True, "balance": bal, "key": item["key"],
-            "message": f"🎨 Koupeno: {item['name']}! Nasaď si to v sekci Kosmetika."}
+            "message": f"🎨 Koupeno: {item['name']}! Nasadit si to můžeš v sekci Kosmetika."}
 
 
 @router.post("/cosmetics/equip")
@@ -560,8 +560,8 @@ def _try_claim_drop(conn, user, request, raw_code):
         ).fetchone()
         conn.commit()
         if mine:
-            raise HTTPException(status_code=400, detail=f"Tenhle drop už jsi chytil (pozice {mine['position']}).")
-        raise HTTPException(status_code=400, detail="Drop už je rozebraný! 😢 Příště rychleji. ⚡")
+            raise HTTPException(status_code=400, detail=f"Tento drop už jsi chytil (pozice {mine['position']}). 🙂")
+        raise HTTPException(status_code=400, detail="Tento drop je už rozebraný! 😢 Příště buď rychlejší. ⚡")
     position = conn.execute(
         "SELECT position FROM drop_claims WHERE drop_id = ? AND user_id = ?", (d["id"], user["id"]),
     ).fetchone()["position"]
@@ -582,7 +582,7 @@ def redeem(data: RedeemIn, request: Request,
 
     # --- ANTI-BOT: risk score blokuje vysoký combined risk ---
     check_or_block(conn, user, request, context="redeem", t0_ms=data.t0,
-                   block_msg="Redeem zablokován ochranou proti zneužití.")
+                   block_msg="Uplatnění kódu jsme zablokovali ochranou proti zneužití.")
 
     code = data.code.strip()
     # AKTIVNÍ drop má přednost (živý závod o kód) – zabere i když existuje stejnojmenný
@@ -594,17 +594,17 @@ def redeem(data: RedeemIn, request: Request,
         "SELECT * FROM redeem_codes WHERE UPPER(code) = UPPER(?)", (code,)
     ).fetchone()
     if not row:
-        raise HTTPException(status_code=400, detail="Neplatný kód.")
+        raise HTTPException(status_code=400, detail="Tento kód neplatí. 🤔")
     if row["expires_at"] and row["expires_at"] < now_iso():
-        raise HTTPException(status_code=400, detail="Platnost kódu vypršela.")
+        raise HTTPException(status_code=400, detail="Platnost tohoto kódu už vypršela.")
     if row["uses_count"] >= row["max_uses"]:
-        raise HTTPException(status_code=400, detail="Kód už byl vyčerpán.")
+        raise HTTPException(status_code=400, detail="Tento kód je už vyčerpaný.")
     already = conn.execute(
         "SELECT 1 FROM redeem_uses WHERE code_id = ? AND user_id = ?",
         (row["id"], user["id"]),
     ).fetchone()
     if already:
-        raise HTTPException(status_code=400, detail="Tento kód jsi už použil.")
+        raise HTTPException(status_code=400, detail="Tento kód jsi už použil. 🙂")
 
     # --- ANTI-BOT: nové účty mají cap na získané body z kódů (první 24 h) ---
     if is_new_account(user) and row["points_value"] > 0:
@@ -612,8 +612,8 @@ def redeem(data: RedeemIn, request: Request,
         if already_pts + row["points_value"] > NEW_ACCOUNT_MAX_REDEEM_PTS:
             raise HTTPException(
                 status_code=429,
-                detail=f"Nové účty (<24 h) mohou získat max {NEW_ACCOUNT_MAX_REDEEM_PTS} sedláků "
-                       f"z kódů. Zatím {already_pts}.",
+                detail=f"Nové účty (mladší 24 h) mohou z kódů získat nejvýše {NEW_ACCOUNT_MAX_REDEEM_PTS} sedláků. "
+                       f"Zatím máš {already_pts}.",
             )
 
     points_added = 0
@@ -632,7 +632,7 @@ def redeem(data: RedeemIn, request: Request,
         if product:
             if not role_allows(user, product):
                 raise HTTPException(status_code=403,
-                                    detail="Tuto odměnu nemůžeš uplatnit (jen pro sub/VIP).")
+                                    detail="Tuto odměnu uplatnit nemůžeš (je jen pro sub/VIP).")
             conn.execute(
                 "INSERT INTO orders (user_id, product_id, product_name, points_spent, status, created_at) "
                 "VALUES (?, ?, ?, 0, ?, ?)",
@@ -737,7 +737,7 @@ def set_trade_url(data: TradeUrlIn,
     if url and not _TRADE_RE.match(url):
         raise HTTPException(
             status_code=400,
-            detail="Neplatný Steam trade link. Zkopíruj ho celý ze Steamu – má tvar "
+            detail="Neplatný Steam trade odkaz. Zkopíruj ho prosím celý ze Steamu, má tvar "
                    "https://steamcommunity.com/tradeoffer/new/?partner=…&token=…",
         )
     conn.execute("UPDATE users SET steam_trade_url = ? WHERE id = ?",
@@ -791,7 +791,7 @@ def prestige_buy(user: sqlite3.Row = Depends(require_user), conn: sqlite3.Connec
     """Spálí sedláky za +1 prestige (NEvratné). Body opravdu zmizí z oběhu (sink)."""
     p = _user_prestige(user)
     if p >= PRESTIGE_MAX:
-        raise HTTPException(status_code=400, detail="Máš maximální prestige. 👑")
+        raise HTTPException(status_code=400, detail="Máš už maximální prestige. 👑")
     cost = _prestige_cost(p)
     if not try_debit(conn, user["id"], cost, f"Prestige {p + 1} – spáleno 🔥"):
         raise HTTPException(status_code=400, detail=f"Nemáš dost sedláků. Prestige {p + 1} stojí {cost}.")
@@ -867,11 +867,11 @@ def gift_points(data: GiftIn, request: Request,
                 conn: sqlite3.Connection = Depends(db_dep)):
     """Pošle sedláky jinému divákovi. Nevratné. Anti-alt: ne na stejnou IP/zařízení."""
     if not GIFT_ENABLED:
-        raise HTTPException(status_code=403, detail="Darování sedláků je dočasně mimo provoz. 🔧")
+        raise HTTPException(status_code=403, detail="Darování sedláků je dočasně mimo provoz. 🔧 Zkus to prosím později.")
     rate_limit(f"gift:{user['id']}", 5, 60)
     key = (data.username or "").strip().lstrip("@").lower()
     if not key:
-        raise HTTPException(status_code=400, detail="Zadej příjemce.")
+        raise HTTPException(status_code=400, detail="Zadej prosím příjemce. 🙂")
     rcp = conn.execute(
         "SELECT * FROM users WHERE LOWER(kick_username) = ? OR LOWER(username) = ? "
         "ORDER BY (kick_username IS NOT NULL) DESC LIMIT 1", (key, key),
@@ -879,9 +879,9 @@ def gift_points(data: GiftIn, request: Request,
     if not rcp:
         raise HTTPException(status_code=400, detail=f"Uživatel {data.username} neexistuje.")
     if rcp["id"] == user["id"]:
-        raise HTTPException(status_code=400, detail="Sobě poslat nemůžeš. 😄")
+        raise HTTPException(status_code=400, detail="Sobě poslat sedláky nemůžeš. 😄")
     if rcp["banned"]:
-        raise HTTPException(status_code=400, detail="Tomuhle účtu nelze poslat (zabanován).")
+        raise HTTPException(status_code=400, detail="Tomuto účtu poslat nelze (je zabanovaný).")
     # anti-funnel: nový účet nesmí hned posílat dary. Klasický trik je založit alt na čisté
     # IP/zařízení a poslat body na hlavní účet DŘÍV, než se stihne propojit otisk – proto
     # darování pustíme až po pár dnech od založení (admin výjimka). Doplňuje _shared_identity níž.
@@ -889,11 +889,11 @@ def gift_points(data: GiftIn, request: Request,
         raise HTTPException(
             status_code=403,
             detail=f"Darovat můžeš až {GIFT_MIN_AGE_HOURS} h po založení účtu "
-                   f"(ochrana proti farmění bodů přes nové účty).")
+                   f"(ochrana proti farmění bodů přes nové účty). 🛡️")
     # anti-farma: nelze posílat účtu ze stejné IP/zařízení (admin výjimka)
     if user["role"] != ROLE_ADMIN and rcp["role"] != ROLE_ADMIN and _shared_identity(conn, user["id"], rcp["id"]):
         raise HTTPException(status_code=403,
-                            detail="Nelze poslat účtu ze stejné sítě/zařízení (ochrana proti farmení).")
+                            detail="Účtu ze stejné sítě nebo zařízení poslat nelze (ochrana proti farmení). 🛡️")
     # Dar = ŽÁDOST, kterou schvaluje admin. Odesílateli se body HNED zablokují (escrow), aby je
     # mezitím nemohl utratit dvakrát; admin pak dar POVOLÍ (přesun příjemci) nebo ZAMÍTNE (vrácení).
     # Escrow řádek v points_log má NEUTRÁLNÍ důvod – nepasuje na 'Dar pro %', takže funnel detektor
@@ -915,7 +915,7 @@ def gift_points(data: GiftIn, request: Request,
     fresh = conn.execute("SELECT points FROM users WHERE id = ?", (user["id"],)).fetchone()["points"]
     return {"ok": True, "balance": fresh, "recipient": rcp["username"], "amount": amt, "pending": True,
             "message": f"🎁 Žádost o dar {amt} sedláků pro {rcp['username']} čeká na schválení adminem. "
-                       f"Body máš zatím zablokované — když admin zamítne, vrátí se ti zpět."}
+                       f"Body máš zatím zablokované – pokud admin žádost zamítne, vrátí se ti zpět."}
 
 
 # ---------------- Notifikace (zvoneček v hlavičce) ----------------
@@ -996,7 +996,7 @@ def daily_claim(user: sqlite3.Row = Depends(require_user),
     streak, can, next_in = _daily_state(user, now)
     if not can:
         hrs = round(next_in / 3600, 1)
-        raise HTTPException(status_code=400, detail=f"Denní bonus už máš. Vrať se za {hrs} h. ⏳")
+        raise HTTPException(status_code=400, detail=f"Denní bonus už sis dnes vyzvedl. Vrať se za {hrs} h. ⏳")
     idx = streak % 7
     mult = tier_for_rank(user_rank(conn, user["points"], user["username"]))[1]
     reward = DAILY_LADDER[idx] * mult
@@ -1028,7 +1028,7 @@ def login_calendar_claim(data: LoginCalClaimIn, user: sqlite3.Row = Depends(requ
     from ..logincal import claim
     r = claim(conn, user, data.milestone)
     if not r.get("ok"):
-        raise HTTPException(status_code=400, detail=r.get("error", "Milník nelze vyzvednout."))
+        raise HTTPException(status_code=400, detail=r.get("error", "Tento milník teď vyzvednout nejde."))
     return r
 
 
@@ -1047,7 +1047,7 @@ def garden_plant(data: GardenPlantIn, user: sqlite3.Row = Depends(require_user),
     from .. import garden
     r = garden.plant(conn, user, data.plot, data.crop)
     if not r.get("ok"):
-        raise HTTPException(status_code=400, detail=r.get("error", "Nelze zasadit."))
+        raise HTTPException(status_code=400, detail=r.get("error", "Zasadit se to teď nepodařilo."))
     return r
 
 
@@ -1058,7 +1058,7 @@ def garden_harvest(data: GardenHarvestIn, user: sqlite3.Row = Depends(require_us
     from .. import garden
     r = garden.harvest(conn, user, data.plot)
     if not r.get("ok"):
-        raise HTTPException(status_code=400, detail=r.get("error", "Nelze sklidit."))
+        raise HTTPException(status_code=400, detail=r.get("error", "Sklidit se to teď nepodařilo."))
     return r
 
 
@@ -1077,7 +1077,7 @@ def garden_decor_buy(data: DecorBuyIn, user: sqlite3.Row = Depends(require_user)
     from .. import garden
     r = garden.buy_decor(conn, user, data.key)
     if not r.get("ok"):
-        raise HTTPException(status_code=400, detail=r.get("error", "Nelze koupit."))
+        raise HTTPException(status_code=400, detail=r.get("error", "Koupit se to teď nepodařilo."))
     return r
 
 
@@ -1148,7 +1148,7 @@ def wheel_spin(user: sqlite3.Row = Depends(require_user),
         conn.commit()
         _, next_in = _wheel_state(user, now)
         hrs = round((next_in or WHEEL_COOLDOWN_H * 3600) / 3600, 1)
-        raise HTTPException(status_code=400, detail=f"Dnes už jsi točil 🎡 Vrať se za {hrs} h. ⏳")
+        raise HTTPException(status_code=400, detail=f"Dnes už jsi točil. 🎡 Vrať se za {hrs} h. ⏳")
     # Výsledek = PROVABLY FAIR (commit-reveal): server ho nevybírá náhodně za běhu, počítá ho
     # z předem zveřejněného server seedu + client seedu + nonce → hráč si ověří, že to nebylo
     # rigged. Stejné šance jako dřív (váhy se nemění). Viz /fair.

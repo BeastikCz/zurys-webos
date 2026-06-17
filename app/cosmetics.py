@@ -31,7 +31,7 @@ CATALOG = [
     {"key": "name_emerald", "type": "name",   "name": "Smaragd",            "cost": 8000,  "rarity": "classified", "sub": True,  "cls": "cn-emerald"},
     {"key": "name_sunset",  "type": "name",   "name": "Západ slunce",       "cost": 9000,  "rarity": "classified", "sub": False, "cls": "cn-sunset"},
     {"key": "name_ice",     "type": "name",   "name": "Led",                "cost": 12000, "rarity": "covert",     "sub": False, "cls": "cn-ice"},
-    {"key": "name_toxic",   "type": "name",   "name": "Toxic",              "cost": 14000, "rarity": "covert",     "sub": False, "cls": "cn-toxic"},
+    {"key": "name_toxic",   "type": "name",   "name": "Toxická",            "cost": 14000, "rarity": "covert",     "sub": False, "cls": "cn-toxic"},
     {"key": "name_red",     "type": "name",   "name": "Covert červená",     "cost": 16000, "rarity": "covert",     "sub": False, "cls": "cn-red"},
     {"key": "name_chrome",  "type": "name",   "name": "Chrom",              "cost": 25000, "rarity": "covert",     "sub": False, "cls": "cn-chrome"},
     {"key": "name_cyber",   "type": "name",   "name": "Cyberpunk",          "cost": 28000, "rarity": "contraband", "sub": False, "cls": "cn-cyber"},
@@ -41,7 +41,7 @@ CATALOG = [
     {"key": "name_lava",    "type": "name",   "name": "Láva",               "cost": 45000, "rarity": "contraband", "sub": False, "cls": "cn-lava"},
     {"key": "name_gold",    "type": "name",   "name": "Contraband zlatá",   "cost": 50000, "rarity": "contraband", "sub": False, "cls": "cn-gold"},
     {"key": "name_holo",    "type": "name",   "name": "Holografická",       "cost": 70000, "rarity": "legendary",  "sub": False, "cls": "cn-holo"},
-    {"key": "name_rainbow", "type": "name",   "name": "Rainbow",            "cost": 80000, "rarity": "legendary",  "sub": False, "cls": "cn-rainbow"},
+    {"key": "name_rainbow", "type": "name",   "name": "Duhová",             "cost": 80000, "rarity": "legendary",  "sub": False, "cls": "cn-rainbow"},
     # ---- Rámečky avataru (cenově seřazené) ----
     {"key": "frame_bronze",   "type": "frame", "name": "Bronz",            "cost": 800,   "rarity": "milspec",    "sub": False, "cls": "cf-bronze"},
     {"key": "frame_silver",   "type": "frame", "name": "Stříbro",          "cost": 2500,  "rarity": "restricted", "sub": False, "cls": "cf-silver"},
@@ -51,7 +51,7 @@ CATALOG = [
     {"key": "frame_amethyst", "type": "frame", "name": "Ametyst",          "cost": 8000,  "rarity": "classified", "sub": False, "cls": "cf-amethyst"},
     {"key": "frame_emerald",  "type": "frame", "name": "Smaragd prsten",   "cost": 10000, "rarity": "classified", "sub": True,  "cls": "cf-emerald"},
     {"key": "frame_ice",      "type": "frame", "name": "Ledový prsten",    "cost": 12000, "rarity": "covert",     "sub": False, "cls": "cf-ice"},
-    {"key": "frame_neon",     "type": "frame", "name": "Neon puls",        "cost": 22000, "rarity": "covert",     "sub": False, "cls": "cf-neon"},
+    {"key": "frame_neon",     "type": "frame", "name": "Neonový puls",     "cost": 22000, "rarity": "covert",     "sub": False, "cls": "cf-neon"},
     {"key": "frame_rainbow",  "type": "frame", "name": "Duhový prsten",    "cost": 55000, "rarity": "legendary",  "sub": False, "cls": "cf-rainbow"},
     {"key": "frame_fire",     "type": "frame", "name": "Rotující oheň",    "cost": 60000, "rarity": "legendary",  "sub": False, "cls": "cf-fire"},
     # ---- Exkluzivní (nelze koupit, jen vyhrát) ----

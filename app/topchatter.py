@@ -74,7 +74,7 @@ def maybe_payout(conn) -> int:
             from . import kickbot
             medal = ["🥇", "🥈", "🥉"]
             parts = " · ".join(f"{medal[i]} {w[0]} (+{w[1]})" for i, w in enumerate(winners))
-            kickbot.send_message(conn, f"🗣️ TOP CHATTEŘI VČEREJŠKA: {parts} — díky za rozjetý chat! 💬🌾",
+            kickbot.send_message(conn, f"🗣️ TOP CHATTEŘI VČEREJŠKA: {parts} – děkujeme za skvěle rozjetý chat! 💬🌾",
                                  kind="system")
         except Exception:
             import traceback
@@ -102,7 +102,7 @@ def pay_today(conn) -> dict:
     Nastaví topchat_paid_day=dnes, takže noční auto-výplata už nedvojplatí."""
     today = _today_str()
     if (get_setting(conn, "topchat_paid_day") or "") >= today:
-        return {"ok": False, "error": "Dnešní TOP chatteři už byli vyplacení."}
+        return {"ok": False, "error": "Dnešní TOP chatteři už byli vyplaceni."}
     rows = conn.execute(
         "SELECT p.user_id AS uid, u.username AS username, u.kick_username AS kick_username, COUNT(*) AS msgs "
         "FROM points_log p JOIN users u ON u.id = p.user_id "
@@ -126,7 +126,7 @@ def pay_today(conn) -> dict:
             from . import kickbot
             medal = ["🥇", "🥈", "🥉"]
             parts = " · ".join(f"{medal[i]} {w[0]} (+{w[1]})" for i, w in enumerate(winners))
-            kickbot.send_message(conn, f"🗣️ TOP CHATTEŘI DNE: {parts} — díky za rozjetý chat! 💬🌾", kind="system")
+            kickbot.send_message(conn, f"🗣️ TOP CHATTEŘI DNE: {parts} – děkujeme za skvěle rozjetý chat! 💬🌾", kind="system")
         except Exception:
             import traceback
             traceback.print_exc()
