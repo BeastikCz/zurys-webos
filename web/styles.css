@@ -869,6 +869,8 @@ footer.site-footer { border-top: 1px solid var(--border); padding: 22px 0; color
   .logo .brand { letter-spacing: .06em; }
   .top-right { gap: 7px; }
   .logout-top { display: none; }                 /* Odhlásit je v hamburger menu */
+  .lvl-pill { display: none !important; }         /* level je na profilu; base .lvl-pill je v CSS níž (v7), proto !important */
+  .user-chip { display: none; }                   /* avatar/profil je v hamburger menu (👤 Profil) → v topbaru zbytečný */
   .kick-long { display: none; } .kick-short { display: inline; }
   .pts-pill { padding: 6px 11px; font-size: 13px; }
   .icon-btn { width: 38px; height: 38px; }
@@ -899,6 +901,8 @@ footer.site-footer { border-top: 1px solid var(--border); padding: 22px 0; color
 @media (max-width: 360px) {
   .logo .brand { display: none; }
   .container { padding: 0 12px; }
+  .topbar-inner { gap: 6px; } .top-right { gap: 5px; }
+  .icon-btn { width: 33px; height: 33px; }        /* malé telefony: zhustit, ať se topbar vejde i na 320 px */
 }
 
 /* ============================================================
