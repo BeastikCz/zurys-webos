@@ -292,7 +292,7 @@ function renderHeader() {
   const route = currentRoute();
   const u = state.user;
   document.body.classList.toggle("logged-in", !!u);   /* na mobilu uvolní místo v topbaru (skryje wordmark) */
-  const items = [["shop", "Shop"], ["bonusy", "Bonusy"], ["zahrada", "Zahrádka"], ["leaderboard", "Žebříček"], ["exchange", "Směnárna"], ["games", "Hry"], ["predikce", "Predikce"]];
+  const items = [["shop", "Shop"], ["bonusy", "Bonusy"], ["leaderboard", "Žebříček"], ["exchange", "Směnárna"], ["games", "Hry"], ["predikce", "Predikce"]];
   const navDot = (k) => (k === "bonusy" && u && bonusReady) ? `<span class="nav-dot" title="Máš nevyzvednutou odměnu!"></span>` : "";
   const navLinks = items.map(([k, l]) => `<a href="#/${k}" class="nav-link ${route === k ? "active" : ""}">${l}${navDot(k)}</a>`).join("")
     + (isStaff(u) ? `<a href="#/admin" class="nav-link ${route === "admin" ? "active" : ""}">${u.role === "admin" ? "Admin" : "Panel"}</a>` : "");
@@ -2047,12 +2047,12 @@ let _gardenSel = null, _gardenTimer = null;
 function grdDur(s) { s = Math.max(0, s | 0); const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), ss = s % 60; return h ? `${h}h ${m}m` : (m ? `${m}m ${ss}s` : `${ss}s`); }
 function pageGarden() {
   const view = $("#view");
-  if (!state.user) { view.innerHTML = `<div class="empty"><div class="big">🌱</div>Přihlas se přes Kick a začni pěstovat sedláky!</div>`; return; }
-  view.innerHTML = `<div class="page-head with-mascot"><img class="page-mascot" src="/sedlak-cut.png" alt=""><div class="ph-text"><h1>🌱 Zahrádka</h1><p class="muted">Vyber semínko → zasaď na záhon → počkej až doroste → sklidíš sedláky! 🌾</p></div></div>
-    <div id="gardenBox">${skeletonCards(1)}</div>
-    <div id="gardenDecor" style="margin-top:8px"></div>`;
-  loadGarden();
-  loadGardenDecor();
+  view.innerHTML = `<div class="page-head with-mascot"><img class="page-mascot" src="/sedlak-cut.png" alt=""><div class="ph-text"><h1>🌱 Zahrádka</h1><p class="muted">Vylepšujeme ji – brzy se vrátí lepší! 🚧</p></div></div>
+    <div class="panel" style="text-align:center;padding:42px 20px">
+      <div style="font-size:48px;margin-bottom:10px">🚧🌱</div>
+      <div class="section-title" style="margin:0 0 6px">Zahrádka je teď mimo provoz</div>
+      <p class="muted" style="font-size:14px;max-width:430px;margin:0 auto">Pracujeme na vylepšené verzi. Tvoje rozpěstované plodiny a dekorace zůstávají uložené. Mezitím mrkni na 🎟️ Battle Pass nebo 🛒 Shop! 🌾</p>
+    </div>`;
 }
 async function loadGardenDecor() {
   const box = document.getElementById("gardenDecor"); if (!box) return;
@@ -5039,7 +5039,6 @@ function welcomeGuide() {
   const steps = [
     ["📺", "Sleduj stream", "Za sledování Zurys streamu ti automaticky naskakují <b>sedláci</b> 🌾 — stačí mít web otevřený."],
     ["🛒", "Utrať v Shopu", "Sedláky vyměníš za <b>skiny a odměny</b> — instantní odměny i tomboly o velké ceny."],
-    ["🌱", "Zasaď v Zahrádce", "Zasaď semínko, počkej až doroste a <b>skliď víc sedláků</b>. Ozdob si farmu dekoracemi."],
     ["🎟️", "Plň Battle Pass", "Vše co naděláš tě posouvá v <b>sezónním Battle Passu</b> — denní bonus, kolo štěstí i odměny za tiery."],
     ["🎮", "Hraj a sázej", "Miny, duely, blackjack, predikce — zariskuj o <b>velké výhry</b> (férově, provably-fair)."],
     ["🏆", "Stoupej výš", "Farmařením rosteš v <b>levelu</b> a šplháš v žebříčku. Staň se #1 sedlákem! 👑"],

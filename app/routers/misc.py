@@ -1032,10 +1032,21 @@ def login_calendar_claim(data: LoginCalClaimIn, user: sqlite3.Row = Depends(requ
     return r
 
 
+import os as _os
+GARDEN_OFF = _os.environ.get("WEBOS_GARDEN_OFF", "0") == "1"   # zahrádka mimo provoz (redesign); env ve fly.toml. Lokálně/testy = zapnutá.
+
+
+def _garden_guard():
+    """Zahrádka dočasně vypnutá → 503. Data (plodiny/dekorace) zůstávají, jen se nedá hrát."""
+    if GARDEN_OFF:
+        raise HTTPException(status_code=503, detail="Zahrádka je teď mimo provoz – vylepšujeme ji. Brzy bude zpátky! 🚧🌱")
+
+
 @router.get("/garden")
 def garden_status(user: sqlite3.Row = Depends(require_user),
                   conn: sqlite3.Connection = Depends(db_dep)):
     """Zahrádka: stav záhonů (prázdný/roste/hotovo) + dostupné plodiny."""
+    _garden_guard()
     from .. import garden
     return garden.status(conn, user)
 
@@ -1044,6 +1055,7 @@ def garden_status(user: sqlite3.Row = Depends(require_user),
 def garden_plant(data: GardenPlantIn, user: sqlite3.Row = Depends(require_user),
                  conn: sqlite3.Connection = Depends(db_dep)):
     """Zasadí plodinu na záhon (zaplatí sazbu)."""
+    _garden_guard()
     from .. import garden
     r = garden.plant(conn, user, data.plot, data.crop)
     if not r.get("ok"):
@@ -1055,6 +1067,7 @@ def garden_plant(data: GardenPlantIn, user: sqlite3.Row = Depends(require_user),
 def garden_harvest(data: GardenHarvestIn, user: sqlite3.Row = Depends(require_user),
                    conn: sqlite3.Connection = Depends(db_dep)):
     """Sklidí dorostlý záhon (odměna)."""
+    _garden_guard()
     from .. import garden
     r = garden.harvest(conn, user, data.plot)
     if not r.get("ok"):
@@ -1066,6 +1079,7 @@ def garden_harvest(data: GardenHarvestIn, user: sqlite3.Row = Depends(require_us
 def garden_decor(user: sqlite3.Row = Depends(require_user),
                  conn: sqlite3.Connection = Depends(db_dep)):
     """Dekorace zahrádky: katalog + co hráč vlastní."""
+    _garden_guard()
     from .. import garden
     return garden.decor_status(conn, user)
 
@@ -1074,6 +1088,7 @@ def garden_decor(user: sqlite3.Row = Depends(require_user),
 def garden_decor_buy(data: DecorBuyIn, user: sqlite3.Row = Depends(require_user),
                      conn: sqlite3.Connection = Depends(db_dep)):
     """Koupí dekoraci (cosmetic sink, vlastní se navždy)."""
+    _garden_guard()
     from .. import garden
     r = garden.buy_decor(conn, user, data.key)
     if not r.get("ok"):
