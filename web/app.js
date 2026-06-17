@@ -2032,6 +2032,7 @@ async function doClaimDaily() {
     const r = await api("/daily/claim", { method: "POST" });
     state.user.points = r.balance;
     toast(r.message, "success");
+    try { confettiBurst(); } catch (e) {}
     renderHeader(); loadDaily(); refreshBonusDot();
   } catch (e) { toast(e.message, "error"); loadDaily(); }
 }
@@ -2135,6 +2136,7 @@ async function doSpinWheel() {
       if (state.user) state.user.points = r.balance;
       renderHeader();
       toast(r.message, "success");
+      try { confettiBurst(); } catch (e) {}
       if (r.jackpot) wheelEl.classList.add("jackpot-win");
       if (btn) btn.outerHTML = `<button class="btn btn-block" disabled>Další zatočení za ~${(wheelState && wheelState.cooldown_h) || 20} h</button>`;
       refreshBonusDot();
@@ -2184,6 +2186,7 @@ async function claimQuest(key) {
     const r = await api("/quests/claim", { method: "POST", body: { key } });
     if (state.user) state.user.points = r.balance;
     toast(r.message || "Odměna vyzvednuta! 🌾", "success");
+    try { confettiBurst(); } catch (e) {}
     renderHeader(); loadQuests(); refreshBonusDot();
   } catch (e) { toast(e.message, "error"); }
 }

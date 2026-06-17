@@ -1698,3 +1698,10 @@ body::before { display: none !important; }
   background: linear-gradient(90deg, var(--accent), var(--farm-green)); box-shadow: 0 0 8px var(--accent-glow);
   transition: width .6s cubic-bezier(.2,.8,.2,1); }
 @media (max-width:760px){ .lvl-pill .lvl-bar { display: none; } }
+
+/* 3) oheň/ember glow na daily streak kartě */
+#dailyCard .panel { animation: streakEmber 3.2s ease-in-out infinite; }
+@keyframes streakEmber {
+  0%, 100% { box-shadow: var(--shadow), 0 0 0 1px rgba(255,140,40,.18), 0 0 26px -12px rgba(255,120,30,.42); }
+  50% { box-shadow: var(--shadow), 0 0 0 1px rgba(255,165,55,.34), 0 0 42px -8px rgba(255,140,40,.62); }
+}
