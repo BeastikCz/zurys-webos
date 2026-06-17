@@ -53,3 +53,31 @@ def test_hall_of_fame_shape(client):
     d = r.json()
     for k in ("loyal", "subs", "gifters", "active"):
         assert k in d and isinstance(d[k], list)
+
+
+def test_hall_of_fame_gifters_counts_subs(client):
+    """Nejštědřejší: subs = součet darovaných subů z reason „… ×N" (i s happy-hour příponou)."""
+    import secrets
+    from app.db import get_conn, now_iso
+    conn = get_conn()
+    try:
+        u = f"gf_{secrets.token_hex(3)}"
+        uid = conn.execute(
+            "INSERT INTO users (kick_username, username, role, points, created_at) VALUES (?,?,?,0,?)",
+            (u, u, "user", now_iso())).lastrowid
+        # 2 gift eventy: ×9000 (běžné) + ×123 (happy 2×). subs=9123, metric=9 000 000+246 000.
+        conn.execute("INSERT INTO points_log (user_id, change, reason, created_at) VALUES (?,?,?,?)",
+                     (uid, 9_000_000, "Kick gift sub 🎁 ×9000", now_iso()))
+        conn.execute("INSERT INTO points_log (user_id, change, reason, created_at) VALUES (?,?,?,?)",
+                     (uid, 246_000, "Kick gift sub 🎁 ×123 (happy 2×)", now_iso()))
+        # příjemce se NEsmí počítat
+        conn.execute("INSERT INTO points_log (user_id, change, reason, created_at) VALUES (?,?,?,?)",
+                     (uid, 0, "Kick gift sub (příjemce)", now_iso()))
+        conn.commit()
+    finally:
+        conn.close()
+    g = client.get("/api/hall-of-fame").json()["gifters"]
+    me = next((x for x in g if x["username"] == u), None)
+    assert me is not None, "gifter má být v žebříčku (×9000 = rank 1)"
+    assert me["subs"] == 9123, f"subs měl být 9123, je {me['subs']}"
+    assert me["metric"] == 9_246_000

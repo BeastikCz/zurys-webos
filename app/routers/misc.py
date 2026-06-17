@@ -366,10 +366,22 @@ def hall_of_fame(conn: sqlite3.Connection = Depends(db_dep)):
               "ORDER BY created_at ASC LIMIT 10")
     subs = q("SELECT username, avatar_url, role, created_at FROM users "
              "WHERE banned=0 AND is_sub=1 ORDER BY created_at ASC LIMIT 10")
-    gifters = q("SELECT u.username, u.avatar_url, u.role, SUM(l.change) AS metric "
-                "FROM points_log l JOIN users u ON u.id=l.user_id "
-                "WHERE l.reason LIKE 'Kick gift sub %' AND l.reason NOT LIKE '%příjemce%' AND u.banned=0 "
-                "GROUP BY u.id ORDER BY metric DESC LIMIT 10")
+    # Nejštědřejší: počet darovaných subů (z reason „… ×N") + sedláky. Řadíme dle POČTU subů
+    # (× je u N první číslo v reason; „2×" z happy-hour přípony je až za ním). metric = sedláky (zpětná kompat).
+    import re as _re
+    _gagg = {}
+    for r in conn.execute(
+            "SELECT u.id AS uid, u.username, u.avatar_url, u.role, l.reason, l.change "
+            "FROM points_log l JOIN users u ON u.id=l.user_id "
+            "WHERE l.reason LIKE 'Kick gift sub %' AND l.reason NOT LIKE '%příjemce%' AND u.banned=0"):
+        g = _gagg.get(r["uid"])
+        if g is None:
+            g = _gagg[r["uid"]] = {"username": r["username"], "avatar_url": r["avatar_url"],
+                                   "role": r["role"], "metric": 0, "subs": 0}
+        g["metric"] += r["change"] or 0
+        _m = _re.search(r"\d+", r["reason"] or "")
+        g["subs"] += int(_m.group()) if _m else 1
+    gifters = sorted(_gagg.values(), key=lambda x: (x["subs"], x["metric"]), reverse=True)[:10]
     active = q("SELECT u.username, u.avatar_url, u.role, COUNT(*) AS metric "
                "FROM points_log l JOIN users u ON u.id=l.user_id "
                "WHERE l.reason='Aktivita v chatu' AND u.banned=0 GROUP BY u.id ORDER BY metric DESC LIMIT 10")

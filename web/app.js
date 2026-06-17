@@ -4812,7 +4812,7 @@ async function pageHallOfFame() {
     box.innerHTML = `<div class="hof-grid">
       ${board("🏆", "Nejvěrnější", "nejdéle v komunitě", d.loyal, (u) => "🎂 " + memberSince(u.created_at))}
       ${board("💜", "Subscribeři", "naši subové", d.subs, () => "💜 sub")}
-      ${board("🎁", "Nejštědřejší", "nejvíc gift subů", d.gifters, (u) => "🎁 " + fmtPts(u.metric || 0))}
+      ${board("🎁", "Nejštědřejší", "nejvíc gift subů", d.gifters, (u) => { const n = u.subs || 0; const w = n === 1 ? "sub" : (n >= 2 && n <= 4 ? "suby" : "subů"); return `🎁 <b>${n}</b> ${w} <span class="faint" style="font-weight:400">· ${fmtPts(u.metric || 0)}</span>`; })}
       ${board("🔥", "Nejaktivnější", "nejvíc v chatu", d.active, (u) => "💬 " + (u.metric || 0))}
     </div>`;
   } catch (e) { box.innerHTML = `<div class="empty">${esc(e.message)}</div>`; }
