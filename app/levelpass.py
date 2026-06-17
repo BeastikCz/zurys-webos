@@ -1,8 +1,8 @@
 """Level Pass: celoživotní milníky podle ÚROVNĚ (ne sezónní – to je Battle Pass).
 
 Dosáhneš úrovně → vyzvedneš exkluzivní kosmetiku, kterou NEJDE koupit (grant-only).
-Úroveň jde JEN z poctivého farmení – gambling i placené/gift suby se do `earned_total`
-nepočítají (viz deps._NO_EARN_KW), takže milníky = dlouhý grind, ne nákup. Vrchol =
+Úroveň jde hlavně z poctivého farmení – gambling se do `earned_total` nepočítá vůbec,
+placené/gift suby jen z 50 % (viz deps.earn_factor: náskok přispěvatelů, ne koupený level). Vrchol =
 úroveň 100 = trofejový rámeček + reálná cena (claim pingne streamera na Discord, ať ji předá).
 
 Žádná vlastní tabulka: claim = grant kosmetiky → `cosmetic_owns` JE ledger (vlastníš

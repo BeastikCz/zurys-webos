@@ -342,26 +342,39 @@ def level_info(earned_total) -> dict:
     return {"level": level, "into": into, "span": span, "next_at": next_at, "pct": max(0, min(100, pct))}
 
 
-# Reasons z gamblingu, vratek/storen A PLACENÝCH subů/giftů NEpočítají do earned_total → level /
-# Battle Pass = jen poctivé FARMENÍ (sledování, chat, denní, kolo, úkoly, sklizeň, drops, partneři…),
-# ne sázky/výhry ani „koupené" levely přes gift suby. points (zůstatek) se mění normálně; filtruje
-# JEN lifetime XP. Forward-only (staré earned_total se nemění → nikomu neklesne level). Soft denylist
-# (nezachycený reason nadál počítá – nerozbije farmení; allowlist by riskoval opačně).
+# Kolik z kladného přírůstku jde do earned_total (lifetime XP → level / Battle Pass):
+#  • gambling/vratky/storna = 0 % (level se nedá vygamblit)
+#  • placené/gift suby = 50 % (přispěvatel má NÁSKOK, ale lvl 100 = ~5 880 subů → koupit nejde)
+#  • poctivé FARMENÍ (sledování, chat, denní, kolo, úkoly, sklizeň, drops, partneři…) = 100 %
+# points (zůstatek) se mění vždy plně; tohle filtruje JEN lifetime XP. Forward-only (staré
+# earned_total se nemění). Soft denylist (nezachycený reason počítá plně – nerozbije farmení).
 _NO_EARN_KW = ("mines", "blackjack", "piškvor", "duel", "hra #", "predikce", "výhra",
                "vrácen", "vráceno", "remíza", "vypršel", "refund", "storno", "zrušen",
-               "odchod (vrácení", "kick sub", "kick resub", "gift sub")
+               "odchod (vrácení")
+_SUB_EARN_KW = ("kick sub", "kick resub", "gift sub")   # placené/gift suby → jen část XP
+SUB_EARN_FACTOR = 0.5                                    # sub dá 50 % hodnoty jako XP (náskok, ne koupený level)
+
+
+def earn_factor(reason: str) -> float:
+    """Podíl kladného přírůstku do earned_total (XP). 0.0 = gambling/vratky, 0.5 = placené/gift
+    suby (náskok přispěvatelů), 1.0 = poctivé farmení. Pořadí: nejdřív denylist (vratka subu = 0)."""
+    r = (reason or "").lower()
+    if any(k in r for k in _NO_EARN_KW):
+        return 0.0
+    if any(k in r for k in _SUB_EARN_KW):
+        return SUB_EARN_FACTOR
+    return 1.0
 
 
 def counts_as_earned(reason: str) -> bool:
-    """True = kladný přírůstek se počítá do earned_total (lifetime XP). False pro gambling/vratky."""
-    r = (reason or "").lower()
-    return not any(k in r for k in _NO_EARN_KW)
+    """True = přírůstek dává aspoň část XP (False jen pro gambling/vratky). Zpětná kompatibilita."""
+    return earn_factor(reason) > 0
 
 
 def add_points(conn: sqlite3.Connection, user_id: int, change: int, reason: str) -> None:
-    """Změní body uživatele a zapíše záznam do points_log. Kladný přírůstek z FARMENÍ navíc
-    naskládá do earned_total (lifetime XP – nikdy neklesá; gambling/vratky se nezapočítají)."""
-    earn = max(0, change) if counts_as_earned(reason) else 0
+    """Změní body uživatele a zapíše záznam do points_log. Kladný přírůstek navíc naskládá do
+    earned_total (lifetime XP – nikdy neklesá): farmení 100 %, suby 50 %, gambling/vratky 0 %."""
+    earn = int(round(max(0, change) * earn_factor(reason)))
     conn.execute("UPDATE users SET points = points + ?, earned_total = earned_total + ? WHERE id = ?",
                  (change, earn, user_id))
     conn.execute(

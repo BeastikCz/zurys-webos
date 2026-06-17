@@ -2206,7 +2206,7 @@ async function loadLevelPass() {
         <div class="section-title" style="margin:0">🏅 Level Pass</div>
         <span class="faint" style="font-size:12.5px">Tvá úroveň <b style="color:var(--accent)">${lp.level}</b>${lp.claimable ? ` · <b style="color:var(--farm-green)">${lp.claimable} k vyzvednutí!</b>` : ""}</span>
       </div>
-      <p class="muted" style="font-size:12.5px;margin:0 0 12px">Exkluzivní rámečky, co <b>nejdou koupit</b> — jen za dosaženou úroveň. A úroveň roste <b>jen poctivým farmením</b> (ne z gamblingu ani subů), takže je fakt vydřená. Vrchol = <b>úroveň 100</b> 👑 → trofej + <b>reálná cena</b>! 🔪</p>
+      <p class="muted" style="font-size:12.5px;margin:0 0 12px">Exkluzivní rámečky, co <b>nejdou koupit</b> — jen za dosaženou úroveň. Úroveň roste hlavně <b>farmením</b> (gambling se nepočítá, placené/gift suby dají jen <b>50 % XP</b> — náskok, ne koupený level), takže ji nikdo rychle nepřeskočí. Vrchol = <b>úroveň 100</b> 👑 → trofej + <b>reálná cena</b>! 🔪</p>
       <div class="lp-track">${nodes}</div>
     </div>`;
   } catch (e) { box.innerHTML = ""; }
@@ -3401,7 +3401,7 @@ async function adminUsers() {
         <button type="button" class="btn btn-ghost${adminState.userSort === "level" ? " on" : ""}" data-action="user-sort" data-sort="level" title="Seřadit podle úrovně (nafarmeno XP) – kdo má nejvyšší level">Dle úrovně ⭐</button>
         <a class="btn btn-ghost" href="/api/admin/export/users.csv" title="Export všech uživatelů: zůstatek, utraceno, nasbíráno, registrace">📥 CSV</a>
       </form>
-      <div class="table-wrap"><table class="tbl"><thead><tr><th>Uživatel</th><th>${isAdmin ? "Kick / IP" : "Kick"}</th><th>Role</th><th title="Úroveň z celkem nafarmeného (earned_total). Nepočítá gambling ani suby.">Úroveň</th><th>Body</th><th>Upravit body</th><th>Stav</th></tr></thead><tbody>
+      <div class="table-wrap"><table class="tbl"><thead><tr><th>Uživatel</th><th>${isAdmin ? "Kick / IP" : "Kick"}</th><th>Role</th><th title="Úroveň z celkem nafarmeného (earned_total). Gambling se nepočítá, placené/gift suby jen z 50 %.">Úroveň</th><th>Body</th><th>Upravit body</th><th>Stav</th></tr></thead><tbody>
       ${list.map((u) => `<tr>
         <td><div style="display:flex;align-items:center;gap:9px">${avatarHTML(u.username, u.avatar_url)}<b>${esc(u.username)}</b></div>${userAdminTools(u, isAdmin)}</td>
         <td class="faint" style="font-size:12.5px">${u.kick_username ? "🟢 " + esc(u.kick_username) : (isAdmin ? esc(u.email || "—") : "—")}${isAdmin ? "<br>" + (u.last_ip ? `<span class="code-pill">${esc(u.last_ip)}</span>${u.ip_count > 1 ? ` <span class="faint">(${u.ip_count} IP)</span>` : ""}` : "<span class='faint'>bez IP</span>") : ""}</td>
