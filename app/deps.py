@@ -342,14 +342,14 @@ def level_info(earned_total) -> dict:
     return {"level": level, "into": into, "span": span, "next_at": next_at, "pct": max(0, min(100, pct))}
 
 
-# Reasons z gamblingu a vratek/storen NEpočítají do earned_total → level / Battle Pass = jen
-# poctivé farmení (sledování, chat, subs, denní, kolo, úkoly, sklizeň, drops…), ne sázky a výhry.
-# points (zůstatek) se mění normálně; tohle filtruje JEN lifetime XP. Forward-only (staré
-# earned_total se nemění → nikomu neklesne level). Soft: nezachycený gambling reason nadál počítá
-# (= dosavadní chování), nerozbije farmení – proto denylist, ne allowlist (ten by riskoval opačně).
+# Reasons z gamblingu, vratek/storen A PLACENÝCH subů/giftů NEpočítají do earned_total → level /
+# Battle Pass = jen poctivé FARMENÍ (sledování, chat, denní, kolo, úkoly, sklizeň, drops, partneři…),
+# ne sázky/výhry ani „koupené" levely přes gift suby. points (zůstatek) se mění normálně; filtruje
+# JEN lifetime XP. Forward-only (staré earned_total se nemění → nikomu neklesne level). Soft denylist
+# (nezachycený reason nadál počítá – nerozbije farmení; allowlist by riskoval opačně).
 _NO_EARN_KW = ("mines", "blackjack", "piškvor", "duel", "hra #", "predikce", "výhra",
                "vrácen", "vráceno", "remíza", "vypršel", "refund", "storno", "zrušen",
-               "odchod (vrácení")
+               "odchod (vrácení", "kick sub", "kick resub", "gift sub")
 
 
 def counts_as_earned(reason: str) -> bool:

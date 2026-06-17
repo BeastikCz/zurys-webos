@@ -9,7 +9,7 @@ primary_region = "fra"   # Frankfurt = EU, nejblíž ČR i Kicku
 [env]
   WEBOS_DATA_DIR = "/data"
   WEBOS_GAMES_OFF = "0"   # hry zapnuté (piškvorky/duely/blackjack); "1" = dočasně vypnout
-  WEBOS_GARDEN_OFF = "1"  # zahrádka MIMO PROVOZ (redesign); "0" = zapnout (data plodin/dekorací zůstávají)
+  WEBOS_GARDEN_OFF = "0"  # zahrádka v2 zapnutá (semínko = % výnosu); "1" = mimo provoz
   KICK_REDIRECT_URI = "https://zurys.live/api/auth/kick/callback"
   KICK_CLIENT_ID = "01KSZPP0E6QAVCG1X7JWVWA3YV"
   KICK_BROADCASTER_CHANNEL = "zurys1337"

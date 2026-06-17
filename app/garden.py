@@ -10,20 +10,38 @@ from datetime import datetime, timezone, timedelta
 from .db import now_iso
 
 N_PLOTS = 4
+SEED_PCT = 0.30       # cena semínka = 30 % výnosu (sink; škáluje s plodinou → drahé plodiny gatované kapitálem)
+SEED_PCT_SUB = 0.15   # sub perk: poloviční sazba semínka
 
-# (key, ikona, název, sazba, hodiny růstu, odměna při sklizni). Marže ~40-90 %, gated časem.
+# (key, ikona, název, hodiny růstu, výnos při sklizni). Cena semínka = % z výnosu (počítá se dle subu).
 CROPS = [
-    {"key": "mrkev",    "icon": "🥕", "name": "Mrkev",       "cost": 50,   "hours": 1,  "reward": 80},
-    {"key": "brambory", "icon": "🥔", "name": "Brambory",    "cost": 150,  "hours": 4,  "reward": 250},
-    {"key": "dyne",     "icon": "🎃", "name": "Dýně",        "cost": 400,  "hours": 12, "reward": 700},
-    {"key": "klas",     "icon": "🌾", "name": "Zlatý klas",  "cost": 1000, "hours": 24, "reward": 1800},
+    {"key": "mrkev",    "icon": "🥕", "name": "Mrkev",       "hours": 1,  "reward": 50},
+    {"key": "brambory", "icon": "🥔", "name": "Brambory",    "hours": 3,  "reward": 150},
+    {"key": "dyne",     "icon": "🎃", "name": "Dýně",        "hours": 12, "reward": 600},
+    {"key": "klas",     "icon": "🌾", "name": "Zlatý klas",  "hours": 24, "reward": 1400},
 ]
 _BY_KEY = {c["key"]: c for c in CROPS}
 
 
-def _crops_public() -> list:
-    return [{"key": c["key"], "icon": c["icon"], "name": c["name"], "cost": c["cost"],
-             "hours": c["hours"], "reward": c["reward"]} for c in CROPS]
+def _is_sub(user) -> bool:
+    try:
+        return bool(user["is_sub"]) or user["role"] == "admin"
+    except (KeyError, IndexError, TypeError):
+        return False
+
+
+def _seed_cost(crop, is_sub: bool) -> int:
+    """Cena semínka = % výnosu (sub má poloviční). Min 1."""
+    return max(1, round(crop["reward"] * (SEED_PCT_SUB if is_sub else SEED_PCT)))
+
+
+def _crops_public(is_sub: bool) -> list:
+    out = []
+    for c in CROPS:
+        seed = _seed_cost(c, is_sub)
+        out.append({"key": c["key"], "icon": c["icon"], "name": c["name"], "hours": c["hours"],
+                    "reward": c["reward"], "cost": seed, "net": c["reward"] - seed})
+    return out
 
 
 def status(conn, user) -> dict:
@@ -42,7 +60,8 @@ def status(conn, user) -> dict:
         plots.append({"plot": p, "empty": False, "crop": r["crop"], "icon": c.get("icon"),
                       "name": c.get("name"), "reward": c.get("reward"),
                       "ready": ready, "seconds_left": secs})
-    return {"plots": plots, "crops": _crops_public(), "n_plots": N_PLOTS}
+    return {"plots": plots, "crops": _crops_public(_is_sub(user)), "n_plots": N_PLOTS,
+            "sub": _is_sub(user), "seed_pct": int(SEED_PCT * 100), "seed_pct_sub": int(SEED_PCT_SUB * 100)}
 
 
 def plant(conn, user, plot: int, crop_key: str) -> dict:
@@ -54,8 +73,9 @@ def plant(conn, user, plot: int, crop_key: str) -> dict:
         return {"ok": False, "error": "Neznámá plodina."}
     if conn.execute("SELECT 1 FROM garden WHERE user_id = ? AND plot = ?", (user["id"], plot)).fetchone():
         return {"ok": False, "error": "Záhon je obsazený."}
-    if not try_debit(conn, user["id"], c["cost"], f"Zasazení: {c['name']} 🌱"):
-        return {"ok": False, "error": f"Nemáš dost sedláků (sazba {c['cost']})."}
+    seed = _seed_cost(c, _is_sub(user))
+    if not try_debit(conn, user["id"], seed, f"Zasazení: {c['name']} 🌱"):
+        return {"ok": False, "error": f"Nemáš dost sedláků (semínko {seed})."}
     now = datetime.now(timezone.utc)
     conn.execute("INSERT INTO garden (user_id, plot, crop, planted_at, ready_at) VALUES (?,?,?,?,?)",
                  (user["id"], plot, crop_key, now.isoformat(), (now + timedelta(hours=c["hours"])).isoformat()))

@@ -9,7 +9,7 @@ import secrets
 def test_counts_as_earned_classification():
     from app.deps import counts_as_earned
     # farmení → počítá
-    for r in ["Sledování streamu", "Aktivita v chatu", "Kick gift sub 🎁 ×3", "Kolo štěstí 🎡",
+    for r in ["Sledování streamu", "Aktivita v chatu", "Kolo štěstí 🎡",
               "Battle Pass tier 5 🎟️", "Sklizeň: Mrkev 🌾", "Úkol: Denní 📋", "Denní streak – den 3",
               "Drop #5 – 1. místo", "Partner: Sponzor 🤝", "Login kalendář – 5 dní 🗓️"]:
         assert counts_as_earned(r), r
@@ -17,7 +17,8 @@ def test_counts_as_earned_classification():
     for r in ["Mines výhra – full clear (3 bomb)", "Mines cashout (×2.5)", "Coinflip #7 – výhra",
               "Kostky #2 – výhra", "Výhra v piškvorkách #9", "Remíza v piškvorkách #9",
               "Predikce #3 – výhra", "Predikce #3 – nikdo netipnul, vráceno", "Blackjack stůl – win 🃏",
-              "Vrácení vkladu – hra #5", "Zrušená hra #5 – vrácení vkladu", "Vypršelá výzva (duel #2)"]:
+              "Vrácení vkladu – hra #5", "Zrušená hra #5 – vrácení vkladu", "Vypršelá výzva (duel #2)",
+              "Kick gift sub 🎁 ×3", "Kick sub 🟣", "Kick resub 🔁"]:   # placené sub/gift = nejde levelovat penězi
         assert not counts_as_earned(r), r
 
 
@@ -36,9 +37,10 @@ def test_add_points_earned_total_excludes_gambling(client):
         add_points(conn, uid, 2000, "Coinflip #7 – výhra")                 # gambling, NE XP
         add_points(conn, uid, 800, "Predikce #3 – výhra")                  # gambling, NE XP
         add_points(conn, uid, 300, "Vrácení vkladu – hra #5")              # vratka, NE XP
+        add_points(conn, uid, 3000, "Kick gift sub 🎁 ×3")                 # placený gift, NE XP
         conn.commit()
         row = conn.execute("SELECT points, earned_total FROM users WHERE id=?", (uid,)).fetchone()
-        assert row["points"] == 1000 + 500 + 5000 + 2000 + 800 + 300       # zůstatek = úplně vše
+        assert row["points"] == 1000 + 500 + 5000 + 2000 + 800 + 300 + 3000  # zůstatek = úplně vše
         assert row["earned_total"] == 1000 + 500                           # XP = jen farmení + kolo
     finally:
         conn.close()

@@ -24,8 +24,8 @@ def test_garden_plant_grow_harvest(client):
         st = garden.status(conn, user)
         assert len(st["plots"]) == garden.N_PLOTS and st["plots"][0]["empty"]
 
-        r = garden.plant(conn, user, 0, "mrkev")        # sazba 50
-        assert r["ok"] and r["balance"] == 450
+        r = garden.plant(conn, user, 0, "mrkev")        # semínko 15 (30 % z výnosu 50)
+        assert r["ok"] and r["balance"] == 485
         assert garden.plant(conn, user, 0, "mrkev")["ok"] is False     # obsazený
         assert garden.harvest(conn, user, 0)["ok"] is False            # nedorostlo
 
@@ -33,10 +33,10 @@ def test_garden_plant_grow_harvest(client):
         conn.execute("UPDATE garden SET ready_at='2000-01-01T00:00:00+00:00' WHERE user_id=? AND plot=0", (uid,))
         conn.commit()
         h = garden.harvest(conn, user, 0)
-        assert h["ok"] and h["reward"] == 80 and h["balance"] == 450 + 80
+        assert h["ok"] and h["reward"] == 50 and h["balance"] == 485 + 50
         assert garden.status(conn, user)["plots"][0]["empty"]          # zase volný
 
-        # málo sedláků na klas (1000) → fail
+        # málo sedláků na klas (semínko 420 = 30 % z 1400) → fail
         conn.execute("UPDATE users SET points=10 WHERE id=?", (uid,)); conn.commit()
         assert garden.plant(conn, user, 1, "klas")["ok"] is False
         assert garden.plant(conn, user, 1, "neznama")["ok"] is False   # neznámá plodina

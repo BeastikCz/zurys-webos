@@ -292,7 +292,7 @@ function renderHeader() {
   const route = currentRoute();
   const u = state.user;
   document.body.classList.toggle("logged-in", !!u);   /* na mobilu uvolní místo v topbaru (skryje wordmark) */
-  const items = [["shop", "Shop"], ["bonusy", "Bonusy"], ["leaderboard", "Žebříček"], ["exchange", "Směnárna"], ["games", "Hry"], ["predikce", "Predikce"]];
+  const items = [["shop", "Shop"], ["bonusy", "Bonusy"], ["zahrada", "Zahrádka"], ["leaderboard", "Žebříček"], ["exchange", "Směnárna"], ["games", "Hry"], ["predikce", "Predikce"]];
   const navDot = (k) => (k === "bonusy" && u && bonusReady) ? `<span class="nav-dot" title="Máš nevyzvednutou odměnu!"></span>` : "";
   const navLinks = items.map(([k, l]) => `<a href="#/${k}" class="nav-link ${route === k ? "active" : ""}">${l}${navDot(k)}</a>`).join("")
     + (isStaff(u) ? `<a href="#/admin" class="nav-link ${route === "admin" ? "active" : ""}">${u.role === "admin" ? "Admin" : "Panel"}</a>` : "");
@@ -2047,12 +2047,12 @@ let _gardenSel = null, _gardenTimer = null;
 function grdDur(s) { s = Math.max(0, s | 0); const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), ss = s % 60; return h ? `${h}h ${m}m` : (m ? `${m}m ${ss}s` : `${ss}s`); }
 function pageGarden() {
   const view = $("#view");
-  view.innerHTML = `<div class="page-head with-mascot"><img class="page-mascot" src="/sedlak-cut.png" alt=""><div class="ph-text"><h1>🌱 Zahrádka</h1><p class="muted">Vylepšujeme ji – brzy se vrátí lepší! 🚧</p></div></div>
-    <div class="panel" style="text-align:center;padding:42px 20px">
-      <div style="font-size:48px;margin-bottom:10px">🚧🌱</div>
-      <div class="section-title" style="margin:0 0 6px">Zahrádka je teď mimo provoz</div>
-      <p class="muted" style="font-size:14px;max-width:430px;margin:0 auto">Pracujeme na vylepšené verzi. Tvoje rozpěstované plodiny a dekorace zůstávají uložené. Mezitím mrkni na 🎟️ Battle Pass nebo 🛒 Shop! 🌾</p>
-    </div>`;
+  if (!state.user) { view.innerHTML = `<div class="empty"><div class="big">🌱</div>Přihlas se přes Kick a začni pěstovat sedláky!</div>`; return; }
+  view.innerHTML = `<div class="page-head with-mascot"><img class="page-mascot" src="/sedlak-cut.png" alt=""><div class="ph-text"><h1>🌱 Zahrádka</h1><p class="muted">Vyber semínko → zasaď na záhon → počkej až doroste → sklidíš sedláky! 🌾</p></div></div>
+    <div id="gardenBox">${skeletonCards(1)}</div>
+    <div id="gardenDecor" style="margin-top:8px"></div>`;
+  loadGarden();
+  loadGardenDecor();
 }
 async function loadGardenDecor() {
   const box = document.getElementById("gardenDecor"); if (!box) return;
@@ -2089,9 +2089,11 @@ async function loadGarden() {
       if (p.ready) return `<div class="grd-plot grd-ready"><div class="grd-crop">${p.icon}</div><div class="grd-lbl">${esc(p.name)}</div><button class="bp-claim" data-action="grd-harvest" data-plot="${p.plot}">Sklidit +${fmtPts(p.reward)}</button></div>`;
       return `<div class="grd-plot grd-grow"><div class="grd-crop grd-sprout">🌱</div><div class="grd-lbl">${esc(p.name)}</div><div class="grd-time" data-left="${p.seconds_left}">${grdDur(p.seconds_left)}</div></div>`;
     }).join("");
-    const shop = g.crops.map((c) => `<button class="grd-seed${_gardenSel === c.key ? " sel" : ""}" data-action="grd-pick" data-crop="${c.key}"><span class="grd-si">${c.icon}</span><b>${esc(c.name)}</b><span class="faint">${c.hours} h · sazba ${fmtPts(c.cost)} → +${fmtPts(c.reward)}</span></button>`).join("");
+    const shop = g.crops.map((c) => `<button class="grd-seed${_gardenSel === c.key ? " sel" : ""}" data-action="grd-pick" data-crop="${c.key}"><span class="grd-si">${c.icon}</span><b>${esc(c.name)}</b><span class="faint">${c.hours} h · semínko ${fmtPts(c.cost)} · čistě <b>+${fmtPts(c.net)}</b></span></button>`).join("");
+    const seedNote = `<p class="muted" style="font-size:12px;margin:-4px 0 10px">Semínko stojí <b>${g.seed_pct}%</b> z výnosu${g.sub ? ` — máš <b style="color:var(--accent)">sub slevu (jen ${g.seed_pct_sub}%)</b> 💜` : ` · 💜 sub jen ${g.seed_pct_sub}%`}.</p>`;
     box.innerHTML = `<div class="grd-grid">${plots}</div>
       <div class="section-title" style="margin:24px 0 8px">🌰 Semínka ${_gardenSel ? `<span class="feeds-pass">vybráno → klikni prázdný záhon</span>` : ""}</div>
+      ${seedNote}
       <div class="grd-shop">${shop}</div>`;
     if (_gardenTimer) clearInterval(_gardenTimer);
     _gardenTimer = setInterval(() => {
