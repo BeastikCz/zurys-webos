@@ -1473,3 +1473,18 @@ body::before { display: none !important; }
   background: rgba(255,180,35,.12); border: 1px solid rgba(255,180,35,.3);
   border-radius: 999px; padding: 2px 8px; margin-left: 6px; vertical-align: middle; white-space: nowrap;
 }
+
+/* Uvítací průvodce (welcome guide) */
+.modal.modal-wg { max-width: 540px; }
+.wg-head { display: flex; align-items: center; gap: 14px; margin-bottom: 16px; }
+.wg-mascot { width: 76px; height: 76px; object-fit: contain; flex: 0 0 auto; filter: drop-shadow(0 6px 16px rgba(0,0,0,.5)) drop-shadow(0 0 18px rgba(255,180,35,.35)); animation: sedlakBob 3.2s ease-in-out infinite; }
+.wg-title { margin: 0; font-size: 22px; line-height: 1.15; }
+.wg-sub { margin: 5px 0 0; font-size: 13.5px; color: var(--text-dim); }
+.wg-steps { display: flex; flex-direction: column; gap: 10px; margin-bottom: 18px; }
+.wg-step { display: flex; gap: 12px; align-items: flex-start; padding: 11px 13px; border-radius: 14px; border: 1px solid var(--border); background: rgba(255,255,255,.03); }
+.wg-step b { font-size: 14px; }
+.wg-ico { font-size: 26px; line-height: 1; flex: 0 0 auto; }
+.wg-d { font-size: 12.5px; color: var(--text-dim); margin-top: 2px; line-height: 1.45; }
+.wg-reopen { background: none; border: none; color: var(--accent); font: inherit; cursor: pointer; padding: 0; }
+.wg-reopen:hover { text-decoration: underline; }
+@media (max-width: 560px) { .modal.modal-wg { max-width: 100%; } .wg-mascot { width: 56px; height: 56px; } .wg-title { font-size: 18px; } }

@@ -5022,6 +5022,30 @@ function openModal(html, extraClass = "") {
 }
 function closeModal() { $("#modalRoot").classList.remove("open"); $("#modalRoot").innerHTML = ""; }
 
+/* Uvítací průvodce – „jak to funguje" (1× automaticky přes localStorage, znovu z patičky) */
+function welcomeGuide() {
+  const u = state.user;
+  const steps = [
+    ["📺", "Sleduj stream", "Za sledování Zurys streamu ti automaticky naskakují <b>sedláci</b> 🌾 — stačí mít web otevřený."],
+    ["🛒", "Utrať v Shopu", "Sedláky vyměníš za <b>skiny a odměny</b> — instantky i tomboly o velké ceny."],
+    ["🌱", "Zasaď v Zahrádce", "Zasaď semínko, počkej až doroste a <b>skliď víc sedláků</b>. Ozdob si farmu dekoracemi."],
+    ["🎟️", "Plň Battle Pass", "Vše co naděláš tě posouvá v <b>sezónním Battle Passu</b> — denní bonus, kolo štěstí i odměny za tiery."],
+    ["🎮", "Hraj a sázej", "Miny, duely, blackjack, predikce — zariskuj o <b>velké výhry</b> (férově, provably-fair)."],
+    ["🏆", "Stoupej výš", "Farmařením rosteš v <b>levelu</b> a šplháš v žebříčku. Staň se #1 sedlákem! 👑"],
+  ];
+  const cards = steps.map(([ic, t, d]) => `<div class="wg-step"><span class="wg-ico">${ic}</span><div><b>${t}</b><div class="wg-d">${d}</div></div></div>`).join("");
+  const cta = u
+    ? `<button class="btn btn-primary btn-block" data-action="close-modal">Pojď farmařit! 🌾</button>`
+    : `<button class="btn btn-kick btn-block" data-action="connect">🟢 Připoj se přes Kick a začni</button>`;
+  openModal(`<div class="wg">
+    <div class="wg-head"><img class="wg-mascot" src="/sedlak-cut.png" alt="">
+      <div><h2 class="wg-title">Vítej na <span style="color:var(--accent)">Zurys farmě</span>! 🌾</h2>
+      <p class="wg-sub">${u ? "Sbírej sedláky, ozdob si farmu a vyšplhej na vrchol." : "Sbírej sedláky za sledování streamu a vyměň je za skiny a odměny."}</p></div></div>
+    <div class="wg-steps">${cards}</div>
+    ${cta}
+  </div>`, "modal-wg");
+}
+
 /* ============================================================
    EVENT DELEGACE
 ============================================================ */
@@ -5111,6 +5135,7 @@ function handleAction(action, el) {
     case "bjr-chip": bjrChip(el.dataset.amt); break;
     case "game-back": navigate("games"); break;
     case "open-news": openNewsPanel(); break;
+    case "open-welcome": welcomeGuide(); break;
     case "close-news": closeNewsPanel(); break;
     case "open-notifs": openNotifs(); break;
     case "close-notifs": closeNotifs(); break;
@@ -6044,6 +6069,10 @@ async function init() {
   if (!location.hash) location.hash = "#/shop";
   render();
   refreshBonusDot();   // rozsvítí tečku na „Bonusy", pokud je co vyzvednout
+  if (!localStorage.getItem("zurys_welcome_v1") && !(state.user && (state.user.pending_rankup || state.user.pending_overtake))) {
+    localStorage.setItem("zurys_welcome_v1", "1");   // uvítací průvodce 1× (nováčci + stávající po redesignu); znovu z patičky
+    setTimeout(welcomeGuide, 700);
+  }
   if (!window._dmBadgeTimer) window._dmBadgeTimer = setInterval(pollDmBadge, 20000);   // live ✉️ badge (šetrný interval)
   if (!window._notifBadgeTimer) window._notifBadgeTimer = setInterval(pollNotifBadge, 20000);   // live 🔔 badge
 }
