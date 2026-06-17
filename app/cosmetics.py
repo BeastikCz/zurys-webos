@@ -42,6 +42,13 @@ CATALOG = [
     {"key": "name_gold",    "type": "name",   "name": "Contraband zlatá",   "cost": 50000, "rarity": "contraband", "sub": False, "cls": "cn-gold"},
     {"key": "name_holo",    "type": "name",   "name": "Holografická",       "cost": 70000, "rarity": "legendary",  "sub": False, "cls": "cn-holo"},
     {"key": "name_rainbow", "type": "name",   "name": "Duhová",             "cost": 80000, "rarity": "legendary",  "sub": False, "cls": "cn-rainbow"},
+    {"key": "name_sunflower","type": "name",  "name": "Slunečnicová",       "cost": 3000,  "rarity": "restricted", "sub": False, "cls": "cn-sunflower"},
+    {"key": "name_grass",   "type": "name",   "name": "Listová zelená",     "cost": 3500,  "rarity": "restricted", "sub": False, "cls": "cn-grass"},
+    {"key": "name_peach",   "type": "name",   "name": "Broskvová",          "cost": 4000,  "rarity": "classified", "sub": False, "cls": "cn-peach"},
+    {"key": "name_sakura",  "type": "name",   "name": "Sakura",             "cost": 9000,  "rarity": "classified", "sub": False, "cls": "cn-sakura"},
+    {"key": "name_wheat",   "type": "name",   "name": "Zlatý klas",         "cost": 12000, "rarity": "covert",     "sub": False, "cls": "cn-wheat"},
+    {"key": "name_ocean",   "type": "name",   "name": "Oceán",              "cost": 16000, "rarity": "covert",     "sub": False, "cls": "cn-ocean"},
+    {"key": "name_solar",   "type": "name",   "name": "Sluneční bouře",     "cost": 30000, "rarity": "contraband", "sub": False, "cls": "cn-solar"},
     # ---- Rámečky avataru (cenově seřazené) ----
     {"key": "frame_bronze",   "type": "frame", "name": "Bronz",            "cost": 800,   "rarity": "milspec",    "sub": False, "cls": "cf-bronze"},
     {"key": "frame_silver",   "type": "frame", "name": "Stříbro",          "cost": 2500,  "rarity": "restricted", "sub": False, "cls": "cf-silver"},
@@ -54,6 +61,12 @@ CATALOG = [
     {"key": "frame_neon",     "type": "frame", "name": "Neonový puls",     "cost": 22000, "rarity": "covert",     "sub": False, "cls": "cf-neon"},
     {"key": "frame_rainbow",  "type": "frame", "name": "Duhový prsten",    "cost": 55000, "rarity": "legendary",  "sub": False, "cls": "cf-rainbow"},
     {"key": "frame_fire",     "type": "frame", "name": "Rotující oheň",    "cost": 60000, "rarity": "legendary",  "sub": False, "cls": "cf-fire"},
+    {"key": "frame_copper",  "type": "frame", "name": "Měď",               "cost": 2000,  "rarity": "milspec",    "sub": False, "cls": "cf-copper"},
+    {"key": "frame_leaf",    "type": "frame", "name": "Listový věnec",     "cost": 3000,  "rarity": "restricted", "sub": False, "cls": "cf-leaf"},
+    {"key": "frame_teal",    "type": "frame", "name": "Tyrkysový",         "cost": 9000,  "rarity": "classified", "sub": False, "cls": "cf-teal"},
+    {"key": "frame_crystal", "type": "frame", "name": "Krystalový",        "cost": 15000, "rarity": "covert",     "sub": False, "cls": "cf-crystal"},
+    {"key": "frame_magma",   "type": "frame", "name": "Magma",             "cost": 28000, "rarity": "covert",     "sub": False, "cls": "cf-magma"},
+    {"key": "frame_galaxy",  "type": "frame", "name": "Galaxie",           "cost": 42000, "rarity": "contraband", "sub": True,  "cls": "cf-galaxy"},
     # ---- Exkluzivní (nelze koupit, jen vyhrát) ----
     {"key": "frame_champion", "type": "frame", "name": "Šampion sezóny 👑", "cost": 0, "rarity": "legendary", "sub": False, "cls": "cf-champion", "grant_only": True},
 ]

@@ -976,6 +976,28 @@ footer.site-footer { border-top: 1px solid var(--border); padding: 22px 0; color
 @keyframes cf-pulse-ice { 0%,100% { box-shadow:0 0 0 2px #7fe6ff, 0 0 0 0 rgba(127,230,255,.5);} 50% { box-shadow:0 0 0 2px #cdf6ff, 0 0 14px 2px rgba(127,230,255,.75);} }
 @keyframes cf-rainbow { 0% { box-shadow:0 0 0 2px #ff4d6d;} 20% { box-shadow:0 0 0 2px #ff9d2e;} 40% { box-shadow:0 0 0 2px #ffe24d;} 60% { box-shadow:0 0 0 2px #46e08a;} 80% { box-shadow:0 0 0 2px #4db4ff;} 100% { box-shadow:0 0 0 2px #ff4d6d;} }
 
+/* Kosmetika v2 – farm-laděné barvy + rámečky (mid-tier sink) */
+.cn-sunflower { color: #ffd234 !important; text-shadow: 0 0 10px rgba(255,210,52,.35); }
+.cn-grass     { color: #6fd24a !important; }
+.cn-peach     { color: #ff9e7a !important; }
+.cn-sakura  { background: linear-gradient(90deg,#ffd6ec,#ff9ec8,#fff0f6,#ff9ec8); background-size:240% 100%;
+  -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent; color:transparent !important; animation: cos-shine 5s linear infinite; }
+.cn-wheat   { background: linear-gradient(90deg,#ffe9a8,#e0a82a,#fff0c0,#e0a82a); background-size:220% 100%;
+  -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent; color:transparent !important; animation: cos-shine 4s linear infinite; }
+.cn-ocean   { background: linear-gradient(90deg,#7fe6ff,#2e8aff,#46c4ff,#2e8aff); background-size:260% 100%;
+  -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent; color:transparent !important; animation: cos-shine 4.5s linear infinite; }
+.cn-solar   { background: linear-gradient(90deg,#fff04d,#ff8a18,#ff3b2e,#ff8a18,#fff04d); background-size:260% 100%;
+  -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent; color:transparent !important; animation: cos-shine 3s linear infinite; }
+.avatar.cf-copper  { box-shadow: 0 0 0 2px #c87a43; }
+.avatar.cf-leaf    { box-shadow: 0 0 0 2px #6fd24a, 0 0 10px -2px rgba(111,210,74,.6); }
+.avatar.cf-teal    { box-shadow: 0 0 0 2px #1fe0d4, 0 0 10px -2px rgba(31,224,212,.6); }
+.avatar.cf-crystal { box-shadow: 0 0 0 2px #bfe9ff; animation: cf-pulse-crystal 2s ease-in-out infinite; }
+.avatar.cf-magma   { box-shadow: 0 0 0 2px #ff5a2e, 0 0 12px -1px #ff3000; animation: cf-magma 1.6s linear infinite; }
+.avatar.cf-galaxy  { box-shadow: 0 0 0 2px #8a6bff; animation: cf-galaxy 3s ease-in-out infinite; }
+@keyframes cf-pulse-crystal { 0%,100% { box-shadow:0 0 0 2px #bfe9ff, 0 0 0 0 rgba(191,233,255,.5);} 50% { box-shadow:0 0 0 2px #eaf8ff, 0 0 16px 2px rgba(150,220,255,.8);} }
+@keyframes cf-magma { 0% { box-shadow:0 0 0 2px #ff5a2e, 0 0 12px -1px #ff3000;} 50% { box-shadow:0 0 0 2px #ffb300, 0 0 16px 1px #ff6a00;} 100% { box-shadow:0 0 0 2px #ff3000, 0 0 12px -1px #c81800;} }
+@keyframes cf-galaxy { 0%,100% { box-shadow:0 0 0 2px #8a6bff, 0 0 10px 0 rgba(138,107,255,.5);} 50% { box-shadow:0 0 0 2px #c46bff, 0 0 16px 2px rgba(196,107,255,.75);} }
+
 .cb-midnight { background: linear-gradient(120deg,#141a3a,#2a1a4a 60%,#0c1030); }
 .cb-aurora   { background: linear-gradient(120deg,#1b3a5a,#2a6a7a 40%,#5a3a7a 80%,#7a3a5a); }
 .cb-wave     { background: linear-gradient(120deg,#063a2e,#0e7a52 55%,#0a5a44); }
