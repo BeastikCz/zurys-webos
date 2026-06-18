@@ -908,6 +908,14 @@ def wager_limit_status(user: sqlite3.Row = Depends(require_user), conn: sqlite3.
     eff_limit = (r["wager_limit"] if r else None)
     if r and not same_day and r["wager_limit_pending"] is not None:
         eff_limit = r["wager_limit_pending"]          # zítra se aplikuje odložené
+    try:
+        global_limit = int(get_setting(conn, "eco_wager_cap", "75000") or "0")
+    except (TypeError, ValueError):
+        global_limit = 75000
+    if user["role"] == ROLE_ADMIN:
+        global_limit = 0
+    if global_limit > 0:
+        eff_limit = min(eff_limit, global_limit) if eff_limit and eff_limit > 0 else global_limit
     wagered = (r["wagered_today"] if (r and same_day) else 0) or 0
     return {
         "limit": eff_limit or 0,

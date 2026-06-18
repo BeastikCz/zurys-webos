@@ -170,14 +170,33 @@ def check_wager_limit(conn: sqlite3.Connection, user, amount: int) -> None:
         (uid,)).fetchone()
     if row is None:
         return
-    limit = row["wager_limit"]
+    user_limit = row["wager_limit"]
+    try:
+        from .db import get_setting
+        global_limit = int(get_setting(conn, "eco_wager_cap", "75000") or "0")
+    except (TypeError, ValueError):
+        global_limit = 75000
+    try:
+        is_admin = user["role"] == ROLE_ADMIN
+    except (KeyError, IndexError, TypeError):
+        is_admin = False
+    if is_admin:
+        global_limit = 0
+
+    def effective_limit(value):
+        if global_limit <= 0:
+            return value
+        return min(value, global_limit) if value and value > 0 else global_limit
+
+    limit = effective_limit(user_limit)
     wagered = row["wagered_today"] or 0
     if row["wager_day"] != today:                      # nový den → reset + aplikuj odložené navýšení
         if row["wager_limit_pending"] is not None:
-            limit = row["wager_limit_pending"]
+            user_limit = row["wager_limit_pending"]
+            limit = effective_limit(user_limit)
         wagered = 0
         conn.execute("UPDATE users SET wager_day = ?, wagered_today = 0, wager_limit = ?, "
-                     "wager_limit_pending = NULL WHERE id = ?", (today, limit, uid))
+                     "wager_limit_pending = NULL WHERE id = ?", (today, user_limit, uid))
     if limit and limit > 0 and wagered + amount > limit:
         left = max(0, limit - wagered)
         raise HTTPException(status_code=403,

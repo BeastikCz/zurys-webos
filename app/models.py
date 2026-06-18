@@ -137,6 +137,7 @@ class EconomyIn(BaseModel):
     eco_chat_cooldown_s: Optional[int] = Field(default=None, ge=1, le=3600)
     eco_daily_cap: Optional[int] = Field(default=None, ge=0, le=1000000)
     eco_games_cap: Optional[int] = Field(default=None, ge=0, le=10000000)
+    eco_wager_cap: Optional[int] = Field(default=None, ge=0, le=10000000)
     eco_watch_enabled: Optional[int] = Field(default=None, ge=0, le=1)
     eco_chat_enabled: Optional[int] = Field(default=None, ge=0, le=1)
     eco_sub_pts: Optional[int] = Field(default=None, ge=0, le=1000000)

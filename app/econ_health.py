@@ -253,6 +253,29 @@ def insights(conn: sqlite3.Connection, days: int = 1) -> dict:
         d["gambling_volume"] = d["gambling_in"] + d["gambling_out"]
         d["garden_net"] = d["garden_gained"] - d["garden_spent"]
 
+    red_flags = []
+    flag_rules = [
+        ("high_farm", "High farm XP", "farm_xp", 50000),
+        ("high_wager", "High gambling volume", "gambling_volume", 200000),
+        ("high_gamble_profit", "High gambling profit", "gambling_net", 50000),
+        ("high_garden_profit", "High garden profit", "garden_net", 5000),
+    ]
+    for d in rows:
+        for reason, label, key, threshold in flag_rules:
+            value = d.get(key, 0) or 0
+            if value >= threshold:
+                red_flags.append({
+                    "id": d["id"],
+                    "username": d["username"],
+                    "reason": reason,
+                    "label": label,
+                    "metric": key,
+                    "value": value,
+                    "threshold": threshold,
+                    "detail": f"{label}: {value} / {threshold}",
+                })
+    red_flags.sort(key=lambda x: (x["value"] / max(1, x["threshold"])), reverse=True)
+
     def top(key, pred):
         return sorted([x for x in rows if pred(x)], key=lambda x: x[key], reverse=True)[:10]
 
@@ -261,6 +284,7 @@ def insights(conn: sqlite3.Connection, days: int = 1) -> dict:
         "top_farmers": top("farm_xp", lambda x: x["farm_xp"] > 0),
         "top_gamblers": top("gambling_volume", lambda x: x["gambling_volume"] > 0),
         "top_garden": top("garden_net", lambda x: x["garden_gained"] or x["garden_spent"]),
+        "red_flags": red_flags[:20],
         "categories": [
             {"key": key, "emoji": emoji, "label": label, "kind": kind}
             for key, emoji, label, kind, _subs in _RULES

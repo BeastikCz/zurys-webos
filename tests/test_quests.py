@@ -82,6 +82,41 @@ def test_chat_quest_progress(client):
         conn.close()
 
 
+def test_garden_quest_progress(client):
+    conn = get_conn()
+    try:
+        uid = _make_user(conn)
+        conn.commit()
+        d_garden = next(q for q in quests.get_quests(conn, uid) if q["key"] == "d_garden")
+        assert d_garden["progress"] == 0 and not d_garden["completed"]
+        for _ in range(d_garden["target"]):
+            conn.execute("INSERT INTO points_log (user_id, change, reason, created_at) VALUES (?,?,?,?)",
+                         (uid, 50, "Sklizeň: Mrkev", now_iso()))
+        conn.commit()
+        d_garden2 = next(q for q in quests.get_quests(conn, uid) if q["key"] == "d_garden")
+        assert d_garden2["progress"] == d_garden["target"] and d_garden2["completed"]
+    finally:
+        conn.close()
+
+
+def test_shop_quest_progress_is_spend_based(client):
+    conn = get_conn()
+    try:
+        uid = _make_user(conn)
+        conn.commit()
+        d_shop = next(q for q in quests.get_quests(conn, uid) if q["key"] == "d_shop")
+        assert d_shop["progress"] == 0 and not d_shop["completed"]
+        conn.execute(
+            "INSERT INTO orders (user_id, product_id, points_spent, status, created_at) VALUES (?,?,?,?,?)",
+            (uid, None, d_shop["target"], "fulfilled", now_iso()),
+        )
+        conn.commit()
+        d_shop2 = next(q for q in quests.get_quests(conn, uid) if q["key"] == "d_shop")
+        assert d_shop2["progress"] == d_shop["target"] and d_shop2["completed"]
+    finally:
+        conn.close()
+
+
 def test_earn_quest_counts_only_stream_activity(client):
     """'earned' quest postupuje JEN z bodů za sledování/chat na streamu.
 

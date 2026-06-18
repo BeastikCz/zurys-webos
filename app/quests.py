@@ -25,6 +25,8 @@ QUESTS = [
     {"key": "d_earn", "period": "daily",  "name": "Sedlák dříč",   "desc": "Vydělej 700 sedláků koukáním/chatem na streamu 📺", "stat": "earned",  "target": 700,  "reward": 150},
     {"key": "d_bet",  "period": "daily",  "name": "Sázkař",        "desc": "Podej 5 sázek v predikci",            "stat": "bets",    "target": 5,    "reward": 80},
     {"key": "d_chat", "period": "daily",  "name": "Ukecaný",       "desc": "Napiš 20× do chatu během streamu 💬", "stat": "chat",    "target": 20,   "reward": 120},
+    {"key": "d_garden", "period": "daily", "name": "Zahradnik",     "desc": "Sklid 2 plodiny v zahradce",          "stat": "garden_harvest", "target": 2, "reward": 80},
+    {"key": "d_shop", "period": "daily",   "name": "Mecenas dne",   "desc": "Utrat 1000 sedlaku v shopu",          "stat": "shop_spent", "target": 1000, "reward": 120},
     {"key": "w_drop", "period": "weekly", "name": "Týdenní lovec", "desc": "Chytni 60 dropů za týden",            "stat": "drops",   "target": 60,   "reward": 700},
     {"key": "w_duel", "period": "weekly", "name": "Gladiátor",     "desc": "Vyhraj 40 PvP duelů za týden",        "stat": "pvp_won", "target": 40,   "reward": 700},
     {"key": "w_earn", "period": "weekly", "name": "Magnát",        "desc": "Vydělej 12 000 sedláků na streamu za týden 📺", "stat": "earned",  "target": 12000, "reward": 900},
@@ -54,6 +56,12 @@ def _user_stat(conn, uid: int, stat: str) -> int:
             (uid,)).fetchone()["c"]
     if stat == "chat":
         return conn.execute("SELECT COALESCE(SUM(change),0) c FROM points_log WHERE user_id=? AND change>0 AND reason='Aktivita v chatu'", (uid,)).fetchone()["c"]
+    if stat == "garden_harvest":
+        return conn.execute(
+            "SELECT COUNT(*) c FROM points_log WHERE user_id=? AND change>0 AND reason LIKE 'Skliz%'",
+            (uid,)).fetchone()["c"]
+    if stat == "shop_spent":
+        return conn.execute("SELECT COALESCE(SUM(points_spent),0) c FROM orders WHERE user_id=?", (uid,)).fetchone()["c"]
     if stat == "pvp_won":
         won = 0
         for tbl in ("duels", "games"):

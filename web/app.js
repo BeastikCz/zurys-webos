@@ -2941,9 +2941,16 @@ function economyInsightsHTML(d) {
     (x) => `<td class="faint">+${fmtPts(x.garden_gained)} / −${fmtPts(x.garden_spent)}</td>`,
     (x) => `<td style="font-weight:800;color:${x.garden_net >= 0 ? "#e0a857" : "#46d369"}">${money(x.garden_net)}</td>`,
   ]);
+  const flags = (d.red_flags || []).map((x) => `<tr>
+    <td>${uLink(x.username)}</td>
+    <td>${esc(x.label || x.reason || "")}</td>
+    <td style="font-weight:800;color:#e0a857">${fmtPts(x.value || 0)}</td>
+    <td class="faint">${fmtPts(x.threshold || 0)}</td>
+  </tr>`).join("");
   const cats = (d.categories || []).map((c) => `<span class="code-pill" title="${esc(c.kind)}">${c.emoji} ${esc(c.label)}</span>`).join(" ");
   return `<div class="panel" style="margin-bottom:16px">
     <div class="section-title" style="margin-top:0">📊 Farm vs gambling vs zahrádka <span class="faint" style="font-size:12px;font-weight:400">posledních ${d.days} d</span></div>
+    ${flags ? `<div style="margin-bottom:14px"><b style="color:#e0a857">Red flags</b><div class="table-wrap" style="margin-top:8px"><table class="tbl"><thead><tr><th>Uzivatel</th><th>Duvod</th><th>Hodnota</th><th>Limit</th></tr></thead><tbody>${flags}</tbody></table></div></div>` : ""}
     <div class="grid-3">
       <div><b>Top farm XP</b><div class="table-wrap" style="margin-top:8px"><table class="tbl"><tbody>${farmers || `<tr><td class="faint">nic</td></tr>`}</tbody></table></div></div>
       <div><b>Top gambling obrat</b><div class="table-wrap" style="margin-top:8px"><table class="tbl"><tbody>${gamblers || `<tr><td class="faint">nic</td></tr>`}</tbody></table></div></div>
@@ -3007,6 +3014,7 @@ async function adminEconomy() {
         <div class="eco-sep">Limity</div>
         ${ecoField("eco_daily_cap", "Denní strop výdělku (sedláci)", "Max pasivních bodů za den (anti-farm)", e.eco_daily_cap)}
         ${ecoField("eco_games_cap", "Denní strop zisku z HER (0 = bez limitu)", "Max čistý zisk z coinflip/kostky/piškvorky za den – brzda na grind", e.eco_games_cap)}
+        ${ecoField("eco_wager_cap", "Denni strop SAZEK (global)", "Max protočených sedláků za den napříč Mines/PvP/predikcemi; 0 = vypnuto", e.eco_wager_cap)}
         <div class="row-between" style="margin-top:18px">
           <span class="faint" style="font-size:12px">Změny platí okamžitě pro všechny.</span>
           <button class="btn btn-accent" data-action="eco-save">💾 Uložit nastavení</button>
@@ -3023,7 +3031,7 @@ async function adminEconomy() {
   } catch (e) { box.innerHTML = `<div class="empty">${esc(e.message)}</div>`; }
 }
 async function saveEconomy() {
-  const ids = ["eco_pts_per_min","eco_sub_mult","eco_vip_mult","eco_chat_pts","eco_chat_cooldown_s","eco_daily_cap","eco_games_cap","eco_sub_pts","eco_resub_pts","eco_giftsub_pts","eco_follow_pts"];
+  const ids = ["eco_pts_per_min","eco_sub_mult","eco_vip_mult","eco_chat_pts","eco_chat_cooldown_s","eco_daily_cap","eco_games_cap","eco_wager_cap","eco_sub_pts","eco_resub_pts","eco_giftsub_pts","eco_follow_pts"];
   const body = {};
   ids.forEach((id) => { const el = $("#" + id); if (el) body[id] = parseInt(el.value, 10) || 0; });
   ["eco_watch_enabled","eco_chat_enabled"].forEach((id) => { const el = $("#" + id); if (el) body[id] = el.classList.contains("on") ? 1 : 0; });

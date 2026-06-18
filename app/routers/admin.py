@@ -282,7 +282,16 @@ def economy_garden(conn: sqlite3.Connection = Depends(db_dep)):
 def economy_insights(days: int = Query(1, ge=1, le=30),
                      conn: sqlite3.Connection = Depends(db_dep)):
     """Farm vs gambling vs garden overview for economy admins."""
-    return econ_health.insights(conn, days)
+    data = econ_health.insights(conn, days)
+    for flag in data.get("red_flags", [])[:5]:
+        alerts.send(
+            "Economy red flag",
+            f"{flag.get('username')} - {flag.get('detail')}",
+            key=f"econ-redflag:{flag.get('id')}:{flag.get('reason')}",
+            cooldown=21600,
+            ping=False,
+        )
+    return data
 
 
 @router.get("/egg-finders")

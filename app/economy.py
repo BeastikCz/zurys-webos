@@ -21,6 +21,7 @@ DEFAULTS = {
     "eco_chat_cooldown_s": 300,   # min. rozestup mezi odměnami za chat (s) = 5 min
     "eco_daily_cap":      5000,   # strop pasivního výdělku za den (sedláci)
     "eco_games_cap":      15000,  # denní strop ČISTÉHO zisku z her (coinflip/kostky/piškvorky); 0 = bez limitu
+    "eco_wager_cap":      75000,  # global daily wager cap across Mines/PvP/predictions; 0 = no global cap
     "eco_watch_enabled":  1,      # body za sledování zapnuté
     "eco_chat_enabled":   1,      # body za chat zapnuté
     # Body za Kick eventy (přičítá webhook /api/kick/webhook – až bude napojený):
