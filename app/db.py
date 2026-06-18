@@ -691,6 +691,8 @@ _MIGRATIONS = [
     ("users", "gamble_block_until", "TEXT"),  # sebevyloučení ze sázek: ISO konec / "permanent" / NULL
     ("users", "timeout_until", "TEXT"),       # timeout (dočasný blok webu): ISO konec / NULL. Zrcadlí Kick timeout.
     ("subgoal_gifters", "paid", "INTEGER NOT NULL DEFAULT 0"),  # SUB cíl: gifter už dostal odměnu (per-gifter idempotence)
+    ("users", "earned_today", "INTEGER NOT NULL DEFAULT 0"),  # XP z FARMENÍ nasbírané dnes (denní strop XP)
+    ("users", "earned_day", "TEXT"),          # den (local) pro reset earned_today
     ("users", "fair_server_seed", "TEXT"),    # provably fair: tajný server seed (aktuální)
     ("users", "fair_server_hash", "TEXT"),    # SHA-256 commit (ukázán předem)
     ("users", "fair_client_seed", "TEXT"),    # client seed (hráč si mění)

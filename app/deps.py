@@ -1,4 +1,5 @@
 """Sdílené FastAPI závislosti: připojení k DB, aktuální uživatel, role, pomocníci."""
+import re
 import sqlite3
 from datetime import datetime, timezone, timedelta
 from typing import Optional
@@ -6,7 +7,7 @@ from typing import Optional
 from fastapi import Depends, HTTPException, Request
 
 from .config import SESSION_COOKIE, ROLE_ADMIN, ROLE_BROADCASTER, STAFF_ROLES, ADMIN_SECTIONS, TRUSTED_IPS, KNOWN_ADMIN_IPS
-from .db import get_conn, now_iso
+from .db import get_conn, now_iso, local_date
 from . import alerts
 
 # Jak často (max) přepisovat „naposledy viděn" u session. get_current_user běží na VĚTŠINĚ
@@ -419,11 +420,74 @@ def counts_as_earned(reason: str) -> bool:
     return earn_factor(reason) > 0
 
 
+# ── NOVÝ XP MODEL (supporter-first) ─────────────────────────────────────────────
+# Supporter event (vlastní sub / resub / gift sub giver) = PEVNÝCH XP_PER_SUB za KAŽDÝ sub (z POČTU
+# subů v reason, ne z bodů → HH 2× bonus XP nezdvojí), BEZ stropu = náskok podporovatelů. Free farmení
+# = body × faktor s DENNÍM stropem XP (sub má ×1.5 a vyšší strop). Gambling/dary/admin/komunitní cíle/
+# botrix = 0. Import staré platformy = plně (veteráni). Klasifikace MUSÍ sedět se zpětným přepočtem.
+XP_PER_SUB = 5000          # XP za 1 sub (vlastní/resub/darovaný)
+FARM_XP_CAP = 2000         # denní strop XP z farmení (non-sub)
+FARM_XP_CAP_SUB = 3000     # denní strop XP z farmení pro suby (×1.5)
+SUB_FARM_MULT = 1.5        # sub farmí XP rychleji
+
+_XP_ZERO_KW = ("battle pass", "mines", "blackjack", "coinflip", "duel", "predikce", "piškvor",
+               "kostky", "stůl – win", "sázka", "výhra v", "zrušen", "zrušená", "vrácen", "vráceno",
+               "vypršel", "vypršelá", "remíza", "storno", "refund", "výzv", "hra #", "dar od",
+               "dar pro", "dar →", "úprava adminem", "chat cíl", "sub cíl", "komunitní", "botrix")
+_XP_HALF_KW = ("kolo", "drop", "partner", "flash")     # náhoda/promo → půlka XP
+
+
+def classify_xp(reason: str):
+    """(kind, val) klasifikace reason pro XP. Sdílí _xp_award (forward), battlepass season baseline
+    i zpětný přepočet → klasifikace je VŠUDE stejná. kind: 'sup' (val=počet subů) / 'imp' / 'zero' /
+    'farm' (val=faktor 0.5/1.0)."""
+    r = (reason or "").lower()
+    if "kick gift sub" in r and "příjemce" not in r:
+        m = re.search(r"\d+", r)
+        return ("sup", int(m.group()) if m else 1)
+    if ("kick sub" in r or "kick resub" in r) and "příjemce" not in r:
+        return ("sup", 1)
+    if "import" in r:
+        return ("imp", None)
+    if any(k in r for k in _XP_ZERO_KW):
+        return ("zero", None)
+    return ("farm", 0.5 if any(k in r for k in _XP_HALF_KW) else 1.0)
+
+
+def _xp_award(conn: sqlite3.Connection, user_id: int, change: int, reason: str) -> int:
+    """XP (do earned_total) za tenhle KLADNÝ přírůstek dle nových pravidel. Supporter = pevně
+    XP_PER_SUB/sub (bez stropu), farmení = body×faktor s denním stropem (sub ×1.5 + vyšší strop),
+    gambling/dary/admin/cíle/botrix = 0, import = plně. Píše earned_today (strop). Necommituje."""
+    if change <= 0:
+        return 0
+    kind, val = classify_xp(reason)
+    if kind == "sup":
+        return XP_PER_SUB * val
+    if kind == "imp":
+        return change
+    if kind == "zero":
+        return 0
+    # poctivé farmení – body × faktor, sub ×1.5, denní strop XP
+    row = conn.execute("SELECT is_sub, earned_today, earned_day FROM users WHERE id = ?", (user_id,)).fetchone()
+    if row is None:
+        return 0
+    is_sub = bool(row["is_sub"]) if "is_sub" in row.keys() else False
+    base = int(round(change * val * (SUB_FARM_MULT if is_sub else 1.0)))
+    cap = FARM_XP_CAP_SUB if is_sub else FARM_XP_CAP
+    today = local_date()
+    used = (row["earned_today"] or 0) if row["earned_day"] == today else 0
+    grant = max(0, min(base, cap - used))
+    if row["earned_day"] != today or grant > 0:               # zapiš denní čítač (i reset na nový den)
+        conn.execute("UPDATE users SET earned_today = ?, earned_day = ? WHERE id = ?",
+                     (used + grant, today, user_id))
+    return grant
+
+
 def add_points(conn: sqlite3.Connection, user_id: int, change: int, reason: str, *, xp: bool = True) -> None:
-    """Změní body uživatele a zapíše záznam do points_log. Kladný přírůstek navíc naskládá do
-    earned_total (lifetime XP – nikdy neklesá): farmení 100 %, suby 50 %, gambling/vratky 0 %.
-    xp=False → přírůstek se do earned_total NEpočítá vůbec (admin granty: body ano, level NE)."""
-    earn = int(round(max(0, change) * earn_factor(reason))) if xp else 0
+    """Změní body uživatele a zapíše do points_log. Kladný přírůstek navíc naskládá do earned_total
+    (lifetime XP – nikdy neklesá) dle _xp_award: supporter 5000/sub (náskok), farmení s denním stropem,
+    gambling/dary/cíle 0. xp=False → do earned_total se nepočítá vůbec (admin granty: body ano, level NE)."""
+    earn = _xp_award(conn, user_id, change, reason) if xp else 0
     conn.execute("UPDATE users SET points = points + ?, earned_total = earned_total + ? WHERE id = ?",
                  (change, earn, user_id))
     conn.execute(

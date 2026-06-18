@@ -46,23 +46,24 @@ def test_battlepass_progress_and_claim(client):
 
 
 def test_battlepass_late_first_open_counts_current_season_xp(client):
-    from app.db import get_conn, now_iso
-    from app.deps import add_points
+    from app.db import get_conn
+    from app.deps import add_points, XP_PER_SUB
     from app import battlepass
     conn = get_conn()
     try:
         uid = _mk(conn, earned=0)
         conn.commit()
 
-        # User farms before ever opening Battle Pass. First status must not set
-        # baseline to current XP, otherwise the pass appears locked forever.
-        add_points(conn, uid, 6000, "Sledovani streamu")
+        # XP nasbírané PŘED prvním otevřením passu se musí započítat – baseline = stav na ZAČÁTKU
+        # sezóny (dopočteno), ne earned_total při otevření, jinak by pass vypadal navždy zamčený.
+        # Supporter event = uncapped, 1 sub × 5000 = 5000 XP → 2 tiery (TIER_XP 2500).
+        add_points(conn, uid, 1000, "Kick gift sub 🎁 ×1")
         conn.commit()
 
         st = battlepass.status(conn, {"id": uid})
         assert st["tier"] == 2
         assert st["claimable"] == 2
-        assert st["xp"] == 6000
+        assert st["xp"] == XP_PER_SUB                       # 1 sub = 5000 XP
     finally:
         conn.close()
 

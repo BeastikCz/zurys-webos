@@ -48,22 +48,40 @@ def _earned(conn, uid: int) -> int:
 
 
 def _season_earned(conn, uid: int) -> int:
-    from .deps import earn_factor
+    """XP nafarmené TUTO sezónu dle NOVÝCH pravidel (deps.classify_xp): supporter pevně XP_PER_SUB/sub,
+    farmení body×faktor s DENNÍM stropem (sub ×1.5), gambling/cíle 0, import plně. Per-day strop se
+    rekonstruuje stejně jako forward → konzistentní s earned_total. Slouží k dopočtu baseline."""
+    from .deps import classify_xp, XP_PER_SUB, FARM_XP_CAP, FARM_XP_CAP_SUB, SUB_FARM_MULT
+    sub_row = conn.execute("SELECT is_sub FROM users WHERE id = ?", (uid,)).fetchone()
+    is_sub = bool(sub_row["is_sub"]) if sub_row else False
+    cap = FARM_XP_CAP_SUB if is_sub else FARM_XP_CAP
     total = 0
+    farm_by_day = {}
     for r in conn.execute(
-        "SELECT change, reason FROM points_log WHERE user_id = ? AND change > 0 AND created_at >= ?",
-        (uid, _season_start_iso()),
-    ):
-        total += int(round((r["change"] or 0) * earn_factor(r["reason"] or "")))
+        "SELECT change, reason, substr(created_at,1,10) d FROM points_log "
+        "WHERE user_id = ? AND change > 0 AND created_at >= ?", (uid, _season_start_iso())):
+        kind, vfac = classify_xp(r["reason"] or "")
+        ch = r["change"] or 0
+        if kind == "sup":
+            total += XP_PER_SUB * vfac
+        elif kind == "imp":
+            total += ch
+        elif kind == "farm":
+            farm_by_day[r["d"]] = farm_by_day.get(r["d"], 0) + int(round(ch * vfac * (SUB_FARM_MULT if is_sub else 1.0)))
+    total += sum(min(x, cap) for x in farm_by_day.values())
     return max(0, total)
 
 
 def _season_baseline(conn, uid: int) -> int:
+    """earned_total na ZAČÁTKU sezóny = aktuální earned_total − co se nafarmilo tuto sezónu."""
     return max(0, _earned(conn, uid) - _season_earned(conn, uid))
 
 
 def _row(conn, uid: int):
-    """(baseline, claimed, claimed_premium) pro aktuální sezónu; při prvním přístupu řádek založí."""
+    """(baseline, claimed, claimed_premium) pro aktuální sezónu; při prvním přístupu řádek založí.
+    Baseline = earned_total na začátku sezóny (dopočteno _season_baseline → i farmení PŘED prvním
+    otevřením passu se započítá). Pojistka: když earned_total klesne pod baseline (retro přepočet),
+    baseline se sníží, ať tier nejde do mínusu."""
     season = _season()
     row = conn.execute("SELECT baseline, claimed, claimed_premium FROM battlepass WHERE user_id = ? AND season = ?",
                        (uid, season)).fetchone()

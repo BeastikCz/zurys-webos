@@ -1,50 +1,148 @@
-"""earned_total (lifetime XP → level / Battle Pass): farmení 100 %, placené/gift suby 50 %
-(náskok přispěvatelů, ne koupený level), gambling výhry a vratky 0 %. Zůstatek (points) se
-mění vždy plně.
+"""Nový XP model (supporter-first) → earned_total (lifetime XP → level / Battle Pass):
+ • supporter (vlastní sub / resub / gift sub giver) = PEVNÝCH 5000 XP za KAŽDÝ sub (z počtu v reason,
+   ne z bodů → HH 2× bonus XP nezdvojí), BEZ stropu = náskok podporovatelů
+ • poctivé farmení = body × faktor (kolo/drop/partner 0.5, zbytek 1.0), DENNÍ strop XP (sub ×1.5 + vyšší strop)
+ • gambling / dary / admin / komunitní cíle / botrix = 0
+ • import staré platformy = plně, bez stropu
+Zůstatek (points) se mění vždy plně.
 
     .venv/Scripts/python.exe -m pytest tests/test_earned_gambling.py -v
 """
 import secrets
 
 
-def test_earn_factor_classification():
-    from app.deps import counts_as_earned, earn_factor
-    # poctivé farmení → 100 % XP
-    for r in ["Sledování streamu", "Aktivita v chatu", "Kolo štěstí 🎡",
-              "Sklizeň: Mrkev 🌾", "Úkol: Denní 📋", "Denní streak – den 3",
-              "Drop #5 – 1. místo", "Partner: Sponzor 🤝", "Login kalendář – 5 dní 🗓️"]:
-        assert earn_factor(r) == 1.0 and counts_as_earned(r), r
-    # gambling / vratky → 0 % XP (level se nedá vygamblit)
-    for r in ["Mines výhra – full clear (3 bomb)", "Mines cashout (×2.5)", "Coinflip #7 – výhra",
-              "Kostky #2 – výhra", "Výhra v piškvorkách #9", "Remíza v piškvorkách #9",
-              "Predikce #3 – výhra", "Predikce #3 – nikdo netipnul, vráceno", "Blackjack stůl – win 🃏",
-              "Vrácení vkladu – hra #5", "Zrušená hra #5 – vrácení vkladu", "Vypršelá výzva (duel #2)",
-              "Battle Pass tier 5 🎟️", "Battle Pass PRÉMIUM tier 5 💜🎟️"]:
-        assert earn_factor(r) == 0.0 and not counts_as_earned(r), r
-    # placené / gift suby → 50 % XP (náskok, ne koupený lvl 100)
-    for r in ["Kick sub 🟣", "Kick resub 🔁", "Kick gift sub 🎁 ×3", "Kick sub 🟣 (happy 2×)"]:
-        assert earn_factor(r) == 0.5 and counts_as_earned(r), r
+def _mk(conn, is_sub=0):
+    from app.db import now_iso
+    u = f"et_{secrets.token_hex(3)}"
+    return conn.execute(
+        "INSERT INTO users (kick_username, username, role, points, earned_total, is_sub, created_at) "
+        "VALUES (?,?,?,0,0,?,?)", (u, u, "user", is_sub, now_iso())).lastrowid
 
 
-def test_add_points_earned_total_weights(client):
-    from app.db import get_conn, now_iso
+def _et(conn, uid):
+    return conn.execute("SELECT earned_total FROM users WHERE id=?", (uid,)).fetchone()["earned_total"]
+
+
+def test_classify_xp():
+    from app.deps import classify_xp
+    # supporter (počet subů z reason)
+    assert classify_xp("Kick gift sub 🎁 ×5") == ("sup", 5)
+    assert classify_xp("Kick gift sub 🎁 ×2 (happy 2×)") == ("sup", 2)   # HH nezdvojí počet
+    assert classify_xp("Kick sub 🟣") == ("sup", 1)
+    assert classify_xp("Kick resub 🔁") == ("sup", 1)
+    assert classify_xp("Kick gift sub (příjemce)")[0] != "sup"          # příjemce nebere
+    # import
+    assert classify_xp("Import ze staré platformy")[0] == "imp"
+    # nulové buckety
+    for r in ["Mines cashout (×2)", "Coinflip duel", "Predikce #3 – výhra", "Vrácení vkladu – hra #5",
+              "Úprava adminem", "Sub cíl komunity 🟣🎁", "Sub cíl tier 3 🟣🎁", "Komunitní chat cíl 🎉",
+              "botrix", "Dar od X 🎁", "Battle Pass tier 5 🎟️"]:
+        assert classify_xp(r)[0] == "zero", r
+    # farmení (faktor)
+    assert classify_xp("Sledování streamu") == ("farm", 1.0)
+    assert classify_xp("Aktivita v chatu") == ("farm", 1.0)
+    assert classify_xp("Sklizeň: Mrkev 🌾") == ("farm", 1.0)
+    assert classify_xp("Kolo štěstí 🎡") == ("farm", 0.5)
+    assert classify_xp("Drop #5 – 1. místo") == ("farm", 0.5)
+    assert classify_xp("Flash partner: XY") == ("farm", 0.5)
+
+
+def test_supporter_xp_flat_per_sub(client):
+    from app.db import get_conn
+    from app.deps import add_points, XP_PER_SUB
+    conn = get_conn()
+    try:
+        uid = _mk(conn)
+        add_points(conn, uid, 5000, "Kick gift sub 🎁 ×5")              # 5 subů → 5×5000 (body ignorovány)
+        conn.commit()
+        assert _et(conn, uid) == 5 * XP_PER_SUB
+        add_points(conn, uid, 4000, "Kick gift sub 🎁 ×2 (happy 2×)")   # HH 2× body NEzdvojí XP → 2 subů
+        conn.commit()
+        assert _et(conn, uid) == (5 + 2) * XP_PER_SUB
+    finally:
+        conn.close()
+
+
+def test_zero_buckets_no_xp(client):
+    from app.db import get_conn
     from app.deps import add_points
     conn = get_conn()
     try:
-        u = f"et_{secrets.token_hex(3)}"
-        uid = conn.execute(
-            "INSERT INTO users (kick_username, username, role, points, earned_total, created_at) "
-            "VALUES (?,?,?,0,0,?)", (u, u, "user", now_iso())).lastrowid
-        add_points(conn, uid, 1000, "Sledování streamu")                  # farmení → 100 % XP
-        add_points(conn, uid, 500, "Kolo štěstí 🎡")                       # farmení → 100 % XP
-        add_points(conn, uid, 5000, "Mines výhra – full clear (3 bomb)")   # gambling → 0 % XP
-        add_points(conn, uid, 2000, "Coinflip #7 – výhra")                 # gambling → 0 % XP
-        add_points(conn, uid, 800, "Predikce #3 – výhra")                  # gambling → 0 % XP
-        add_points(conn, uid, 300, "Vrácení vkladu – hra #5")              # vratka → 0 % XP
-        add_points(conn, uid, 3000, "Kick gift sub 🎁 ×3")                 # gift sub → 50 % XP = 1500
+        uid = _mk(conn)
+        for ch, r in [(5000, "Mines cashout (×2)"), (2000, "Coinflip duel"), (1000, "Úprava adminem"),
+                      (1000, "Sub cíl komunity 🟣🎁"), (1000, "Komunitní chat cíl 🎉"), (500, "botrix"),
+                      (300, "Vrácení vkladu – hra #5")]:
+            add_points(conn, uid, ch, r)
         conn.commit()
-        row = conn.execute("SELECT points, earned_total FROM users WHERE id=?", (uid,)).fetchone()
-        assert row["points"] == 1000 + 500 + 5000 + 2000 + 800 + 300 + 3000   # zůstatek = úplně vše
-        assert row["earned_total"] == 1000 + 500 + 1500                       # XP = farmení + 50 % subu
+        assert _et(conn, uid) == 0
+    finally:
+        conn.close()
+
+
+def test_farm_daily_cap(client):
+    from app.db import get_conn
+    from app.deps import add_points, FARM_XP_CAP
+    conn = get_conn()
+    try:
+        uid = _mk(conn)                                    # non-sub → strop 2000
+        add_points(conn, uid, 5000, "Sledování streamu")   # farm 1.0, ale denní strop 2000
+        conn.commit()
+        assert _et(conn, uid) == FARM_XP_CAP               # zbytek nad strop propadá
+    finally:
+        conn.close()
+
+
+def test_kolo_half_factor(client):
+    from app.db import get_conn
+    from app.deps import add_points
+    conn = get_conn()
+    try:
+        uid = _mk(conn)
+        add_points(conn, uid, 800, "Kolo štěstí 🎡")       # 0.5 faktor → 400
+        conn.commit()
+        assert _et(conn, uid) == 400
+    finally:
+        conn.close()
+
+
+def test_sub_farm_multiplier_and_higher_cap(client):
+    from app.db import get_conn
+    from app.deps import add_points, FARM_XP_CAP_SUB
+    conn = get_conn()
+    try:
+        uid = _mk(conn, is_sub=1)                          # sub → ×1.5 + strop 3000
+        add_points(conn, uid, 1000, "Sledování streamu")   # 1000 × 1.5 = 1500
+        conn.commit()
+        assert _et(conn, uid) == 1500
+        add_points(conn, uid, 5000, "Sledování streamu")   # 5000×1.5=7500, ale strop 3000 (už 1500) → +1500
+        conn.commit()
+        assert _et(conn, uid) == FARM_XP_CAP_SUB
+    finally:
+        conn.close()
+
+
+def test_import_full_uncapped(client):
+    from app.db import get_conn
+    from app.deps import add_points
+    conn = get_conn()
+    try:
+        uid = _mk(conn)
+        add_points(conn, uid, 50000, "Import ze staré platformy")   # plně, bez stropu
+        conn.commit()
+        assert _et(conn, uid) == 50000
+    finally:
+        conn.close()
+
+
+def test_admin_grant_xp_false_no_xp(client):
+    from app.db import get_conn
+    from app.deps import add_points
+    conn = get_conn()
+    try:
+        uid = _mk(conn)
+        add_points(conn, uid, 9999, "Bonus", xp=False)     # xp=False → 0 XP bez ohledu na reason
+        conn.commit()
+        assert _et(conn, uid) == 0
+        assert conn.execute("SELECT points FROM users WHERE id=?", (uid,)).fetchone()["points"] == 9999
     finally:
         conn.close()
