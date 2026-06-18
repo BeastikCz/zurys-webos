@@ -14,8 +14,8 @@ N_PLOTS = 4
 SEED_PCT = 0.75       # cena semínka = 75 % výnosu; zahrádka je fun bonus, ne hlavní faucet
 SEED_PCT_SUB = 0.65   # sub perk: lepší marže, ale pořád bez tisku sedláků
 PEST_CHANCE = 0.70    # base pest chance; garden decor reduces this down to PEST_MIN_CHANCE
-PEST_RESCUE_PCT = 0.20  # záchrana před škůdci = 20 % výnosu (sink). Nezachráníš → sklizeň jen poloviční.
-PEST_PENALTY = 0.5    # neošetření škůdci sežerou půlku úrody
+PEST_RESCUE_PCT = 0.20  # záchrana před chrobáci = 20 % výnosu (sink). Nezachráníš → sklizeň jen poloviční.
+PEST_PENALTY = 0.5    # neošetření chrobáci sežerou půlku úrody
 PEST_MIN_CHANCE = 0.10   # dolní strop šance i s plnou výbavou dekorací
 
 # (key, ikona, název, hodiny růstu, výnos při sklizni). Cena semínka = % z výnosu (počítá se dle subu).
@@ -53,7 +53,7 @@ def _seed_cost(crop, is_sub: bool) -> int:
 
 
 def _rescue_cost(crop) -> int:
-    """Cena záchrany před škůdci = % výnosu. Min 5."""
+    """Cena záchrany před chrobáci = % výnosu. Min 5."""
     return max(5, round(crop["reward"] * PEST_RESCUE_PCT))
 
 
@@ -91,7 +91,7 @@ def status(conn, user) -> dict:
         c = _BY_KEY.get(r["crop"], {})
         ready = r["ready_at"] <= now_iso()
         secs = 0 if ready else max(0, int((datetime.fromisoformat(r["ready_at"]) - now).total_seconds()))
-        pest = (r["pest"] if "pest" in r.keys() else 0) == 1   # 1 = aktivní škůdci (čeká na záchranu)
+        pest = (r["pest"] if "pest" in r.keys() else 0) == 1   # 1 = aktivní chrobáci (čeká na záchranu)
         plots.append({"plot": p, "empty": False, "crop": r["crop"], "icon": c.get("icon"),
                       "name": c.get("name"), "reward": c.get("reward"),
                       "ready": ready, "seconds_left": secs,
@@ -134,9 +134,9 @@ def harvest(conn, user, plot: int) -> dict:
         return {"ok": False, "error": "Ještě nedorostlo. 🌱"}
     c = _BY_KEY.get(r["crop"], {})
     base = c.get("reward", 0)
-    pest = (r["pest"] if "pest" in r.keys() else 0) == 1   # neošetření škůdci → půlka úrody
+    pest = (r["pest"] if "pest" in r.keys() else 0) == 1   # neošetření chrobáci → půlka úrody
     reward = round(base * PEST_PENALTY) if pest else base
-    reason = "Sklizeň (škůdci ji načali) 🐛" if pest else f"Sklizeň: {c.get('name', '?')} 🌾"
+    reason = "Sklizeň (chrobáci ji načali) 🐛" if pest else f"Sklizeň: {c.get('name', '?')} 🌾"
     conn.execute("DELETE FROM garden WHERE user_id = ? AND plot = ?", (user["id"], plot))
     add_points(conn, user["id"], reward, reason)
     conn.commit()
@@ -145,16 +145,16 @@ def harvest(conn, user, plot: int) -> dict:
 
 
 def rescue(conn, user, plot: int) -> dict:
-    """Zaplať záchranu před škůdci (% výnosu) → plodina ošetřena, plná sklizeň. Bez záchrany = půlka."""
+    """Zaplať záchranu před chrobáci (% výnosu) → plodina ošetřena, plná sklizeň. Bez záchrany = půlka."""
     from .deps import try_debit
     r = conn.execute("SELECT * FROM garden WHERE user_id = ? AND plot = ?", (user["id"], plot)).fetchone()
     if not r:
         return {"ok": False, "error": "Prázdný záhon."}
     if (r["pest"] if "pest" in r.keys() else 0) != 1:
-        return {"ok": False, "error": "Na tomhle záhonu škůdci nejsou. 🌱"}
+        return {"ok": False, "error": "Na tomhle záhonu chrobáci nejsou. 🌱"}
     c = _BY_KEY.get(r["crop"], {})
     cost = _rescue_cost(c)
-    if not try_debit(conn, user["id"], cost, f"Záchrana před škůdci: {c.get('name', '?')} 🐛"):
+    if not try_debit(conn, user["id"], cost, f"Záchrana před chrobáky: {c.get('name', '?')} 🐛"):
         return {"ok": False, "error": f"Nemáš dost sedláků na postřik ({cost})."}
     conn.execute("UPDATE garden SET pest = 2 WHERE user_id = ? AND plot = ?", (user["id"], plot))
     conn.commit()
