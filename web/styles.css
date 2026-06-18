@@ -42,7 +42,7 @@
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
-html, body { height: 100%; }
+html, body { height: 100%; overflow-x: clip; }   /* root pojistka proti horizontálnímu scrollbaru (full-bleed .ticker 100vw přetéká o šířku scrollbaru); clip nerozbije sticky topbar */
 body {
   font-family: system-ui, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   background: var(--bg);
