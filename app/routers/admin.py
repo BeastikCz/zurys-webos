@@ -271,6 +271,13 @@ def economy_health_endpoint(days: int = Query(14, ge=1, le=90),
     return econ_health.health(conn, days)
 
 
+@router.get("/economy/garden")
+def economy_garden(conn: sqlite3.Connection = Depends(db_dep)):
+    """Ekonomika zahrádky: výdaje (semínka + dekorace) vs příjmy (sklizně), net faucet/sink,
+    okna 24h/7d/celkem + rozpad podle plodin. Sekce 'economy' (admin + broadcaster)."""
+    return econ_health.garden_economy(conn)
+
+
 _retention_cache = {"at": 0.0, "data": None}
 
 

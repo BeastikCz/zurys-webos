@@ -1553,3 +1553,11 @@ body::before { display: none !important; }
 .lp-info .faint { font-size: 12px; }
 .lp-done { font-size: 13px; color: var(--farm-green); font-weight: 700; flex: 0 0 auto; }
 .lp-lock { font-size: 12.5px; color: var(--text-dim); flex: 0 0 auto; }
+
+/* Admin – ekonomika zahrádky (výdaje/příjmy karta) */
+.ge-wins { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
+.ge-win { flex: 1 1 180px; border: 1px solid var(--border); border-radius: 12px; padding: 11px 13px; background: rgba(255,255,255,.02); }
+.ge-win-h { font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: .04em; color: var(--text-dim); margin-bottom: 8px; }
+.ge-line { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 12.5px; padding: 3px 0; }
+.ge-line.ge-net { border-top: 1px dashed var(--border); margin-top: 5px; padding-top: 7px; }
+.ge-crop-h { font-size: 12px; font-weight: 700; color: var(--text-dim); margin: 4px 0 8px; }

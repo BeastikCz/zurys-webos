@@ -27,7 +27,10 @@ _RULES = [
     ("kick",        "💜", "Kick eventy",         "faucet",   ["kick sub", "kick resub", "kick gift sub", "kick follow", "sub cíl"]),
     ("partners",    "🤝", "Partneři",            "faucet",   ["partner:", "flash partner"]),
     ("import",      "📦", "Import / start",      "faucet",   ["import ze staré", "počáteční body od admina"]),
+    ("garden_h",    "🌾", "Zahrádka – sklizeň",  "faucet",   ["sklizeň:"]),
     ("shop",        "🛒", "Nákupy v shopu",      "sink",     ["nákup odměn", "nákup"]),
+    ("garden_s",    "🌱", "Zahrádka – semínka",  "sink",     ["zasazení:"]),
+    ("garden_d",    "🪴", "Zahrádka – dekorace", "sink",     ["dekorace zahrádky"]),
     ("prestige",    "🔥", "Prestige (spáleno)",  "sink",     ["prestige"]),
     ("predictions", "🎯", "Predikce",            "transfer", ["predikce"]),
     ("blackjack",   "🃏", "Blackjack",           "transfer", ["blackjack"]),
@@ -129,3 +132,46 @@ def health(conn: sqlite3.Connection, days: int = 14) -> dict:
         "dau_peak": max(dau_vals) if dau_vals else 0,
         "dau_avg": round(sum(dau_vals) / len(dau_vals)) if dau_vals else 0,
     }
+
+
+_GARDEN_CROPS = [("Mrkev", "🥕"), ("Brambory", "🥔"), ("Dýně", "🎃"), ("Zlatý klas", "🌾")]
+
+
+def garden_economy(conn: sqlite3.Connection) -> dict:
+    """Ekonomika zahrádky z points_logu: výdaje (semínka + dekorace) vs příjmy (sklizně) a net.
+    net > 0 = zahrádka přidává body do oběhu (faucet/inflační); net < 0 = ubírá (sink).
+    Okna 24 h / 7 dní / celkem + rozpad podle plodin (celkem) + co teď roste. Read-only."""
+    now = datetime.now(timezone.utc)
+    windows = {"d1": (now - timedelta(hours=24)).isoformat(),
+               "d7": (now - timedelta(days=7)).isoformat(),
+               "all": "2000-01-01T00:00:00+00:00"}
+
+    def _agg(start):
+        def q(cond):
+            r = conn.execute("SELECT COALESCE(SUM(ABS(change)), 0) AS n, COUNT(*) AS c "
+                             "FROM points_log WHERE created_at >= ? AND " + cond, (start,)).fetchone()
+            return r["n"], r["c"]
+        seeds_n, seeds_c = q("change < 0 AND lower(reason) LIKE 'zasazení:%'")
+        decor_n, decor_c = q("change < 0 AND lower(reason) LIKE 'dekorace zahrádky%'")
+        harv_n, harv_c = q("change > 0 AND lower(reason) LIKE 'sklizeň:%'")
+        return {"seeds": seeds_n, "seeds_count": seeds_c, "decor": decor_n, "decor_count": decor_c,
+                "vydaje": seeds_n + decor_n, "prijmy": harv_n, "harvest_count": harv_c,
+                "net": harv_n - (seeds_n + decor_n)}
+
+    per_crop = []
+    for name, icon in _GARDEN_CROPS:
+        s = conn.execute("SELECT COALESCE(SUM(-change), 0) AS n, COUNT(*) AS c FROM points_log "
+                         "WHERE change < 0 AND lower(reason) LIKE ?", (f"zasazení: {name.lower()}%",)).fetchone()
+        h = conn.execute("SELECT COALESCE(SUM(change), 0) AS n, COUNT(*) AS c FROM points_log "
+                         "WHERE change > 0 AND lower(reason) LIKE ?", (f"sklizeň: {name.lower()}%",)).fetchone()
+        per_crop.append({"name": name, "icon": icon, "planted": s["c"], "seed_spent": s["n"],
+                         "harvested": h["c"], "harvest_earned": h["n"], "net": h["n"] - s["n"]})
+
+    from .garden import _BY_KEY as _gbk          # názvy/ikony plodin = jediný zdroj pravdy
+    growing = []
+    for r in conn.execute("SELECT crop, COUNT(*) AS c FROM garden GROUP BY crop ORDER BY c DESC"):
+        cc = _gbk.get(r["crop"], {})
+        growing.append({"crop": cc.get("name", r["crop"]), "icon": cc.get("icon", "🌱"), "count": r["c"]})
+
+    return {"by_window": {k: _agg(v) for k, v in windows.items()},
+            "per_crop": per_crop, "growing": growing}

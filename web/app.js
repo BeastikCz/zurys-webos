@@ -2845,15 +2845,48 @@ function retentionHTML(r) {
       <div class="faint" style="font-size:12px;margin-top:10px">Týdenní retence: z <b>${r.prev_week_active}</b> aktivních minulý týden se <b>${r.retained}</b> vrátilo i tento týden. Stickiness 20 %+ = zdravé · celkem účtů ${r.total_users}.</div>
     </div>`;
 }
+function gardenEconomyHTML(g) {
+  if (!g || !g.by_window) return "";
+  const win = (key, label) => {
+    const d = g.by_window[key] || {};
+    const net = d.net || 0;
+    const verdict = net > 0
+      ? `<b style="color:#e0a857">FAUCET +${fmtPts(net)}</b> <span class="faint">přidává do oběhu</span>`
+      : `<b style="color:#46d369">SINK ${fmtPts(net)}</b> <span class="faint">ubírá z oběhu</span>`;
+    return `<div class="ge-win">
+      <div class="ge-win-h">${label}</div>
+      <div class="ge-line"><span>📥 Příjmy (sklizeň)</span><b style="color:#46d369">+${fmtPts(d.prijmy || 0)}</b></div>
+      <div class="ge-line"><span>📤 Výdaje (semínka+dekor)</span><b style="color:#ff6b6b">−${fmtPts(d.vydaje || 0)}</b></div>
+      <div class="ge-line ge-net"><span>= Net</span><span>${verdict}</span></div>
+    </div>`;
+  };
+  const crops = (g.per_crop || []).map((c) => `<tr>
+    <td>${c.icon} ${esc(c.name)}</td>
+    <td class="faint">${c.planted}× / ${c.harvested}×</td>
+    <td style="color:#ff6b6b">−${fmtPts(c.seed_spent)}</td>
+    <td style="color:#46d369">+${fmtPts(c.harvest_earned)}</td>
+    <td style="color:${c.net > 0 ? "#e0a857" : "#46d369"};font-weight:700">${c.net > 0 ? "+" : ""}${fmtPts(c.net)}</td>
+  </tr>`).join("");
+  const growing = (g.growing || []).length ? g.growing.map((x) => `${x.count}× ${x.icon || ""} ${esc(x.crop)}`).join(" · ") : "nic neroste";
+  return `<div class="panel" style="margin-bottom:16px">
+    <div class="section-title" style="margin-top:0">🌱 Ekonomika zahrádky — výdaje vs příjmy</div>
+    <p class="muted" style="font-size:12.5px;margin:0 0 12px">Semínka + dekorace = <b>výdaje</b> (sink, ubírá body z oběhu). Sklizně = <b>příjmy</b> (faucet, přidává). <b>Net &gt; 0 = zahrádka tiskne peníze</b> → zvedni cenu semínka (teď 30 %), když je to moc inflační. Net &lt; 0 = zdravé.</p>
+    <div class="ge-wins">${win("d1", "24 h")}${win("d7", "7 dní")}${win("all", "Celkem")}</div>
+    <div class="ge-crop-h">Podle plodin (celkem · zaseto / sklizeno)</div>
+    <div class="table-wrap"><table class="tbl"><thead><tr><th>Plodina</th><th>Zaseto / sklizeno</th><th>Semínka</th><th>Sklizeň</th><th>Net</th></tr></thead><tbody>${crops}</tbody></table></div>
+    <div class="faint" style="font-size:12px;margin-top:10px">🌿 Teď roste: ${growing}</div>
+  </div>`;
+}
 async function adminEconomy() {
   const box = $("#adminContent");
   try {
-    const [e, lv, dash, rake, health, hh, ret] = await Promise.all([api("/admin/economy"), api("/admin/economy/live"), api("/admin/economy/dashboard"), api("/admin/economy/games-rake"), api("/admin/economy/health?days=14").catch(() => null), api("/admin/shop-discount").catch(() => ({ pct: 0, live_only: false, active_now: 0 })), api("/admin/analytics/retention").catch(() => null)]);
+    const [e, lv, dash, rake, health, hh, ret, garden] = await Promise.all([api("/admin/economy"), api("/admin/economy/live"), api("/admin/economy/dashboard"), api("/admin/economy/games-rake"), api("/admin/economy/health?days=14").catch(() => null), api("/admin/shop-discount").catch(() => ({ pct: 0, live_only: false, active_now: 0 })), api("/admin/analytics/retention").catch(() => null), api("/admin/economy/garden").catch(() => null)]);
     const modeBtn = (m, label) => `<button class="btn btn-sm ${lv.mode === m ? "btn-primary" : "btn-ghost"}" data-action="eco-live-mode" data-mode="${m}">${label}</button>`;
     box.innerHTML = `
       ${economyDashboardHTML(dash)}
       ${retentionHTML(ret)}
       ${economyHealthHTML(health)}
+      ${gardenEconomyHTML(garden)}
       ${coinIconCardHTML()}
       <div class="panel" style="margin-bottom:16px">
         <div class="section-title" style="margin-top:0">📡 Stream — body za sledování jen když je LIVE</div>
