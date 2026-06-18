@@ -12,6 +12,7 @@ from ..services import product_public, validate_items, apply_purchase, shop_disc
 router = APIRouter(prefix="/shop", tags=["shop"])
 
 EXCHANGE_CATEGORY = "Směnárna"
+EXCHANGE_ENABLED = False
 # prodané tikety pro tomboly (progress bar)
 _TICKETS = "(SELECT COUNT(*) FROM raffle_entries e WHERE e.product_id = p.id) AS tickets_sold"
 
@@ -225,6 +226,8 @@ def raffle_entries(product_id: int, conn: sqlite3.Connection = Depends(db_dep)):
 @router.get("/exchange")
 def exchange_items(conn: sqlite3.Connection = Depends(db_dep)):
     """Položky směnárny (kategorie 'Směnárna')."""
+    if not EXCHANGE_ENABLED:
+        return []
     rows = conn.execute(
         "SELECT * FROM products WHERE active = 1 AND category = ? ORDER BY cost_points ASC",
         (EXCHANGE_CATEGORY,),

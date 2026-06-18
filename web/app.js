@@ -206,7 +206,7 @@ function clearCart() { state.cart = []; saveCart(); renderHeader(); }
 
 /* ---------------- Router ---------------- */
 const NAV = [
-  ["shop", "Shop"], ["leaderboard", "Žebříček"], ["exchange", "Směnárna"], ["faq", "FAQ"], ["redeem", "Kód"],
+  ["shop", "Shop"], ["leaderboard", "Žebříček"], ["faq", "FAQ"], ["redeem", "Kód"],
 ];
 function parseRoute() { const h = location.hash.replace(/^#\/?/, "").split("?")[0]; const [name, param] = h.split("/"); return { name: name || "shop", param }; }
 function currentRoute() { return parseRoute().name; }
@@ -292,7 +292,7 @@ function renderHeader() {
   const route = currentRoute();
   const u = state.user;
   document.body.classList.toggle("logged-in", !!u);   /* na mobilu uvolní místo v topbaru (skryje wordmark) */
-  const items = [["shop", "Shop"], ["bonusy", "Bonusy"], ["zahrada", "Zahrádka"], ["leaderboard", "Žebříček"], ["exchange", "Směnárna"], ["games", "Hry"], ["predikce", "Predikce"]];
+  const items = [["shop", "Shop"], ["bonusy", "Bonusy"], ["zahrada", "Zahrádka"], ["leaderboard", "Žebříček"], ["games", "Hry"], ["predikce", "Predikce"]];
   const navDot = (k) => (k === "bonusy" && u && bonusReady) ? `<span class="nav-dot" title="Máš nevyzvednutou odměnu!"></span>` : "";
   const navLinks = items.map(([k, l]) => `<a href="#/${k}" class="nav-link ${route === k ? "active" : ""}">${l}${navDot(k)}</a>`).join("")
     + (isStaff(u) ? `<a href="#/admin" class="nav-link ${route === "admin" ? "active" : ""}">${u.role === "admin" ? "Admin" : "Panel"}</a>` : "");
@@ -1462,25 +1462,12 @@ function badgesSectionHTML(badges) {
 async function pageExchange() {
   const view = $("#view");
   view.innerHTML = `
-    <div class="page-head with-mascot"><img class="page-mascot" src="/sedlak-cut.png" alt=""><div class="ph-text"><h1>💱 Směnárna</h1><p class="muted">Pošli sedláky kamarádům nebo uplatni promo kód od streamera.</p></div></div>
-    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(310px,1fr));gap:18px;margin-bottom:24px">${giftCardHTML()}${redeemCardHTML()}</div>
-    <div id="exWrap">${skeletonCards(2)}</div>`;
-  try {
-    const items = await api("/shop/exchange");
-    if (!items.length) { $("#exWrap").innerHTML = ""; return; }
-    $("#exWrap").innerHTML = `<div class="section-title">🛒 Směnárna</div><div class="exchange-grid">${items.map((p) => {
-      const c = canBuy(p);
-      let btn;
-      if (c.ok) btn = `<button class="btn btn-primary btn-block" data-action="buy" data-id="${p.id}">Směnit za ${fmtPts(p.cost_points)}</button>`;
-      else if (c.reason === "login") btn = `<button class="btn btn-kick btn-block" data-action="connect">🟢 Připoj se přes Kick</button>`;
-      else if (c.reason === "points") btn = `<button class="btn btn-block" disabled>Nemáš dost bodů</button>`;
-      else btn = `<button class="btn btn-block" disabled>Nedostupné</button>`;
-      return `<div class="card ex-card">
-        <div class="ex-top"><div class="ex-emoji">${emojiFor(p)}</div><div><div style="font-weight:700">${esc(p.name)}</div><div class="faint" style="font-size:13px">${esc(p.category)}</div></div></div>
-        <div class="price"><b style="font-size:20px">${Number(p.cost_points).toLocaleString("cs-CZ")}</b><span>bodů</span></div>
-        ${btn}</div>`;
-    }).join("")}</div>`;
-  } catch (e) { $("#exWrap").innerHTML = `<div class="empty">${esc(e.message)}</div>`; }
+    <div class="page-head with-mascot"><img class="page-mascot" src="/sedlak-cut.png" alt=""><div class="ph-text"><h1>💱 Směnárna</h1><p class="muted">Dočasně mimo provoz.</p></div></div>
+    <div class="panel">
+      <div class="section-title" style="margin-top:0">🔧 Směnárna je vypnutá</div>
+      <p class="muted" style="font-size:13.5px;margin:6px 0 14px">Dary sedláků a směnárnové položky jsou teď pozastavené kvůli úpravám anti-abuse pravidel.</p>
+      <a class="btn btn-accent" href="#/redeem">🎫 Uplatnit kód</a>
+    </div>`;
 }
 function giftCardHTML() {
   if (!state.user) return `<div class="panel"><div class="section-title" style="margin-top:0">🎁 Poslat sedláky kamarádovi</div><p class="muted" style="font-size:13.5px;margin:6px 0 0">Pro darování se <a href="#" data-action="connect" style="color:var(--accent)">připoj přes Kick</a>.</p></div>`;
@@ -1528,7 +1515,10 @@ async function doGift() {
 // „Uplatnit kód" žije na stránce Exchange. Route #/redeem sem naviguje
 // a rovnou skočí na kartu + zvýrazní ji, ať to lidi snadno najdou.
 function pageRedeem() {
-  pageExchange();
+  const view = $("#view");
+  view.innerHTML = `
+    <div class="page-head with-mascot"><img class="page-mascot" src="/sedlak-cut.png" alt=""><div class="ph-text"><h1>🎫 Uplatnit kód</h1><p class="muted">Promo kód od streamera.</p></div></div>
+    <div style="max-width:520px">${redeemCardHTML()}</div>`;
   requestAnimationFrame(() => {
     const card = document.getElementById("redeemCard");
     if (!card) return;

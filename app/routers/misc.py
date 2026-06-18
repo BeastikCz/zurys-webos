@@ -948,7 +948,7 @@ def set_wager_limit(data: WagerLimitIn, user: sqlite3.Row = Depends(require_user
 
 # ---------------- Exchange: poslání sedláků kamarádovi ----------------
 # Darování sedláků – přepínač. False = MIMO PROVOZ (neukáže se a neprojde). Zpět nastav na True.
-GIFT_ENABLED = True
+GIFT_ENABLED = False
 
 
 def _shared_identity(conn: sqlite3.Connection, uid1: int, uid2: int) -> bool:
