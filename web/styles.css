@@ -1473,6 +1473,12 @@ body::before { display: none !important; }
 .grd-sprout { animation: sedlakBob 2.4s ease-in-out infinite; }
 .grd-lbl { font-size: 12.5px; font-weight: 800; color: var(--text-dim); }
 .grd-time { font-size: 12px; font-weight: 900; color: var(--accent); font-variant-numeric: tabular-nums; }
+/* 🐛 Škůdci na záhonu – riziko (zaplať záchranu, jinak půlka sklizně) */
+.grd-plot.grd-pestd { border-color: #e0673c; box-shadow: 0 0 24px -9px rgba(224,103,60,.55); animation: bpPulse 1.8s ease-in-out infinite; }
+.grd-rescue-btn { background: linear-gradient(135deg,#ff7a3c,#e0531f); color: #fff; border: none; border-radius: 999px; padding: 7px 12px; font-weight: 800; font-size: 12px; cursor: pointer; box-shadow: 0 3px 10px -4px rgba(224,83,31,.6); }
+.grd-rescue-btn:hover { filter: brightness(1.08); }
+.grd-harv-half { background: none; border: 1px solid var(--border); color: var(--text-dim); border-radius: 999px; padding: 4px 10px; font-size: 11px; font-weight: 700; cursor: pointer; margin-top: 2px; }
+.grd-harv-half:hover { border-color: var(--text-dim); color: var(--text); }
 .grd-shop { display: flex; gap: 12px; flex-wrap: wrap; }
 .grd-seed { flex: 1 1 150px; display: flex; flex-direction: column; gap: 4px; align-items: flex-start;
   padding: 12px 14px; border-radius: 14px; border: 1.5px solid var(--border); background: rgba(255,255,255,.03);

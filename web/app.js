@@ -2095,6 +2095,13 @@ async function loadGarden() {
     const g = await api("/garden");
     const plots = g.plots.map((p) => {
       if (p.empty) return `<div class="grd-plot grd-empty" data-action="grd-plant" data-plot="${p.plot}"><div class="grd-crop">➕</div><div class="grd-lbl">Zasadit</div></div>`;
+      if (p.pest) {
+        const half = Math.round(p.reward * 0.5);
+        const tail = p.ready
+          ? `<button class="grd-harv-half" data-action="grd-harvest" data-plot="${p.plot}" title="Sklidit poškozené – jen půlka">Sklidit +${fmtPts(half)}</button>`
+          : `<div class="grd-time" data-left="${p.seconds_left}">${grdDur(p.seconds_left)}</div>`;
+        return `<div class="grd-plot grd-pestd"><div class="grd-crop">🐛</div><div class="grd-lbl">${esc(p.name)}</div><button class="grd-rescue-btn" data-action="grd-rescue" data-plot="${p.plot}" title="Zaplať a zachráníš plnou úrodu. Bez postřiku jen půlka (+${fmtPts(half)}).">🐛 Zachraň ${fmtPts(p.rescue_cost)}</button>${tail}</div>`;
+      }
       if (p.ready) return `<div class="grd-plot grd-ready"><div class="grd-crop">${p.icon}</div><div class="grd-lbl">${esc(p.name)}</div><button class="bp-claim" data-action="grd-harvest" data-plot="${p.plot}">Sklidit +${fmtPts(p.reward)}</button></div>`;
       return `<div class="grd-plot grd-grow"><div class="grd-crop grd-sprout">🌱</div><div class="grd-lbl">${esc(p.name)}</div><div class="grd-time" data-left="${p.seconds_left}">${grdDur(p.seconds_left)}</div></div>`;
     }).join("");
@@ -2129,8 +2136,16 @@ async function grdHarvest(plot) {
   try {
     const r = await api("/garden/harvest", { method: "POST", body: { plot: parseInt(plot, 10) } });
     if (state.user) state.user.points = r.balance;
-    toast(`Sklizeno: ${r.name}! +${fmtPts(r.reward)} 🌾`, "success");
-    try { confettiBurst(); } catch (e) {}
+    if (r.pest) { toast(`🐛 Škůdci ti načali úrodu! Sklizeno jen +${fmtPts(r.reward)} (půlka) — příště je včas zachraň. 🌾`, "info"); }
+    else { toast(`Sklizeno: ${r.name}! +${fmtPts(r.reward)} 🌾`, "success"); try { confettiBurst(); } catch (e) {} }
+    renderHeader(); loadGarden();
+  } catch (e) { toast(e.message, "error"); }
+}
+async function grdRescue(plot) {
+  try {
+    const r = await api("/garden/rescue", { method: "POST", body: { plot: parseInt(plot, 10) } });
+    if (state.user) state.user.points = r.balance;
+    toast(`🐛➡️🌱 Postřik! ${r.name} zachráněna (−${fmtPts(r.cost)}) — bude plná sklizeň.`, "success");
     renderHeader(); loadGarden();
   } catch (e) { toast(e.message, "error"); }
 }
@@ -5182,6 +5197,7 @@ function handleAction(action, el) {
     case "grd-pick": grdPick(el.dataset.crop); break;
     case "grd-plant": grdPlant(el.dataset.plot); break;
     case "grd-harvest": grdHarvest(el.dataset.plot); break;
+    case "grd-rescue": grdRescue(el.dataset.plot); break;
     case "decor-buy": buyDecor(el.dataset.key); break;
     case "claim-partner": claimPartnerLink(el.dataset.id, el.dataset.url); break;
     case "cos-buy": buyCosmetic(el.dataset.key); break;
