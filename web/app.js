@@ -2206,7 +2206,7 @@ async function loadLevelPass() {
         <div class="section-title" style="margin:0">🏅 Level Pass</div>
         <span class="faint" style="font-size:12.5px">Tvá úroveň <b style="color:var(--accent)">${lp.level}</b>${lp.claimable ? ` · <b style="color:var(--farm-green)">${lp.claimable} k vyzvednutí!</b>` : ""}</span>
       </div>
-      <p class="muted" style="font-size:12.5px;margin:0 0 12px">Exkluzivní rámečky, co <b>nejdou koupit</b> — jen za dosaženou úroveň. Úroveň roste hlavně <b>farmením</b> (gambling se nepočítá, placené/gift suby dají jen <b>50 % XP</b> — náskok, ne koupený level), takže ji nikdo rychle nepřeskočí. Vrchol = <b>úroveň 100</b> 👑 → trofej + <b>reálná cena</b>! 🔪</p>
+      <p class="muted" style="font-size:12.5px;margin:0 0 12px">Exkluzivní rámečky, co <b>nejdou koupit</b> — jen za dosaženou úroveň. Úroveň roste hlavně <b>farmením</b> (placené/gift suby dají jen <b>50 % XP</b> — náskok, ne koupený level), takže ji nikdo rychle nepřeskočí. Vrchol = <b>úroveň 100</b> 👑 → trofej + <b>reálná cena</b>! 🔪</p>
       <div class="lp-track">${nodes}</div>
     </div>`;
   } catch (e) { box.innerHTML = ""; }
