@@ -11,10 +11,10 @@ from datetime import datetime, timezone, timedelta
 from .db import now_iso
 
 N_PLOTS = 4
-SEED_PCT = 0.30       # cena semínka = 30 % výnosu (sink; škáluje s plodinou → drahé plodiny gatované kapitálem)
-SEED_PCT_SUB = 0.15   # sub perk: poloviční sazba semínka
-PEST_CHANCE = 0.30    # šance že plodina chytí škůdce (riziko – zahrádka není 100% jistý plus)
-PEST_RESCUE_PCT = 0.25  # záchrana před škůdci = 25 % výnosu (sink). Nezachráníš → sklizeň jen poloviční.
+SEED_PCT = 0.75       # cena semínka = 75 % výnosu; zahrádka je fun bonus, ne hlavní faucet
+SEED_PCT_SUB = 0.65   # sub perk: lepší marže, ale pořád bez tisku sedláků
+PEST_CHANCE = 0.35    # šance že plodina chytí škůdce (riziko – zahrádka není 100% jistý plus)
+PEST_RESCUE_PCT = 0.20  # záchrana před škůdci = 20 % výnosu (sink). Nezachráníš → sklizeň jen poloviční.
 PEST_PENALTY = 0.5    # neošetření škůdci sežerou půlku úrody
 
 # (key, ikona, název, hodiny růstu, výnos při sklizni). Cena semínka = % z výnosu (počítá se dle subu).
@@ -48,8 +48,12 @@ def _crops_public(is_sub: bool) -> list:
     out = []
     for c in CROPS:
         seed = _seed_cost(c, is_sub)
+        expected_no_rescue = round(c["reward"] * ((1 - PEST_CHANCE) + PEST_CHANCE * PEST_PENALTY) - seed)
+        expected_rescue = round(c["reward"] - seed - (_rescue_cost(c) * PEST_CHANCE))
         out.append({"key": c["key"], "icon": c["icon"], "name": c["name"], "hours": c["hours"],
-                    "reward": c["reward"], "cost": seed, "net": c["reward"] - seed})
+                    "reward": c["reward"], "cost": seed, "net": c["reward"] - seed,
+                    "expected_no_rescue": expected_no_rescue,
+                    "expected_rescue": expected_rescue})
     return out
 
 
@@ -72,7 +76,8 @@ def status(conn, user) -> dict:
                       "ready": ready, "seconds_left": secs,
                       "pest": pest, "rescue_cost": _rescue_cost(c) if pest else 0})
     return {"plots": plots, "crops": _crops_public(_is_sub(user)), "n_plots": N_PLOTS,
-            "sub": _is_sub(user), "seed_pct": int(SEED_PCT * 100), "seed_pct_sub": int(SEED_PCT_SUB * 100)}
+            "sub": _is_sub(user), "seed_pct": int(SEED_PCT * 100), "seed_pct_sub": int(SEED_PCT_SUB * 100),
+            "pest_chance": int(PEST_CHANCE * 100), "rescue_pct": int(PEST_RESCUE_PCT * 100)}
 
 
 def plant(conn, user, plot: int, crop_key: str) -> dict:
@@ -93,7 +98,7 @@ def plant(conn, user, plot: int, crop_key: str) -> dict:
                  (user["id"], plot, crop_key, now.isoformat(), (now + timedelta(hours=c["hours"])).isoformat(), pest))
     conn.commit()
     bal = conn.execute("SELECT points FROM users WHERE id = ?", (user["id"],)).fetchone()["points"]
-    return {"ok": True, "balance": bal}
+    return {"ok": True, "balance": bal, "name": c["name"], "cost": seed, "hours": c["hours"]}
 
 
 def harvest(conn, user, plot: int) -> dict:
@@ -141,6 +146,9 @@ DECOR = [
     {"key": "tractor",   "icon": "🚜", "name": "Traktor",    "cost": 3500},
     {"key": "house",     "icon": "🏡", "name": "Chaloupka",  "cost": 5500},
     {"key": "rainbow",   "icon": "🌈", "name": "Duha",       "cost": 9000},
+    {"key": "scarecrow", "icon": "🧑‍🌾", "name": "Strašák",   "cost": 15000},
+    {"key": "fountain",  "icon": "⛲", "name": "Fontána",    "cost": 30000},
+    {"key": "manor",     "icon": "🏰", "name": "Statek",     "cost": 75000},
 ]
 _DECOR_BY_KEY = {d["key"]: d for d in DECOR}
 

@@ -1351,6 +1351,12 @@ async function pageUserProfile(nick) {
         ${statBox(fmtPts(p.biggest_win), "Největší zisk")}
       </div>
       <div class="stat-grid" style="margin-top:12px">
+        ${statBox(fmtPts(p.farm_xp_total || 0), "Poctive farm XP", "accent")}
+        ${statBox(fmtPts(p.farm_gross_total || 0), "Farm gross")}
+        ${statBox(fmtPts(p.gambling_net_total || 0), "Gambling net", (p.gambling_net_total || 0) >= 0 ? "" : "warn")}
+        ${statBox(fmtPts(p.garden_net_total || 0), "Zahradka net", (p.garden_net_total || 0) > 0 ? "accent" : "")}
+      </div>
+      <div class="stat-grid" style="margin-top:12px">
         ${statBox(`${p.games_won}/${p.games_played}`, "Duely (výher/her)")}
         ${statBox(p.games_played ? wr + "%" : "—", "Win-rate duelů")}
         ${statBox(p.raffle_wins, "Výher v tombolách 🏆")}
@@ -2105,8 +2111,8 @@ async function loadGarden() {
       if (p.ready) return `<div class="grd-plot grd-ready"><div class="grd-crop">${p.icon}</div><div class="grd-lbl">${esc(p.name)}</div><button class="bp-claim" data-action="grd-harvest" data-plot="${p.plot}">Sklidit +${fmtPts(p.reward)}</button></div>`;
       return `<div class="grd-plot grd-grow"><div class="grd-crop grd-sprout">🌱</div><div class="grd-lbl">${esc(p.name)}</div><div class="grd-time" data-left="${p.seconds_left}">${grdDur(p.seconds_left)}</div></div>`;
     }).join("");
-    const shop = g.crops.map((c) => `<button class="grd-seed${_gardenSel === c.key ? " sel" : ""}" data-action="grd-pick" data-crop="${c.key}"><span class="grd-si">${c.icon}</span><b>${esc(c.name)}</b><span class="faint">${c.hours} h · semínko ${fmtPts(c.cost)} · čistě <b>+${fmtPts(c.net)}</b></span></button>`).join("");
-    const seedNote = `<p class="muted" style="font-size:12px;margin:-4px 0 10px">Semínko stojí <b>${g.seed_pct}%</b> z výnosu${g.sub ? ` — máš <b style="color:var(--accent)">sub slevu (jen ${g.seed_pct_sub}%)</b> 💜` : ` · 💜 sub jen ${g.seed_pct_sub}%`}.</p>`;
+    const shop = g.crops.map((c) => `<button class="grd-seed${_gardenSel === c.key ? " sel" : ""}" data-action="grd-pick" data-crop="${c.key}"><span class="grd-si">${c.icon}</span><b>${esc(c.name)}</b><span class="faint">${c.hours} h · semínko ${fmtPts(c.cost)} · oček. <b>${c.expected_no_rescue >= 0 ? "+" : ""}${fmtPts(c.expected_no_rescue || 0)}</b> / aktivně <b>${c.expected_rescue >= 0 ? "+" : ""}${fmtPts(c.expected_rescue || 0)}</b></span></button>`).join("");
+    const seedNote = `<p class="muted" style="font-size:12px;margin:-4px 0 10px">Semínko stojí <b>${g.seed_pct}%</b> z výnosu${g.sub ? ` — máš <b style="color:var(--accent)">sub slevu (jen ${g.seed_pct_sub}%)</b> 💜` : ` · 💜 sub jen ${g.seed_pct_sub}%`}. Škůdci: <b>${g.pest_chance || 0}%</b>, záchrana <b>${g.rescue_pct || 0}%</b> výnosu.</p>`;
     box.innerHTML = `<div class="grd-grid">${plots}</div>
       <div class="section-title" style="margin:24px 0 8px">🌰 Semínka ${_gardenSel ? `<span class="feeds-pass">vybráno → klikni prázdný záhon</span>` : ""}</div>
       ${seedNote}
@@ -2128,7 +2134,7 @@ async function grdPlant(plot) {
   try {
     const r = await api("/garden/plant", { method: "POST", body: { plot: parseInt(plot, 10), crop: _gardenSel } });
     if (state.user) state.user.points = r.balance;
-    toast("Zasazeno! 🌱 Teď počkej až doroste.", "success");
+    toast(`Zasazeno: ${r.name || "plodina"} −${fmtPts(r.cost || 0)} · doroste za ${r.hours || "?"} h.`, "success");
     renderHeader(); loadGarden();
   } catch (e) { toast(e.message, "error"); }
 }
@@ -2420,7 +2426,7 @@ async function loadProfTab(tab) {
       const rows = await api("/profile/points-log");
       if (!rows.length) { box.innerHTML = `<div class="empty"><div class="big">📊</div>Žádná historie.</div>`; return; }
       box.innerHTML = `<div class="table-wrap"><table class="tbl"><thead><tr><th>Změna</th><th>Důvod</th><th>Kdy</th></tr></thead><tbody>${rows.map((l) => `
-        <tr><td class="${l.change >= 0 ? "pos" : "neg"}">${l.change >= 0 ? "+" : ""}${fmtPts(l.change)}</td><td>${esc(l.reason || "")}</td><td class="faint">${timeAgo(l.created_at)}</td></tr>`).join("")}</tbody></table></div>`;
+        <tr><td class="${l.change >= 0 ? "pos" : "neg"}">${l.change >= 0 ? "+" : ""}${fmtPts(l.change)}</td><td>${esc(l.reason || "")} ${l.category ? `<span class="code-pill">${esc(l.category.label)}</span>` : ""}</td><td class="faint">${timeAgo(l.created_at)}</td></tr>`).join("")}</tbody></table></div>`;
     }
   } catch (e) { box.innerHTML = `<div class="empty">${esc(e.message)}</div>`; }
 }
@@ -2898,23 +2904,60 @@ function gardenEconomyHTML(g) {
     <td style="color:#46d369">+${fmtPts(c.harvest_earned)}</td>
     <td style="color:${c.net > 0 ? "#e0a857" : "#46d369"};font-weight:700">${c.net > 0 ? "+" : ""}${fmtPts(c.net)}</td>
   </tr>`).join("");
+  const users = (g.per_user || []).map((u) => `<tr><td>${uLink(u.username)}</td><td class="faint">+${fmtPts(u.gained)} / -${fmtPts(u.spent)}</td><td style="font-weight:800;color:${u.net > 0 ? "#e0a857" : "#46d369"}">${u.net > 0 ? "+" : ""}${fmtPts(u.net)}</td></tr>`).join("");
+  const recent = (g.recent || []).map((r) => `<tr><td>${uLink(r.username)}</td><td class="${r.change >= 0 ? "pos" : "neg"}">${r.change >= 0 ? "+" : ""}${fmtPts(r.change)}</td><td>${esc(r.reason || "")}</td></tr>`).join("");
   const growing = (g.growing || []).length ? g.growing.map((x) => `${x.count}× ${x.icon || ""} ${esc(x.crop)}`).join(" · ") : "nic neroste";
   return `<div class="panel" style="margin-bottom:16px">
     <div class="section-title" style="margin-top:0">🌱 Ekonomika zahrádky — výdaje vs příjmy</div>
-    <p class="muted" style="font-size:12.5px;margin:0 0 12px">Semínka + dekorace = <b>výdaje</b> (sink, ubírá body z oběhu). Sklizně = <b>příjmy</b> (faucet, přidává). <b>Net &gt; 0 = zahrádka tiskne peníze</b> → zvedni cenu semínka (teď 30 %), když je to moc inflační. Net &lt; 0 = zdravé.</p>
+    <p class="muted" style="font-size:12.5px;margin:0 0 12px">Semínka + dekorace = <b>výdaje</b> (sink, ubírá body z oběhu). Sklizně = <b>příjmy</b> (faucet, přidává). <b>Net &gt; 0 = zahrádka tiskne peníze</b> → zvedni cenu semínka (teď ${g.seed_pct || "?"} %), když je to moc inflační. Net &lt; 0 = zdravé.</p>
     <div class="ge-wins">${win("d1", "24 h")}${win("d7", "7 dní")}${win("all", "Celkem")}</div>
     <div class="ge-crop-h">Podle plodin (celkem · zaseto / sklizeno)</div>
     <div class="table-wrap"><table class="tbl"><thead><tr><th>Plodina</th><th>Zaseto / sklizeno</th><th>Semínka</th><th>Sklizeň</th><th>Net</th></tr></thead><tbody>${crops}</tbody></table></div>
+    <div class="ge-crop-h">Top uzivatele zahradky</div>
+    <div class="table-wrap"><table class="tbl"><thead><tr><th>Uzivatel</th><th>Prijmy / vydaje</th><th>Net</th></tr></thead><tbody>${users || `<tr><td class="faint">zatim nic</td></tr>`}</tbody></table></div>
+    <div class="ge-crop-h">Posledni zahradni pohyby</div>
+    <div class="table-wrap"><table class="tbl"><thead><tr><th>Uzivatel</th><th>Zmena</th><th>Duvod</th></tr></thead><tbody>${recent || `<tr><td class="faint">zatim nic</td></tr>`}</tbody></table></div>
     <div class="faint" style="font-size:12px;margin-top:10px">🌿 Teď roste: ${growing}</div>
+  </div>`;
+}
+function economyInsightsHTML(d) {
+  if (!d) return "";
+  const money = (n) => `${n >= 0 ? "+" : ""}${fmtPts(n || 0)}`;
+  const rows = (items, cols) => (items || []).map((x) => `<tr>${cols.map((c) => c(x)).join("")}</tr>`).join("");
+  const farmers = rows(d.top_farmers, [
+    (x) => `<td>${uLink(x.username)}</td>`,
+    (x) => `<td style="color:var(--accent);font-weight:800">+${fmtPts(x.farm_xp)}</td>`,
+    (x) => `<td class="faint">gross +${fmtPts(x.farm_gross)}</td>`,
+  ]);
+  const gamblers = rows(d.top_gamblers, [
+    (x) => `<td>${uLink(x.username)}</td>`,
+    (x) => `<td>${fmtPts(x.gambling_volume)}</td>`,
+    (x) => `<td style="font-weight:800;color:${x.gambling_net >= 0 ? "#46d369" : "#ff6b6b"}">${money(x.gambling_net)}</td>`,
+  ]);
+  const garden = rows(d.top_garden, [
+    (x) => `<td>${uLink(x.username)}</td>`,
+    (x) => `<td class="faint">+${fmtPts(x.garden_gained)} / −${fmtPts(x.garden_spent)}</td>`,
+    (x) => `<td style="font-weight:800;color:${x.garden_net >= 0 ? "#e0a857" : "#46d369"}">${money(x.garden_net)}</td>`,
+  ]);
+  const cats = (d.categories || []).map((c) => `<span class="code-pill" title="${esc(c.kind)}">${c.emoji} ${esc(c.label)}</span>`).join(" ");
+  return `<div class="panel" style="margin-bottom:16px">
+    <div class="section-title" style="margin-top:0">📊 Farm vs gambling vs zahrádka <span class="faint" style="font-size:12px;font-weight:400">posledních ${d.days} d</span></div>
+    <div class="grid-3">
+      <div><b>Top farm XP</b><div class="table-wrap" style="margin-top:8px"><table class="tbl"><tbody>${farmers || `<tr><td class="faint">nic</td></tr>`}</tbody></table></div></div>
+      <div><b>Top gambling obrat</b><div class="table-wrap" style="margin-top:8px"><table class="tbl"><tbody>${gamblers || `<tr><td class="faint">nic</td></tr>`}</tbody></table></div></div>
+      <div><b>Top zahrádka net</b><div class="table-wrap" style="margin-top:8px"><table class="tbl"><tbody>${garden || `<tr><td class="faint">nic</td></tr>`}</tbody></table></div></div>
+    </div>
+    <div class="faint" style="font-size:12px;margin-top:12px">Normalizace reasons: ${cats}</div>
   </div>`;
 }
 async function adminEconomy() {
   const box = $("#adminContent");
   try {
-    const [e, lv, dash, rake, health, hh, ret, garden, eggs] = await Promise.all([api("/admin/economy"), api("/admin/economy/live"), api("/admin/economy/dashboard"), api("/admin/economy/games-rake"), api("/admin/economy/health?days=14").catch(() => null), api("/admin/shop-discount").catch(() => ({ pct: 0, live_only: false, active_now: 0 })), api("/admin/analytics/retention").catch(() => null), api("/admin/economy/garden").catch(() => null), api("/admin/egg-finders").catch(() => null)]);
+    const [e, lv, dash, rake, health, hh, ret, garden, insights, eggs] = await Promise.all([api("/admin/economy"), api("/admin/economy/live"), api("/admin/economy/dashboard"), api("/admin/economy/games-rake"), api("/admin/economy/health?days=14").catch(() => null), api("/admin/shop-discount").catch(() => ({ pct: 0, live_only: false, active_now: 0 })), api("/admin/analytics/retention").catch(() => null), api("/admin/economy/garden").catch(() => null), api("/admin/economy/insights?days=1").catch(() => null), api("/admin/egg-finders").catch(() => null)]);
     const modeBtn = (m, label) => `<button class="btn btn-sm ${lv.mode === m ? "btn-primary" : "btn-ghost"}" data-action="eco-live-mode" data-mode="${m}">${label}</button>`;
     box.innerHTML = `
       ${economyDashboardHTML(dash)}
+      ${economyInsightsHTML(insights)}
       ${retentionHTML(ret)}
       ${economyHealthHTML(health)}
       ${gardenEconomyHTML(garden)}

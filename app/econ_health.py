@@ -51,6 +51,11 @@ def categorize(reason: str):
     return _OTHER
 
 
+def normalized_reason(reason: str) -> dict:
+    key, emoji, label, kind = categorize(reason)
+    return {"key": key, "emoji": emoji, "label": label, "kind": kind}
+
+
 def health(conn: sqlite3.Connection, days: int = 14) -> dict:
     """Souhrn zdraví ekonomiky za posledních `days` dní (UTC).
 
@@ -173,5 +178,167 @@ def garden_economy(conn: sqlite3.Connection) -> dict:
         cc = _gbk.get(r["crop"], {})
         growing.append({"crop": cc.get("name", r["crop"]), "icon": cc.get("icon", "🌱"), "count": r["c"]})
 
+    per_user = [dict(r) for r in conn.execute(
+        "SELECT u.id, u.username, "
+        "COALESCE(SUM(CASE WHEN l.change > 0 THEN l.change ELSE 0 END), 0) AS gained, "
+        "COALESCE(SUM(CASE WHEN l.change < 0 THEN -l.change ELSE 0 END), 0) AS spent, "
+        "COALESCE(SUM(l.change), 0) AS net, COUNT(*) AS count "
+        "FROM points_log l JOIN users u ON u.id = l.user_id "
+        "WHERE l.change != 0 AND (lower(l.reason) LIKE 'sklizeĹ:%' "
+        "OR lower(l.reason) LIKE 'zasazenĂ­:%' "
+        "OR lower(l.reason) LIKE 'zĂˇchrana:%' "
+        "OR lower(l.reason) LIKE 'dekorace zahrĂˇdky%') "
+        "GROUP BY l.user_id ORDER BY net DESC LIMIT 12")]
+
+    recent = []
+    for r in conn.execute(
+        "SELECT u.username, l.change, l.reason, l.created_at "
+        "FROM points_log l JOIN users u ON u.id = l.user_id "
+        "WHERE l.change != 0 AND (lower(l.reason) LIKE 'sklizeĹ:%' "
+        "OR lower(l.reason) LIKE 'zasazenĂ­:%' "
+        "OR lower(l.reason) LIKE 'zĂˇchrana:%' "
+        "OR lower(l.reason) LIKE 'dekorace zahrĂˇdky%') "
+        "ORDER BY l.id DESC LIMIT 12"):
+        d = dict(r)
+        d["category"] = normalized_reason(d["reason"])
+        recent.append(d)
+
     return {"by_window": {k: _agg(v) for k, v in windows.items()},
-            "per_crop": per_crop, "growing": growing}
+            "per_crop": per_crop, "growing": growing,
+            "per_user": per_user, "recent": recent}
+
+
+def insights(conn: sqlite3.Connection, days: int = 1) -> dict:
+    try:
+        days = max(1, min(30, int(days)))
+    except (TypeError, ValueError):
+        days = 1
+    start = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+
+    from .deps import earn_factor
+
+    users = {}
+    for r in conn.execute(
+        "SELECT u.id, u.username, l.change, l.reason "
+        "FROM points_log l JOIN users u ON u.id = l.user_id "
+        "WHERE l.created_at >= ? AND l.change != 0", (start,)):
+        d = users.setdefault(r["id"], {
+            "id": r["id"], "username": r["username"],
+            "farm_xp": 0, "farm_gross": 0,
+            "gambling_in": 0, "gambling_out": 0,
+            "garden_gained": 0, "garden_spent": 0,
+        })
+        reason = r["reason"] or ""
+        change = r["change"]
+        cat = categorize(reason)[0]
+        if change > 0:
+            factor = earn_factor(reason)
+            if factor > 0:
+                d["farm_gross"] += change
+                d["farm_xp"] += int(round(change * factor))
+            if factor == 0:
+                d["gambling_in"] += change
+            if cat == "garden_h":
+                d["garden_gained"] += change
+        else:
+            spent = -change
+            if cat in ("mines", "games", "blackjack", "predictions"):
+                d["gambling_out"] += spent
+            if cat in ("garden_s", "garden_d"):
+                d["garden_spent"] += spent
+
+    rows = list(users.values())
+    for d in rows:
+        d["gambling_net"] = d["gambling_in"] - d["gambling_out"]
+        d["gambling_volume"] = d["gambling_in"] + d["gambling_out"]
+        d["garden_net"] = d["garden_gained"] - d["garden_spent"]
+
+    def top(key, pred):
+        return sorted([x for x in rows if pred(x)], key=lambda x: x[key], reverse=True)[:10]
+
+    return {
+        "days": days,
+        "top_farmers": top("farm_xp", lambda x: x["farm_xp"] > 0),
+        "top_gamblers": top("gambling_volume", lambda x: x["gambling_volume"] > 0),
+        "top_garden": top("garden_net", lambda x: x["garden_gained"] or x["garden_spent"]),
+        "categories": [
+            {"key": key, "emoji": emoji, "label": label, "kind": kind}
+            for key, emoji, label, kind, _subs in _RULES
+        ] + [{"key": _OTHER[0], "emoji": _OTHER[1], "label": _OTHER[2], "kind": _OTHER[3]}],
+    }
+
+
+def garden_economy(conn: sqlite3.Connection) -> dict:
+    """Robust garden economy read model; uses normalized categories, not raw Czech SQL LIKE."""
+    from .garden import CROPS, _BY_KEY, SEED_PCT, SEED_PCT_SUB
+
+    now = datetime.now(timezone.utc)
+    windows = {"d1": (now - timedelta(hours=24)).isoformat(),
+               "d7": (now - timedelta(days=7)).isoformat(),
+               "all": "2000-01-01T00:00:00+00:00"}
+    out = {k: {"seeds": 0, "seeds_count": 0, "decor": 0, "decor_count": 0,
+               "vydaje": 0, "prijmy": 0, "harvest_count": 0, "net": 0}
+           for k in windows}
+    crops = {c["name"].lower(): {"name": c["name"], "icon": c["icon"], "planted": 0,
+                                 "seed_spent": 0, "harvested": 0, "harvest_earned": 0, "net": 0}
+             for c in CROPS}
+    users = {}
+    recent = []
+    garden_keys = {"garden_h", "garden_s", "garden_d"}
+
+    for r in conn.execute(
+        "SELECT u.id, u.username, l.change, l.reason, l.created_at "
+        "FROM points_log l JOIN users u ON u.id = l.user_id "
+        "WHERE l.change != 0 ORDER BY l.id DESC"):
+        cat = normalized_reason(r["reason"])
+        key = cat["key"]
+        if key not in garden_keys:
+            continue
+        change = r["change"]
+        spent = -change if change < 0 else 0
+        gained = change if change > 0 else 0
+        for wkey, start in windows.items():
+            if r["created_at"] >= start:
+                w = out[wkey]
+                if key == "garden_h":
+                    w["prijmy"] += gained
+                    w["harvest_count"] += 1
+                elif key == "garden_s":
+                    w["seeds"] += spent
+                    w["seeds_count"] += 1
+                elif key == "garden_d":
+                    w["decor"] += spent
+                    w["decor_count"] += 1
+                w["vydaje"] = w["seeds"] + w["decor"]
+                w["net"] = w["prijmy"] - w["vydaje"]
+
+        text = (r["reason"] or "").lower()
+        for crop_name, crop in crops.items():
+            if crop_name in text:
+                if key == "garden_h":
+                    crop["harvested"] += 1
+                    crop["harvest_earned"] += gained
+                elif key == "garden_s":
+                    crop["planted"] += 1
+                    crop["seed_spent"] += spent
+                crop["net"] = crop["harvest_earned"] - crop["seed_spent"]
+                break
+
+        u = users.setdefault(r["id"], {"id": r["id"], "username": r["username"],
+                                       "gained": 0, "spent": 0, "net": 0, "count": 0})
+        u["gained"] += gained
+        u["spent"] += spent
+        u["net"] += change
+        u["count"] += 1
+        if len(recent) < 12:
+            recent.append({"username": r["username"], "change": change, "reason": r["reason"],
+                           "created_at": r["created_at"], "category": cat})
+
+    growing = []
+    for r in conn.execute("SELECT crop, COUNT(*) AS c FROM garden GROUP BY crop ORDER BY c DESC"):
+        cc = _BY_KEY.get(r["crop"], {})
+        growing.append({"crop": cc.get("name", r["crop"]), "icon": cc.get("icon", "🌱"), "count": r["c"]})
+
+    return {"by_window": out, "per_crop": list(crops.values()), "growing": growing,
+            "per_user": sorted(users.values(), key=lambda x: x["net"], reverse=True)[:12],
+            "recent": recent, "seed_pct": int(SEED_PCT * 100), "seed_pct_sub": int(SEED_PCT_SUB * 100)}

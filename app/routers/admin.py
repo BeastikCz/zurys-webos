@@ -278,6 +278,13 @@ def economy_garden(conn: sqlite3.Connection = Depends(db_dep)):
     return econ_health.garden_economy(conn)
 
 
+@router.get("/economy/insights")
+def economy_insights(days: int = Query(1, ge=1, le=30),
+                     conn: sqlite3.Connection = Depends(db_dep)):
+    """Farm vs gambling vs garden overview for economy admins."""
+    return econ_health.insights(conn, days)
+
+
 @router.get("/egg-finders")
 def egg_finders(conn: sqlite3.Connection = Depends(db_dep)):
     """Easter egg „tajný klas" – kdo a kdy ho našel (z points_log, nejnovější první)."""

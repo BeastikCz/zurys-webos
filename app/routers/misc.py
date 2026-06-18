@@ -203,6 +203,52 @@ def public_profile(nick: str = Query("", max_length=64),
     earned = conn.execute("SELECT COALESCE(SUM(change),0) c FROM points_log WHERE user_id=? AND change>0", (uid,)).fetchone()["c"]
     spent = conn.execute("SELECT COALESCE(SUM(-change),0) c FROM points_log WHERE user_id=? AND change<0", (uid,)).fetchone()["c"]
     biggest = conn.execute("SELECT COALESCE(MAX(change),0) c FROM points_log WHERE user_id=? AND change>0", (uid,)).fetchone()["c"]
+    from ..deps import earn_factor
+    farm_gross = farm_xp = gambling_gross = 0
+    for r in conn.execute("SELECT change, reason FROM points_log WHERE user_id=? AND change>0", (uid,)):
+        factor = earn_factor(r["reason"])
+        if factor > 0:
+            farm_gross += r["change"]
+            farm_xp += int(round(r["change"] * factor))
+        else:
+            gambling_gross += r["change"]
+    gambling_spent = conn.execute(
+        "SELECT COALESCE(SUM(-change),0) c FROM points_log WHERE user_id=? AND change<0 "
+        "AND (lower(reason) LIKE '%mines%' OR lower(reason) LIKE '%blackjack%' "
+        "OR lower(reason) LIKE '%predikce%' OR lower(reason) LIKE '%duel%' "
+        "OR lower(reason) LIKE '%piĹˇkvor%' OR lower(reason) LIKE '%coinflip%')",
+        (uid,)).fetchone()["c"]
+    garden_row = conn.execute(
+        "SELECT COALESCE(SUM(CASE WHEN change>0 THEN change ELSE 0 END),0) gained, "
+        "COALESCE(SUM(CASE WHEN change<0 THEN -change ELSE 0 END),0) spent, "
+        "COALESCE(SUM(change),0) net FROM points_log WHERE user_id=? AND "
+        "(lower(reason) LIKE 'sklizeĹ:%' OR lower(reason) LIKE 'zasazenĂ­:%' "
+        "OR lower(reason) LIKE 'zĂˇchrana:%' OR lower(reason) LIKE 'dekorace zahrĂˇdky%')",
+        (uid,)).fetchone()
+    from ..econ_health import categorize
+    farm_gross = farm_xp = gambling_gross = gambling_spent = 0
+    garden_gained = garden_spent = garden_net = 0
+    for r in conn.execute("SELECT change, reason FROM points_log WHERE user_id=?", (uid,)):
+        change = r["change"]
+        reason = r["reason"]
+        cat = categorize(reason)[0]
+        if change > 0:
+            factor = earn_factor(reason)
+            if factor > 0:
+                farm_gross += change
+                farm_xp += int(round(change * factor))
+            else:
+                gambling_gross += change
+            if cat == "garden_h":
+                garden_gained += change
+        elif change < 0:
+            spent_abs = -change
+            if cat in ("mines", "games", "blackjack", "predictions"):
+                gambling_spent += spent_abs
+            if cat in ("garden_s", "garden_d"):
+                garden_spent += spent_abs
+        if cat in ("garden_h", "garden_s", "garden_d"):
+            garden_net += change
     lvl = level_info(u["earned_total"] if "earned_total" in u.keys() else 0)   # úroveň z lifetime XP (ne z gross earned)
     g = conn.execute(
         "SELECT COUNT(*) AS played, "
@@ -248,6 +294,13 @@ def public_profile(nick: str = Query("", max_length=64),
         "created_at": u["created_at"], "points": u["points"],
         "rank": rank, "league": league_key, "league_mult": league_mult,
         "earned_total": earned, "spent_total": spent, "biggest_win": biggest,
+        "farm_gross_total": farm_gross, "farm_xp_total": farm_xp,
+        "gambling_gross_total": gambling_gross,
+        "gambling_spent_total": gambling_spent,
+        "gambling_net_total": gambling_gross - gambling_spent,
+        "garden_gained_total": garden_gained,
+        "garden_spent_total": garden_spent,
+        "garden_net_total": garden_net,
         "level": lvl["level"], "level_pct": lvl["pct"], "level_into": lvl["into"], "level_span": lvl["span"],
         "games_played": played, "games_won": won,
         "win_rate": round(won / played, 3) if played else 0,
@@ -749,13 +802,15 @@ def my_orders(user: sqlite3.Row = Depends(require_user),
 @router.get("/profile/points-log")
 def my_points_log(user: sqlite3.Row = Depends(require_user),
                   conn: sqlite3.Connection = Depends(db_dep)):
+    from ..econ_health import normalized_reason
     rows = conn.execute(
         "SELECT change, reason, created_at FROM points_log WHERE user_id = ? AND change != 0 "
         "ORDER BY created_at DESC, id DESC LIMIT 100",
         (user["id"],),
     ).fetchall()
     return [
-        {"change": r["change"], "reason": r["reason"], "created_at": r["created_at"]}
+        {"change": r["change"], "reason": r["reason"], "created_at": r["created_at"],
+         "category": normalized_reason(r["reason"])}
         for r in rows
     ]
 
