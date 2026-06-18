@@ -69,3 +69,28 @@ def test_admin_bypasses_global_wager_cap(client):
     finally:
         _reset_cap(conn)
         conn.close()
+
+
+def test_exempt_uid_bypasses_global_wager_cap(client):
+    """Ručně whitelistnutá uid (eco_wager_exempt_uids) obejde globální strop jako admin."""
+    import json
+    conn = get_conn()
+    try:
+        set_setting(conn, "eco_wager_cap", "100")
+        uid = _make_user(conn)                              # běžný user (ne admin)
+        set_setting(conn, "eco_wager_exempt_uids", json.dumps([uid]))
+        conn.commit()
+
+        check_wager_limit(conn, _user(conn, uid), 1000)     # 1000 >> strop 100, ale výjimka → projde
+        row = conn.execute("SELECT wagered_today FROM users WHERE id=?", (uid,)).fetchone()
+        assert row["wagered_today"] == 1000
+
+        # bez whitelistu by stejná sázka spadla
+        other = _make_user(conn)
+        with pytest.raises(HTTPException):
+            check_wager_limit(conn, _user(conn, other), 1000)
+    finally:
+        set_setting(conn, "eco_wager_exempt_uids", "")
+        _reset_cap(conn)
+        conn.commit()
+        conn.close()

@@ -192,7 +192,18 @@ def check_wager_limit(conn: sqlite3.Connection, user, amount: int) -> None:
         is_admin = user["role"] == ROLE_ADMIN
     except (KeyError, IndexError, TypeError):
         is_admin = False
-    if is_admin:
+    # Bez denního stropu sázek: admin vždy + ručně whitelistnutá uid (eco_wager_exempt_uids = JSON
+    # list uid v app_settings). Cílená výjimka pro konkrétní účet (např. top supporter) – stejný
+    # pattern jako mines_ban_uids. Per-user wager_limit umí strop jen SNÍŽIT (přes min), ne obejít.
+    exempt = is_admin
+    if not exempt and global_limit > 0:
+        try:
+            import json as _json
+            from .db import get_setting as _gs
+            exempt = uid in set(_json.loads(_gs(conn, "eco_wager_exempt_uids", "") or "[]"))
+        except (ValueError, TypeError):
+            exempt = False
+    if exempt:
         global_limit = 0
 
     def effective_limit(value):
