@@ -1095,14 +1095,14 @@ function profLevelHTML(p) {
 }
 function podiumCard(r, isMe) {
   const medal = r.rank === 1 ? "🥇" : r.rank === 2 ? "🥈" : "🥉";
-  const crown = r.rank === 1 ? `<div class="pod-crown">👑</div>` : "";
+  const crown = r.rank === 1 ? `<div class="pod-crown" aria-hidden="true"><i></i><b></b><em></em></div>` : "";
   const rays = r.rank === 1 ? `<div class="pod-rays"></div>` : "";
   const sparks = r.rank === 1 ? `<i class="pod-spark s1">✨</i><i class="pod-spark s2">⭐</i><i class="pod-spark s3">✨</i><i class="pod-spark s4">⭐</i>` : "";
   const meTag = isMe ? `<span class="me-tag">TY</span>` : "";
   return `
     <div class="podium-card podium-${r.rank}${isMe ? " me" : ""}" style="--d:${0.05 + r.rank * 0.08}s">
-      ${rays}${sparks}${crown}<span class="pod-medal">${medal}</span>
-      <div class="pod-av-wrap">${avatarHTML(r.username, r.avatar_url, "pod-av", cosF(r))}</div>
+      ${rays}${sparks}<span class="pod-medal">${medal}</span>
+      <div class="pod-av-wrap">${crown}${avatarHTML(r.username, r.avatar_url, "pod-av", cosF(r))}</div>
       <a class="pod-name prof-link ${cosN(r)}" href="#/u/${encodeURIComponent(r.username)}">${esc(r.username)}${meTag}</a>
       <div class="pod-badges">${lvlBadge(r.level)}${lbBadges(r)}</div>
       <div class="pod-pts"><span class="pod-num" data-count="${r.points}">${Number(r.points).toLocaleString("cs-CZ")}</span><span>sedláků</span></div>

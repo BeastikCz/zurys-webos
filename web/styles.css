@@ -432,9 +432,16 @@ main { padding: 0 0 80px; min-height: calc(100vh - var(--header-h)); overflow-x:
 
 .pod-medal { font-size: 30px; line-height: 1; filter: drop-shadow(0 3px 6px rgba(0,0,0,.45)); animation: pod-bob 3s ease-in-out infinite; }
 .podium-1 .pod-medal { font-size: 40px; }
-.pod-crown { position: absolute; top: -30px; left: 50%; font-size: 32px; filter: drop-shadow(0 5px 9px rgba(0,0,0,.55)); transform: translateX(-50%); animation: pod-crown 3.4s ease-in-out infinite; }
+.pod-crown { position: absolute; left: 50%; top: -22px; z-index: 5; width: 58px; height: 36px; transform: translateX(-50%) rotate(-4deg); pointer-events: none; filter: drop-shadow(0 7px 10px rgba(0,0,0,.5)); animation: pod-crown 3.6s ease-in-out infinite; }
+.pod-crown::before { content: ""; position: absolute; left: 8px; right: 8px; bottom: 4px; height: 14px; border: 1px solid rgba(255,255,255,.42); border-radius: 7px 7px 9px 9px; background: linear-gradient(180deg, #fff1a8 0%, #ffd34d 32%, #e89322 100%); box-shadow: inset 0 2px 2px rgba(255,255,255,.55), inset 0 -3px 4px rgba(92,43,0,.32), 0 0 18px rgba(255,199,68,.38); }
+.pod-crown::after { content: ""; position: absolute; left: 5px; right: 5px; bottom: 16px; height: 18px; background: linear-gradient(180deg, #fff6bf 0%, #ffd34d 48%, #e08a1f 100%); clip-path: polygon(0 100%, 11% 18%, 29% 78%, 50% 0, 71% 78%, 89% 18%, 100% 100%); border-radius: 3px; box-shadow: inset 0 2px 0 rgba(255,255,255,.45); }
+.pod-crown i, .pod-crown b, .pod-crown em { position: absolute; z-index: 2; display: block; width: 7px; height: 7px; border-radius: 50%; border: 1px solid rgba(255,255,255,.62); box-shadow: 0 0 8px rgba(255,255,255,.45); }
+.pod-crown i { left: 8px; top: 8px; background: #66d8ff; }
+.pod-crown b { left: 50%; top: 1px; transform: translateX(-50%); background: #ff6aa9; }
+.pod-crown em { right: 8px; top: 8px; background: #8cff9a; }
 
 .pod-av-wrap { position: relative; margin: 12px auto 8px; }
+.podium-1 .pod-av-wrap { margin-top: 24px; }
 .podium-card .pod-av { width: 74px; height: 74px; font-size: 27px; border-radius: 16px; box-shadow: 0 0 0 3px var(--mc), 0 0 22px -4px var(--mc); }
 .podium-1 .pod-av { width: 94px; height: 94px; font-size: 34px; box-shadow: 0 0 0 4px var(--mc), 0 0 34px -2px var(--mc); animation: pod-glow 2.4s ease-in-out infinite; }
 
@@ -849,9 +856,16 @@ footer.site-footer { border-top: 1px solid var(--border); padding: 22px 0; color
   .podium { gap: 7px; padding-top: 42px; }
   .podium-card { padding: 14px 5px 0; }
   .podium-card .pod-av { width: 50px; height: 50px; font-size: 19px; border-radius: 12px; }
+  .podium-1 .pod-av-wrap { margin-top: 20px; }
   .podium-1 .pod-av { width: 62px; height: 62px; font-size: 23px; }
   .pod-medal { font-size: 24px; } .podium-1 .pod-medal { font-size: 30px; }
-  .pod-crown { font-size: 24px; top: -26px; }
+  .pod-crown { width: 42px; height: 28px; top: -18px; }
+  .pod-crown::before { left: 6px; right: 6px; bottom: 3px; height: 11px; }
+  .pod-crown::after { left: 4px; right: 4px; bottom: 13px; height: 13px; }
+  .pod-crown i, .pod-crown b, .pod-crown em { width: 5px; height: 5px; }
+  .pod-crown i { left: 6px; top: 7px; }
+  .pod-crown b { top: 1px; }
+  .pod-crown em { right: 6px; top: 7px; }
   .pod-name { font-size: 12px; } .podium-1 .pod-name { font-size: 13.5px; }
   .pod-pts .pod-num { font-size: 21px; } .podium-1 .pod-pts .pod-num { font-size: 33px; }
   .pod-pts span { font-size: 9.5px; }
