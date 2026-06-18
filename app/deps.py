@@ -369,7 +369,7 @@ def level_info(earned_total) -> dict:
 # earned_total se nemění). Soft denylist (nezachycený reason počítá plně – nerozbije farmení).
 _NO_EARN_KW = ("battle pass", "mines", "blackjack", "piškvor", "duel", "hra #", "predikce", "výhra",
                "vrácen", "vráceno", "remíza", "vypršel", "refund", "storno", "zrušen",
-               "odchod (vrácení")
+               "odchod (vrácení", "dar od", "dar pro", "dar →")
 _SUB_EARN_KW = ("kick sub", "kick resub", "gift sub")   # placené/gift suby → jen část XP
 SUB_EARN_FACTOR = 0.5                                    # sub dá 50 % hodnoty jako XP (náskok, ne koupený level)
 
