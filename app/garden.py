@@ -137,7 +137,11 @@ def harvest(conn, user, plot: int) -> dict:
     pest = (r["pest"] if "pest" in r.keys() else 0) == 1   # neošetření chrobáci → půlka úrody
     reward = round(base * PEST_PENALTY) if pest else base
     reason = "Sklizeň (chrobáci ji načali) 🐛" if pest else f"Sklizeň: {c.get('name', '?')} 🌾"
-    conn.execute("DELETE FROM garden WHERE user_id = ? AND plot = ?", (user["id"], plot))
+    # ATOMICKY: odměnu připíše JEN ten request, který reálně smazal řádek (rowcount==1).
+    # Bez toho dva souběžné /garden/harvest na stejný záhon obě připíšou odměnu (double-pay).
+    if conn.execute("DELETE FROM garden WHERE user_id = ? AND plot = ?", (user["id"], plot)).rowcount != 1:
+        conn.commit()
+        return {"ok": False, "error": "Tenhle záhon je už sklizený. 🌾"}
     add_points(conn, user["id"], reward, reason)
     conn.commit()
     bal = conn.execute("SELECT points FROM users WHERE id = ?", (user["id"],)).fetchone()["points"]
@@ -154,9 +158,16 @@ def rescue(conn, user, plot: int) -> dict:
         return {"ok": False, "error": "Na tomhle záhonu chrobáci nejsou. 🌱"}
     c = _BY_KEY.get(r["crop"], {})
     cost = _rescue_cost(c)
+    # ATOMICKY: zaber napadený záhon (pest 1→2) jako první. Cenu strhne jen request, který reálně
+    # přepnul (rowcount==1) → dva souběžné /garden/rescue nestrhnou postřik 2×.
+    if conn.execute("UPDATE garden SET pest = 2 WHERE user_id = ? AND plot = ? AND pest = 1",
+                    (user["id"], plot)).rowcount != 1:
+        conn.commit()
+        return {"ok": False, "error": "Na tomhle záhonu chrobáci nejsou. 🌱"}
     if not try_debit(conn, user["id"], cost, f"Záchrana před chrobáky: {c.get('name', '?')} 🐛"):
+        conn.execute("UPDATE garden SET pest = 1 WHERE user_id = ? AND plot = ?", (user["id"], plot))  # vrať napadení
+        conn.commit()
         return {"ok": False, "error": f"Nemáš dost sedláků na postřik ({cost})."}
-    conn.execute("UPDATE garden SET pest = 2 WHERE user_id = ? AND plot = ?", (user["id"], plot))
     conn.commit()
     bal = conn.execute("SELECT points FROM users WHERE id = ?", (user["id"],)).fetchone()["points"]
     return {"ok": True, "cost": cost, "balance": bal, "name": c.get("name")}
