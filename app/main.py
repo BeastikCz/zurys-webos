@@ -198,6 +198,34 @@ try:
 finally:
     _gx.close()
 
+# Jednorazove: Battle Pass odmeny nesmi samy odemykat dalsi Battle Pass tiery.
+# Body z claimu zustavaji, opravuje se jen XP omylem pridane pres earned_total.
+_bpx = get_conn()
+try:
+    if not get_setting(_bpx, "battlepass_reward_xp_repair_v1", ""):
+        _bpx.execute("CREATE TABLE IF NOT EXISTS battlepass_xp_repair_backup ("
+                     "user_id INTEGER PRIMARY KEY, earned_total_before INTEGER NOT NULL, "
+                     "bp_xp INTEGER NOT NULL, created_at TEXT NOT NULL)")
+        _bpx.execute(
+            "INSERT OR REPLACE INTO battlepass_xp_repair_backup "
+            "(user_id, earned_total_before, bp_xp, created_at) "
+            "SELECT u.id, COALESCE(u.earned_total,0), COALESCE(b.bp_xp,0), ? "
+            "FROM users u JOIN ("
+            "  SELECT user_id, SUM(change) AS bp_xp FROM points_log "
+            "  WHERE change > 0 AND lower(reason) LIKE 'battle pass%' GROUP BY user_id"
+            ") b ON b.user_id = u.id",
+            (now_iso(),))
+        _bpx.execute(
+            "UPDATE users SET earned_total = MAX(0, COALESCE(earned_total,0) - COALESCE(("
+            "  SELECT SUM(change) FROM points_log "
+            "  WHERE points_log.user_id = users.id AND change > 0 AND lower(reason) LIKE 'battle pass%'"
+            "),0))")
+        set_setting(_bpx, "battlepass_reward_xp_repair_v1", "done")
+        _bpx.commit()
+        print("[xp] battlepass reward XP repair hotov - claim odmeny nedava XP")
+finally:
+    _bpx.close()
+
 # Jednorázově: import ručně dodaných tiketů do tomboly Navaja (ghost účty bez Kicku).
 # Idempotentní (flag navaja_import_v1) + plně vratné (navaja_import.undo). Viz modul.
 _nv = get_conn()

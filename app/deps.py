@@ -367,7 +367,7 @@ def level_info(earned_total) -> dict:
 #  • poctivé FARMENÍ (sledování, chat, denní, kolo, úkoly, sklizeň, drops, partneři…) = 100 %
 # points (zůstatek) se mění vždy plně; tohle filtruje JEN lifetime XP. Forward-only (staré
 # earned_total se nemění). Soft denylist (nezachycený reason počítá plně – nerozbije farmení).
-_NO_EARN_KW = ("mines", "blackjack", "piškvor", "duel", "hra #", "predikce", "výhra",
+_NO_EARN_KW = ("battle pass", "mines", "blackjack", "piškvor", "duel", "hra #", "predikce", "výhra",
                "vrácen", "vráceno", "remíza", "vypršel", "refund", "storno", "zrušen",
                "odchod (vrácení")
 _SUB_EARN_KW = ("kick sub", "kick resub", "gift sub")   # placené/gift suby → jen část XP

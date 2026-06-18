@@ -11,14 +11,15 @@ def test_earn_factor_classification():
     from app.deps import counts_as_earned, earn_factor
     # poctivé farmení → 100 % XP
     for r in ["Sledování streamu", "Aktivita v chatu", "Kolo štěstí 🎡",
-              "Battle Pass tier 5 🎟️", "Sklizeň: Mrkev 🌾", "Úkol: Denní 📋", "Denní streak – den 3",
+              "Sklizeň: Mrkev 🌾", "Úkol: Denní 📋", "Denní streak – den 3",
               "Drop #5 – 1. místo", "Partner: Sponzor 🤝", "Login kalendář – 5 dní 🗓️"]:
         assert earn_factor(r) == 1.0 and counts_as_earned(r), r
     # gambling / vratky → 0 % XP (level se nedá vygamblit)
     for r in ["Mines výhra – full clear (3 bomb)", "Mines cashout (×2.5)", "Coinflip #7 – výhra",
               "Kostky #2 – výhra", "Výhra v piškvorkách #9", "Remíza v piškvorkách #9",
               "Predikce #3 – výhra", "Predikce #3 – nikdo netipnul, vráceno", "Blackjack stůl – win 🃏",
-              "Vrácení vkladu – hra #5", "Zrušená hra #5 – vrácení vkladu", "Vypršelá výzva (duel #2)"]:
+              "Vrácení vkladu – hra #5", "Zrušená hra #5 – vrácení vkladu", "Vypršelá výzva (duel #2)",
+              "Battle Pass tier 5 🎟️", "Battle Pass PRÉMIUM tier 5 💜🎟️"]:
         assert earn_factor(r) == 0.0 and not counts_as_earned(r), r
     # placené / gift suby → 50 % XP (náskok, ne koupený lvl 100)
     for r in ["Kick sub 🟣", "Kick resub 🔁", "Kick gift sub 🎁 ×3", "Kick sub 🟣 (happy 2×)"]:

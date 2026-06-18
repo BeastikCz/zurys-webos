@@ -94,7 +94,7 @@ def claim(conn, user, tier: int, premium: bool = False) -> dict:
         conn.execute("UPDATE battlepass SET claimed_premium = ? WHERE user_id = ? AND season = ?",
                      (json.dumps(sorted(claimed_p)), user["id"], season))
         reward = premium_reward(tier)
-        add_points(conn, user["id"], reward, f"Battle Pass PRÉMIUM tier {tier} 💜🎟️")
+        add_points(conn, user["id"], reward, f"Battle Pass PRÉMIUM tier {tier} 💜🎟️", xp=False)
     else:
         if tier in claimed:
             return {"ok": False, "error": "Tenhle tier už máš vyzvednutý. 🎁"}
@@ -102,7 +102,7 @@ def claim(conn, user, tier: int, premium: bool = False) -> dict:
         conn.execute("UPDATE battlepass SET claimed = ? WHERE user_id = ? AND season = ?",
                      (json.dumps(sorted(claimed)), user["id"], season))
         reward = tier_reward(tier)
-        add_points(conn, user["id"], reward, f"Battle Pass tier {tier} 🎟️")
+        add_points(conn, user["id"], reward, f"Battle Pass tier {tier} 🎟️", xp=False)
     conn.commit()
     bal = conn.execute("SELECT points FROM users WHERE id = ?", (user["id"],)).fetchone()["points"]
     return {"ok": True, "reward": reward, "balance": bal, "tier": tier, "premium": premium}

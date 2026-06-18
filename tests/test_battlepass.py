@@ -33,6 +33,7 @@ def test_battlepass_progress_and_claim(client):
         # claim tier 1 → odměna
         r = battlepass.claim(conn, {"id": uid}, 1)
         assert r["ok"] and r["reward"] == battlepass.tier_reward(1)
+        assert conn.execute("SELECT earned_total FROM users WHERE id=?", (uid,)).fetchone()["earned_total"] == 6000
 
         # claim stejného znovu → fail; claim neodemčeného (tier 5) → fail
         assert battlepass.claim(conn, {"id": uid}, 1)["ok"] is False
@@ -91,6 +92,7 @@ def test_battlepass_premium(client):
         # sub claimne premium tier 1 → 3× odměna
         r = battlepass.claim(conn, sub, 1, premium=True)
         assert r["ok"] and r["premium"] and r["reward"] == battlepass.premium_reward(1)
+        assert conn.execute("SELECT earned_total FROM users WHERE id=?", (uid,)).fetchone()["earned_total"] == 6000
         # znovu premium tier 1 → fail (už vyzvednuto)
         assert battlepass.claim(conn, sub, 1, premium=True)["ok"] is False
         # free řada tier 1 je nezávislá → pořád jde claimnout
