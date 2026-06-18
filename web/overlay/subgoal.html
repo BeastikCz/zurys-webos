@@ -3,93 +3,143 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>ZURYS — SUB cíl overlay</title>
+<title>ZURYS — SUB sklizeň overlay</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   html, body { background: transparent; overflow: hidden; font-family: "Segoe UI", system-ui, Arial, sans-serif; }
-  :root { --g: #8df24a; --g2: #6fd92f; --gd: #4fae22; }
-  #wrap { padding: 18px; }
+  :root { --g: #9bee4f; --g2: #7fe03a; --gd: #4fae22; --gold: #f4b41a; --gold2: #ffd860; --gold-d: #d2820f; }
+  #wrap { padding: 20px; display: inline-block; }
   #wrap.hidden { display: none; }
 
-  .card {
-    position: relative; display: flex; flex-direction: column; gap: 16px;
-    max-width: 860px; padding: 26px 32px;
-    background: linear-gradient(180deg, rgba(8,12,6,.94), rgba(4,7,3,.96));
-    border: 2.5px solid var(--g); border-radius: 30px;
-    box-shadow: 0 0 0 1px rgba(141,242,74,.25), 0 0 40px rgba(141,242,74,.35), 0 18px 60px rgba(0,0,0,.6);
-    color: #fff;
+  .poster {
+    position: relative; width: 384px; padding: 26px 28px 24px; text-align: center; color: #fff;
+    background: radial-gradient(125% 80% at 50% 0%, #0e1708, #06090400 62%), #05070b;
+    border: 3px solid var(--g); border-radius: 26px;
+    box-shadow: 0 0 0 1px rgba(155,238,79,.25), 0 0 34px rgba(127,224,58,.45), 0 0 90px rgba(127,224,58,.16),
+                inset 0 0 60px rgba(0,0,0,.72);
+    transition: transform .22s cubic-bezier(.2,.8,.2,1);
   }
-  .card.done { box-shadow: 0 0 0 1px rgba(141,242,74,.4), 0 0 64px rgba(141,242,74,.6), 0 18px 60px rgba(0,0,0,.6); }
+  .poster.done { border-color: var(--gold2);
+    box-shadow: 0 0 0 1px rgba(255,216,96,.5), 0 0 50px rgba(255,216,96,.55), 0 0 120px rgba(127,224,58,.22),
+                inset 0 0 60px rgba(0,0,0,.72); }
 
-  .top { display: flex; align-items: center; gap: 22px; }
-  .mascot {
-    flex-shrink: 0; width: 104px; height: 104px; border-radius: 50%;
-    border: 3px solid var(--g); overflow: hidden;
-    background: #0a0f05 url('/sedlak.png') no-repeat 52% 17% / 224%;   /* ořez na hlavu/klobouk */
-    box-shadow: 0 0 22px rgba(141,242,74,.45);
+  .sprig { font-size: 24px; line-height: 1; margin-bottom: 4px; filter: drop-shadow(0 0 8px rgba(127,224,58,.55)); }
+  .title { font-size: 46px; font-weight: 900; letter-spacing: 1px; text-transform: uppercase; color: var(--g);
+    line-height: 1; text-shadow: 0 0 18px rgba(127,224,58,.55), 0 3px 12px rgba(0,0,0,.6); }
+  .subtitle { margin-top: 8px; font-size: 16px; font-weight: 700; letter-spacing: .4px; color: #9aa893;
+    display: flex; align-items: center; justify-content: center; gap: 10px; }
+  .subtitle::before, .subtitle::after { content: "🌿"; font-size: 12px; opacity: .85; }
+
+  .silo-wrap { margin: 22px auto 6px; width: 210px; }
+  .silo {
+    position: relative; width: 190px; height: 300px; margin: 0 auto;
+    border-radius: 95px 95px 14px 14px; overflow: hidden;
+    background: linear-gradient(105deg, #0b0f0a 0%, #18201400 40%), linear-gradient(180deg, #11160d, #0a0e08);
+    border: 5px solid #1c241a;
+    box-shadow: inset 0 0 0 2px rgba(255,255,255,.05), inset 0 -10px 30px rgba(0,0,0,.6), 0 14px 40px rgba(0,0,0,.5);
   }
-  .head { min-width: 0; }
-  .ttl { font-size: 40px; font-weight: 900; line-height: 1.04; letter-spacing: .5px; text-transform: uppercase; text-shadow: 0 3px 14px rgba(0,0,0,.6); }
-  .ttl .g { color: var(--g); }
-  .rew { margin-top: 12px; font-size: 19px; font-weight: 800; letter-spacing: .4px; text-transform: uppercase; color: #cfd6c8; display: flex; align-items: center; gap: 9px; }
-  .rew b { color: var(--g); }
+  .grain {
+    position: absolute; left: 0; right: 0; bottom: 0; height: 55%;
+    background:
+      radial-gradient(1.2px 1.2px at 20% 30%, rgba(255,255,255,.4), transparent 60%),
+      radial-gradient(1.2px 1.2px at 62% 52%, rgba(90,40,0,.35), transparent 60%),
+      radial-gradient(1.2px 1.2px at 82% 72%, rgba(255,255,255,.32), transparent 60%),
+      linear-gradient(180deg, var(--gold2) 0, var(--gold) 16%, var(--gold-d) 100%);
+    background-size: 13px 13px, 17px 17px, 15px 15px, auto;
+    box-shadow: inset 0 14px 22px rgba(255,255,255,.18), inset 0 -22px 34px rgba(120,60,0,.42);
+    transition: height 1s cubic-bezier(.2,.8,.2,1);
+  }
+  .grain::before {
+    content: ""; position: absolute; left: 0; right: 0; top: -12px; height: 15px;
+    background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='80' height='15' viewBox='0 0 80 15'%3E%3Cpath d='M0 8 Q20 0 40 8 T80 8 V15 H0 Z' fill='%23ffd860'/%3E%3C/svg%3E") repeat-x;
+    background-size: 80px 15px;
+  }
+  .gloss { position: absolute; inset: 0; pointer-events: none;
+    background:
+      radial-gradient(58% 36% at 34% 15%, rgba(255,255,255,.5), rgba(255,255,255,0) 70%),
+      linear-gradient(100deg, rgba(255,255,255,.13) 5%, transparent 24%); }
+  .ticks { position: absolute; top: 66px; right: 14px; bottom: 36px; width: 16px; pointer-events: none;
+    background: repeating-linear-gradient(180deg, rgba(255,255,255,.4) 0 1.5px, transparent 1.5px 12px);
+    -webkit-mask: linear-gradient(90deg, transparent, #000 55%); mask: linear-gradient(90deg, transparent, #000 55%); }
+  .ticks::before { content: ""; position: absolute; right: 0; top: 0; bottom: 0; width: 10px;
+    background: repeating-linear-gradient(180deg, rgba(255,255,255,.5) 0 1.5px, transparent 1.5px 60px); }
+  .band { position: absolute; top: 56px; bottom: 14px; width: 13px;
+    background: linear-gradient(90deg, #232b1d, #3c4a31 50%, #1f271a); box-shadow: inset 0 0 0 1px rgba(0,0,0,.4); }
+  .band-l { left: 0; border-radius: 0 7px 7px 0; }
+  .band-r { right: 0; border-radius: 7px 0 0 7px; }
+  .band i { position: absolute; left: 50%; width: 5px; height: 5px; margin-left: -2.5px; border-radius: 50%;
+    background: radial-gradient(circle at 35% 30%, #d6ecb6, #5b6b46 70%, #2c3622); }
+  .band i:nth-child(1) { top: 16px; } .band i:nth-child(2) { top: 50%; } .band i:nth-child(3) { bottom: 16px; }
 
-  .bar { position: relative; height: 50px; border-radius: 16px; background: #15170f;
-    box-shadow: inset 0 3px 10px rgba(0,0,0,.7), inset 0 0 0 1px rgba(255,255,255,.05); overflow: hidden; }
-  .fill { height: 100%; width: 0%; border-radius: 16px; transition: width .8s cubic-bezier(.2,.8,.2,1);
-    background-image: repeating-linear-gradient(45deg, var(--g) 0, var(--g) 16px, var(--g2) 16px, var(--g2) 32px);
-    background-size: 45px 45px; animation: slide 1s linear infinite; box-shadow: 0 0 22px rgba(141,242,74,.6); }
-  @keyframes slide { to { background-position: 45px 0; } }
-  .barnum { position: absolute; right: 22px; top: 50%; transform: translateY(-50%); z-index: 2;
-    font-size: 27px; font-weight: 900; font-variant-numeric: tabular-nums; text-shadow: 0 2px 8px rgba(0,0,0,.8); }
-  .barnum .now { color: var(--g); }
+  .base { width: 212px; height: 19px; margin: -3px auto 0; border-radius: 7px;
+    background: linear-gradient(180deg, #3c4a31, #19200f);
+    box-shadow: inset 0 2px 0 rgba(255,255,255,.12), 0 8px 18px rgba(0,0,0,.5); }
 
-  .foot { display: flex; align-items: center; gap: 12px; padding-top: 15px; border-top: 1px solid rgba(255,255,255,.1);
-    font-size: 18px; font-weight: 800; letter-spacing: .3px; text-transform: uppercase; color: #b9c2af; }
-  .foot .heart { color: var(--g); font-size: 20px; }
-  .foot .now { color: var(--g); }
-  .foot .sep { color: #5c6650; }
+  .count { margin-top: 16px; font-size: 64px; font-weight: 900; line-height: 1; letter-spacing: 1px;
+    font-variant-numeric: tabular-nums; display: flex; align-items: baseline; justify-content: center; gap: 8px; }
+  .count .now { color: var(--g); text-shadow: 0 0 22px rgba(127,224,58,.5); }
+  .count .slash { color: #5c6650; font-weight: 800; transform: skewX(-8deg); }
+  .count .tgt { color: #eef3e6; text-shadow: 0 0 16px rgba(255,255,255,.14); }
+
+  .footer { margin-top: 18px; padding: 12px 16px; border-radius: 14px;
+    border: 1.5px solid rgba(127,224,58,.55); background: rgba(127,224,58,.08);
+    font-size: 18px; font-weight: 800; color: #eef3e6;
+    display: flex; align-items: center; justify-content: center; gap: 8px; }
+  .footer .leaf { color: var(--g); font-size: 20px; filter: drop-shadow(0 0 6px rgba(127,224,58,.5)); }
+  .footer b { color: var(--g); font-weight: 900; }
 </style>
 </head>
 <body>
 <div id="wrap" class="hidden">
-  <div class="card" id="card">
-    <div class="top">
-      <div class="mascot"></div>
-      <div class="head">
-        <div class="ttl" id="ttl">Dnešní <span class="g">SUB cíl</span></div>
-        <div class="rew">🎁 Odměna <b id="rew">+0</b> sedláků gifterům z happy hour 🌾</div>
+  <div class="poster" id="poster">
+    <div class="sprig">🌿</div>
+    <div class="title">SUB SKLIZEŇ</div>
+    <div class="subtitle">naplňte silo společně</div>
+    <div class="silo-wrap">
+      <div class="silo">
+        <div class="grain" id="grain"></div>
+        <div class="gloss"></div>
+        <div class="ticks"></div>
+        <div class="band band-l"><i></i><i></i><i></i></div>
+        <div class="band band-r"><i></i><i></i><i></i></div>
       </div>
+      <div class="base"></div>
     </div>
-    <div class="bar"><div class="fill" id="fill"></div><div class="barnum"><span class="now" id="num">0</span> / <span id="tgt">0</span></div></div>
-    <div class="foot"><span class="heart">♥</span> <span class="now" id="num2">0</span>&nbsp;/&nbsp;<span id="tgt2">0</span> subů <span class="sep">·</span> <span id="msg">subněte a naplňte to společně!</span></div>
+    <div class="count"><span class="now" id="num">0</span><span class="slash">/</span><span class="tgt" id="tgt">0</span></div>
+    <div class="footer"><span class="leaf">🌿</span> <span><b id="rew">+0</b> sedláků pro HH giftery</span></div>
   </div>
 </div>
 <script>
-  // Čte stejné /api/sub-goal jako web → web i stream synced.
-  let last = -1;
+  // Náhled bez API: /overlay/subgoal.html?demo  (volitelně ?demo=12,20,300 = progress,target,reward)
+  function demoData() {
+    var p = new URLSearchParams(location.search);
+    if (!p.has("demo")) return null;
+    var v = (p.get("demo") || "").split(",").map(function (x) { return parseInt(x, 10); });
+    var prog = v[0] || 12, tgt = v[1] || 20, rew = (v[2] === 0 ? 0 : v[2] || 300);
+    return { enabled: true, progress: prog, target: tgt, reward: rew, done: prog >= tgt,
+             pct: Math.min(100, Math.round(prog * 100 / tgt)) };
+  }
+  var last = -1;
+  function paint(g) {
+    var wrap = document.getElementById("wrap");
+    if (!g || !g.enabled) { wrap.classList.add("hidden"); last = -1; return; }
+    wrap.classList.remove("hidden");
+    document.getElementById("grain").style.height = Math.max(6, g.pct || 0) + "%";
+    document.getElementById("num").textContent = g.progress;
+    document.getElementById("tgt").textContent = g.target;
+    document.getElementById("rew").textContent = "+" + (g.reward || 0).toLocaleString("cs-CZ");
+    document.getElementById("poster").classList.toggle("done", !!g.done);
+    if (last >= 0 && g.progress > last) {
+      var po = document.getElementById("poster");
+      po.style.transform = "scale(1.025)"; setTimeout(function () { po.style.transform = ""; }, 220);
+    }
+    last = g.progress;
+  }
   function poll() {
-    fetch("/api/sub-goal", { cache: "no-store" }).then(function (r) { return r.json(); }).then(function (g) {
-      var wrap = document.getElementById("wrap");
-      if (!g.enabled) { wrap.classList.add("hidden"); last = -1; return; }
-      wrap.classList.remove("hidden");
-      var card = document.getElementById("card");
-      document.getElementById("fill").style.width = (g.pct || 0) + "%";
-      document.getElementById("rew").textContent = "+" + (g.reward || 0).toLocaleString("cs-CZ");
-      document.getElementById("num").textContent = g.progress;
-      document.getElementById("num2").textContent = g.progress;
-      document.getElementById("tgt").textContent = g.target;
-      document.getElementById("tgt2").textContent = g.target;
-      document.getElementById("ttl").innerHTML = g.done
-        ? 'Dnešní <span class="g">SUB cíl</span> — <span class="g">SPLNĚNO!</span> 🎉'
-        : 'Dnešní <span class="g">SUB cíl</span>';
-      document.getElementById("msg").textContent = g.done
-        ? "rozdáno dnešním gifterům z happy hour! 🎁"
-        : "giftněte suby v happy hour a naplňte cíl! 🎁";
-      card.classList.toggle("done", !!g.done);
-      if (last >= 0 && g.progress > last) { card.style.transform = "scale(1.02)"; setTimeout(function () { card.style.transform = ""; }, 220); }
-      last = g.progress;
-    }).catch(function () {});
+    var d = demoData();
+    if (d) { paint(d); return; }
+    fetch("/api/sub-goal", { cache: "no-store" })
+      .then(function (r) { return r.json(); }).then(paint).catch(function () {});
   }
   poll();
   setInterval(poll, 4000);

@@ -1,0 +1,64 @@
+<svg width="300" height="410" viewBox="0 0 300 410" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="panel" x1="150" y1="0" x2="150" y2="410" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#071208" stop-opacity="0.94"/>
+      <stop offset="1" stop-color="#080906" stop-opacity="0.96"/>
+    </linearGradient>
+    <linearGradient id="grain" x1="69" y1="151" x2="214" y2="280" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFE27A"/>
+      <stop offset="0.45" stop-color="#FFD25A"/>
+      <stop offset="1" stop-color="#D99025"/>
+    </linearGradient>
+    <linearGradient id="shine" x1="80" y1="78" x2="214" y2="285" gradientUnits="userSpaceOnUse">
+      <stop stop-color="white" stop-opacity="0.35"/>
+      <stop offset="0.38" stop-color="white" stop-opacity="0.09"/>
+      <stop offset="1" stop-color="white" stop-opacity="0"/>
+    </linearGradient>
+    <filter id="panelGlow" x="-35" y="-35" width="370" height="480" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feFlood flood-opacity="0" result="BackgroundImageFix"/>
+      <feGaussianBlur in="SourceAlpha" stdDeviation="17"/>
+      <feOffset/>
+      <feComposite in2="SourceAlpha" operator="out"/>
+      <feColorMatrix type="matrix" values="0 0 0 0 0.553 0 0 0 0 0.949 0 0 0 0 0.290 0 0 0 0.26 0"/>
+      <feBlend mode="normal" in2="BackgroundImageFix" result="effect1_dropShadow"/>
+      <feBlend mode="normal" in="SourceGraphic" in2="effect1_dropShadow" result="shape"/>
+    </filter>
+    <filter id="grainGlow" x="37" y="114" width="226" height="204" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feGaussianBlur stdDeviation="10"/>
+    </filter>
+  </defs>
+
+  <g filter="url(#panelGlow)">
+    <rect x="2" y="2" width="296" height="406" rx="20" fill="url(#panel)"/>
+    <rect x="2" y="2" width="296" height="406" rx="20" stroke="#8DF24A" stroke-opacity="0.55" stroke-width="2"/>
+  </g>
+
+  <text x="24" y="41" fill="#8DF24A" font-family="Segoe UI, Arial, sans-serif" font-size="20" font-weight="900" letter-spacing="0.5">
+    SUB SKLIZEŇ
+  </text>
+  <text x="24" y="64" fill="#B8A98A" font-family="Segoe UI, Arial, sans-serif" font-size="13" font-weight="700">
+    naplňte silo společně
+  </text>
+
+  <g transform="translate(81 83)">
+    <rect x="0" y="0" width="138" height="210" rx="64" fill="#050906" fill-opacity="0.74"/>
+    <path d="M3 67C3 29.997 32.997 0 70 0C106.451 0 136 29.549 136 66V189C136 200.598 126.598 210 115 210H22C9.85 210 0 200.15 0 188V70C0 68.995 0.023 67.995 0.068 67H3Z" fill="#071008" stroke="white" stroke-opacity="0.18" stroke-width="3"/>
+    <path d="M2 86C25 77 47 78 69 88C93 99 113 97 136 87V189C136 200.598 126.598 210 115 210H22C9.85 210 0 200.15 0 188V87L2 86Z" fill="url(#grain)"/>
+    <path d="M2 86C25 77 47 78 69 88C93 99 113 97 136 87" stroke="#FFF0A6" stroke-opacity="0.65" stroke-width="3"/>
+    <path d="M18 143C43 132 62 137 82 147C100 156 117 154 136 145V189C136 200.598 126.598 210 115 210H22C9.85 210 0 200.15 0 188V153C6 150 12 147 18 143Z" fill="#C97818" opacity="0.24"/>
+    <ellipse cx="69" cy="112" rx="54" ry="30" fill="#FFD25A" opacity="0.22" filter="url(#grainGlow)"/>
+    <path d="M42 20C30 34 25 52 25 78V177" stroke="url(#shine)" stroke-width="14" stroke-linecap="round"/>
+    <path d="M103 19C113 34 118 53 118 78V177" stroke="white" stroke-opacity="0.08" stroke-width="6" stroke-linecap="round"/>
+  </g>
+
+  <g font-family="Segoe UI, Arial, sans-serif" text-anchor="middle">
+    <text x="150" y="335" fill="#8DF24A" font-size="38" font-weight="950">12</text>
+    <text x="201" y="335" fill="#FFF4D8" font-size="38" font-weight="950">/ 20</text>
+  </g>
+
+  <rect x="20" y="357" width="260" height="36" rx="10" fill="#8DF24A" fill-opacity="0.12"/>
+  <rect x="20.5" y="357.5" width="259" height="35" rx="9.5" stroke="#8DF24A" stroke-opacity="0.20"/>
+  <text x="150" y="380" fill="#DFFFD1" font-family="Segoe UI, Arial, sans-serif" font-size="15" font-weight="900" text-anchor="middle">
+    +300 sedláků pro HH giftery
+  </text>
+</svg>

@@ -1,0 +1,239 @@
+<!doctype html>
+<html lang="cs">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SUB Goal Overlay Concepts</title>
+<style>
+  * { box-sizing: border-box; }
+  :root {
+    --bg: #090b0f;
+    --panel: rgba(16, 14, 22, .92);
+    --line: rgba(255,255,255,.12);
+    --text: #fff4d8;
+    --muted: #b8a98a;
+    --gold: #ffd25a;
+    --green: #8df24a;
+    --purple: #9147ff;
+    --purple2: #c79cff;
+  }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    color: var(--text);
+    background:
+      radial-gradient(circle at 20% 15%, rgba(145,71,255,.20), transparent 32%),
+      radial-gradient(circle at 80% 25%, rgba(255,210,90,.16), transparent 28%),
+      linear-gradient(135deg, #07090d, #141007 52%, #07150d);
+    font-family: "Segoe UI", system-ui, Arial, sans-serif;
+  }
+  .page {
+    width: min(1180px, calc(100vw - 40px));
+    margin: 0 auto;
+    padding: 34px 0 52px;
+  }
+  h1 { margin: 0 0 6px; font-size: 30px; letter-spacing: .2px; }
+  .lead { margin: 0 0 26px; color: var(--muted); font-weight: 650; }
+  .grid { display: grid; grid-template-columns: 1fr; gap: 26px; }
+  .concept {
+    border: 1px solid rgba(255,210,90,.22);
+    background: rgba(0,0,0,.28);
+    border-radius: 14px;
+    padding: 16px;
+  }
+  .concept h2 {
+    margin: 0 0 12px;
+    font-size: 15px;
+    color: #f4d07a;
+    text-transform: uppercase;
+    letter-spacing: .08em;
+  }
+  .stage {
+    position: relative;
+    width: 960px;
+    max-width: 100%;
+    aspect-ratio: 16 / 9;
+    overflow: hidden;
+    border-radius: 10px;
+    background:
+      linear-gradient(rgba(255,255,255,.04) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,.04) 1px, transparent 1px),
+      radial-gradient(circle at 48% 42%, rgba(40,80,45,.65), transparent 35%),
+      linear-gradient(135deg, #13151b, #090806 62%, #101d12);
+    background-size: 40px 40px, 40px 40px, auto, auto;
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,.08);
+  }
+  .note { margin: 10px 0 0; color: var(--muted); font-size: 13px; line-height: 1.45; }
+  .overlay { position: absolute; left: 50%; transform: translateX(-50%); }
+  .num { font-variant-numeric: tabular-nums; }
+  .shine { position: absolute; inset: 0; pointer-events: none; background: linear-gradient(115deg, transparent 30%, rgba(255,255,255,.16), transparent 55%); transform: translateX(-70%); opacity: .45; }
+
+  /* 1 clean lower third */
+  .clean {
+    bottom: 36px;
+    width: 760px;
+    height: 96px;
+    display: grid;
+    grid-template-columns: 86px 1fr 180px;
+    align-items: center;
+    gap: 18px;
+    padding: 13px 18px;
+    border: 1px solid rgba(199,156,255,.55);
+    border-radius: 12px;
+    background: linear-gradient(180deg, rgba(16,13,25,.94), rgba(8,9,12,.90));
+    box-shadow: 0 0 0 1px rgba(145,71,255,.22), 0 16px 50px rgba(0,0,0,.55), 0 0 34px rgba(145,71,255,.28);
+  }
+  .clean .icon {
+    width: 66px; height: 66px; border-radius: 14px;
+    display: grid; place-items: center;
+    font-size: 34px;
+    background: linear-gradient(135deg, #6b2dff, #c79cff);
+    box-shadow: inset 0 2px 0 rgba(255,255,255,.32), 0 0 24px rgba(145,71,255,.42);
+  }
+  .clean .title { font-size: 14px; color: var(--purple2); font-weight: 900; letter-spacing: .12em; text-transform: uppercase; }
+  .clean .main { margin-top: 4px; font-size: 30px; font-weight: 950; line-height: 1; }
+  .clean .bar { margin-top: 10px; height: 9px; border-radius: 999px; overflow: hidden; background: rgba(255,255,255,.12); }
+  .clean .fill { width: 60%; height: 100%; background: linear-gradient(90deg, #9147ff, #ffd25a); box-shadow: 0 0 16px rgba(199,156,255,.7); }
+  .clean .reward { text-align: right; font-weight: 900; }
+  .clean .reward b { display: block; font-size: 27px; color: var(--gold); }
+  .clean .reward span { color: var(--muted); font-size: 12px; text-transform: uppercase; }
+
+  /* 2 hype train */
+  .hype {
+    top: 34px;
+    width: 680px;
+    padding: 18px 22px 20px;
+    border-radius: 18px;
+    background: linear-gradient(135deg, rgba(42,15,82,.94), rgba(12,7,16,.92));
+    border: 2px solid rgba(255,210,90,.72);
+    box-shadow: 0 0 46px rgba(145,71,255,.45), inset 0 0 28px rgba(255,210,90,.08);
+  }
+  .hype .top { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .hype .label { font-size: 15px; color: var(--gold); font-weight: 950; letter-spacing: .14em; text-transform: uppercase; }
+  .hype .big { margin-top: 7px; font-size: 44px; line-height: .95; font-weight: 950; text-shadow: 0 0 18px rgba(255,210,90,.32); }
+  .hype .pill { border-radius: 999px; padding: 7px 12px; font-size: 14px; font-weight: 950; background: rgba(255,210,90,.18); border: 1px solid rgba(255,210,90,.48); color: #ffe8a4; }
+  .hype .track { margin-top: 16px; height: 22px; border-radius: 999px; overflow: hidden; background: rgba(0,0,0,.42); box-shadow: inset 0 2px 8px rgba(0,0,0,.65); }
+  .hype .track i { display: block; height: 100%; width: 60%; border-radius: 999px; background: repeating-linear-gradient(45deg, #9147ff 0 18px, #c79cff 18px 36px); box-shadow: 0 0 18px rgba(199,156,255,.8); }
+
+  /* 3 farm silo */
+  .farm {
+    right: 34px;
+    bottom: 34px;
+    left: auto;
+    transform: none;
+    width: 300px;
+    height: 410px;
+    padding: 20px;
+    border-radius: 20px;
+    border: 2px solid rgba(141,242,74,.55);
+    background: linear-gradient(180deg, rgba(7,18,8,.92), rgba(8,9,6,.94));
+    box-shadow: 0 0 38px rgba(141,242,74,.24), 0 18px 55px rgba(0,0,0,.55);
+  }
+  .farm .ttl { font-size: 20px; font-weight: 950; text-transform: uppercase; color: var(--green); }
+  .farm .sub { margin-top: 4px; color: var(--muted); font-size: 13px; font-weight: 750; }
+  .silo {
+    position: relative;
+    margin: 20px auto 14px;
+    width: 138px; height: 210px;
+    border-radius: 65px 65px 18px 18px;
+    border: 3px solid rgba(255,255,255,.18);
+    background: rgba(0,0,0,.34);
+    overflow: hidden;
+  }
+  .grain { position: absolute; left: 0; right: 0; bottom: 0; height: 60%; background: linear-gradient(180deg, #ffd25a, #d99025); box-shadow: inset 0 12px 20px rgba(255,255,255,.16); }
+  .farm .count { text-align: center; font-size: 38px; font-weight: 950; }
+  .farm .count span { color: var(--green); }
+  .farm .reward { margin-top: 9px; padding: 10px; border-radius: 10px; text-align: center; font-weight: 900; background: rgba(141,242,74,.12); color: #dfffd1; }
+
+  /* 4 minimal */
+  .minimal {
+    top: 46px;
+    left: 46px;
+    transform: none;
+    width: 520px;
+    height: 74px;
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: center;
+    gap: 18px;
+    padding: 12px 16px;
+    border-left: 4px solid var(--purple);
+    background: rgba(5,7,10,.72);
+    backdrop-filter: blur(10px);
+    box-shadow: 0 16px 45px rgba(0,0,0,.42);
+  }
+  .minimal .label { color: var(--purple2); font-size: 13px; font-weight: 900; letter-spacing: .12em; text-transform: uppercase; }
+  .minimal .bar { margin-top: 8px; height: 5px; border-radius: 999px; background: rgba(255,255,255,.12); overflow: hidden; }
+  .minimal .bar span { display: block; width: 60%; height: 100%; background: var(--purple2); }
+  .minimal .score { font-size: 30px; font-weight: 950; }
+</style>
+</head>
+<body>
+  <main class="page">
+    <h1>SUB goal overlay - navrhy</h1>
+    <p class="lead">Staticke mockupy. Data: 12 / 20 subu, odmena +300 sedlaku, 3 HH gifteri.</p>
+
+    <div class="grid">
+      <section class="concept">
+        <h2>1. Clean Lower Third - doporucuju</h2>
+        <div class="stage">
+          <div class="overlay clean">
+            <div class="icon">💜</div>
+            <div>
+              <div class="title">Dnesni SUB cil</div>
+              <div class="main"><span class="num">12</span> / <span class="num">20</span> subu</div>
+              <div class="bar"><div class="fill"></div></div>
+            </div>
+            <div class="reward"><b>+300 🌾</b><span>HH gifteri</span></div>
+          </div>
+        </div>
+        <p class="note">Nejvic profi na stream: ciste, nizke, dobre citelne, nerusi hru. Idealni jako default.</p>
+      </section>
+
+      <section class="concept">
+        <h2>2. Hype Sub Train</h2>
+        <div class="stage">
+          <div class="overlay hype">
+            <div class="top">
+              <div class="label">SUB TRAIN</div>
+              <div class="pill">3 HH gifteri</div>
+            </div>
+            <div class="big"><span class="num">12</span>/<span class="num">20</span> SUBS</div>
+            <div class="track"><i></i></div>
+            <div class="shine"></div>
+          </div>
+        </div>
+        <p class="note">Vic hype, lepsi na eventy/happy hour. Silne sviti, hodne pritahuje oko.</p>
+      </section>
+
+      <section class="concept">
+        <h2>3. Farm Silo</h2>
+        <div class="stage">
+          <div class="overlay farm">
+            <div class="ttl">SUB sklizen</div>
+            <div class="sub">naplnte silo spolecne</div>
+            <div class="silo"><div class="grain"></div></div>
+            <div class="count"><span>12</span> / 20</div>
+            <div class="reward">+300 sedlaku pro HH giftery</div>
+          </div>
+        </div>
+        <p class="note">Nejvic tematicke k sedlakum. Zabavne, ale zabere vic mista na obraze.</p>
+      </section>
+
+      <section class="concept">
+        <h2>4. Minimal Pro</h2>
+        <div class="stage">
+          <div class="overlay minimal">
+            <div>
+              <div class="label">SUB GOAL - +300 HH gifters</div>
+              <div class="bar"><span></span></div>
+            </div>
+            <div class="score"><span class="num">12</span>/<span class="num">20</span></div>
+          </div>
+        </div>
+        <p class="note">Nejcistsi a nejmin rusivy. Hodne esport/studio styl, mene farm vibe.</p>
+      </section>
+    </div>
+  </main>
+</body>
+</html>
