@@ -170,6 +170,34 @@ try:
 finally:
     _lr.close()
 
+# Jednorazove: Exchange/dary omylem pridavaly XP do earned_total (a tim i Battle Pass).
+# Body zustavaji, opravuje se jen XP/level progress. Idempotentni + zaloha pred upravou.
+_gx = get_conn()
+try:
+    if not get_setting(_gx, "gift_xp_repair_v1", ""):
+        _gx.execute("CREATE TABLE IF NOT EXISTS gift_xp_repair_backup ("
+                    "user_id INTEGER PRIMARY KEY, earned_total_before INTEGER NOT NULL, "
+                    "gift_xp INTEGER NOT NULL, created_at TEXT NOT NULL)")
+        _gx.execute(
+            "INSERT OR REPLACE INTO gift_xp_repair_backup "
+            "(user_id, earned_total_before, gift_xp, created_at) "
+            "SELECT u.id, COALESCE(u.earned_total,0), COALESCE(g.gift_xp,0), ? "
+            "FROM users u JOIN ("
+            "  SELECT user_id, SUM(change) AS gift_xp FROM points_log "
+            "  WHERE change > 0 AND reason LIKE 'Dar od %' GROUP BY user_id"
+            ") g ON g.user_id = u.id",
+            (now_iso(),))
+        _gx.execute(
+            "UPDATE users SET earned_total = MAX(0, COALESCE(earned_total,0) - COALESCE(("
+            "  SELECT SUM(change) FROM points_log "
+            "  WHERE points_log.user_id = users.id AND change > 0 AND reason LIKE 'Dar od %'"
+            "),0))")
+        set_setting(_gx, "gift_xp_repair_v1", "done")
+        _gx.commit()
+        print("[xp] gift XP repair hotov - Dar od se nepocita do earned_total")
+finally:
+    _gx.close()
+
 # Jednorázově: import ručně dodaných tiketů do tomboly Navaja (ghost účty bez Kicku).
 # Idempotentní (flag navaja_import_v1) + plně vratné (navaja_import.undo). Viz modul.
 _nv = get_conn()

@@ -1833,7 +1833,7 @@ def gift_request_approve(rid: int, request: Request,
     rcp = conn.execute("SELECT username FROM users WHERE id = ?", (g["to_user_id"],)).fetchone()
     if not frm or not rcp:
         raise HTTPException(status_code=400, detail="Účet odesílatele nebo příjemce už neexistuje.")
-    add_points(conn, g["to_user_id"], g["amount"], f"Dar od {frm['username']} 🎁")
+    add_points(conn, g["to_user_id"], g["amount"], f"Dar od {frm['username']} 🎁", xp=False)
     # escrow řádek přejmenujeme na KANONICKÝ tvar → funnel detektor i přehled darů ho teď započítají
     if g["escrow_log_id"]:
         conn.execute("UPDATE points_log SET reason = ? WHERE id = ?",

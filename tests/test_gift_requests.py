@@ -57,6 +57,15 @@ def _points(uid):
         conn.close()
 
 
+def _earned(uid):
+    from app.db import get_conn
+    conn = get_conn()
+    try:
+        return conn.execute("SELECT earned_total FROM users WHERE id=?", (uid,)).fetchone()["earned_total"]
+    finally:
+        conn.close()
+
+
 def _reason(log_id):
     from app.db import get_conn
     conn = get_conn()
@@ -109,6 +118,7 @@ def test_approve_moves_points_and_canonicalizes(client):
     ap = client.post(f"/api/admin/gift-requests/{gr['id']}/approve", headers=_hdr(a_tok))
     assert ap.status_code == 200, ap.text
     assert _points(r_id) == 1500, "příjemce má dostat body po schválení"
+    assert _earned(r_id) == 0, "dar nesmi pridat XP do levelu/Battle Passu"
     assert _points(s_id) == 3500, "odesílatel zůstává odečtený (escrow se nevrací)"
     assert _reason(gr["escrow_log_id"]) == f"Dar pro {r_name} 🎁", "escrow řádek se má kanonizovat"
     # druhé rozhodnutí už nesmí projít
