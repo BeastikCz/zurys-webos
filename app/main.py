@@ -128,11 +128,27 @@ try:
 finally:
     _ob.close()
 
+
+# Data-level pojistka pro JEDNORÁZOVÉ migrace níže. Normálně je hlídá flag v app_settings
+# (get_setting). Kdyby se flag ZTRATIL (restore DB ze starší zálohy, wipe/restore app_settings),
+# migrace by se spustila ZNOVU a podruhé odečetla earned_total / přepsala zálohu / znovu vynulovala
+# level. Tahle funkce to pozná přímo z DAT: když cílová záloha už má řádky, migrace na těchto datech
+# proběhla → přeskoč ji i bez flagu. (marker_table je vždy literál z kódu, ne vstup → bez injection.)
+def _migr_done(conn, marker_table: str) -> bool:
+    if not conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?",
+                        (marker_table,)).fetchone():
+        return False                                  # tabulka ještě neexistuje → migrace neproběhla
+    return conn.execute(f"SELECT 1 FROM {marker_table} LIMIT 1").fetchone() is not None
+
+
 # Jednorázově: dopočítej earned_total (lifetime nafarmeno) = součet KLADNÝCH points_log.
 # → veteráni rovnou dostanou level podle historie. Aditivní, žádná data se nemažou.
+# Pojistka: běží těsně PŘED level_reset_v1; když už level_reset_backup existuje (reset proběhl),
+# proběhl i tenhle backfill → po ztrátě flagu ho NEPOUŠTĚJ znovu (je to ABSOLUTNÍ přepis – vrátil by
+# earned_total zpět na lifetime součet a zničil reset + gift/BP opravy + opravu over-deduction).
 _xp = get_conn()
 try:
-    if not get_setting(_xp, "earned_total_backfill_v1", ""):
+    if not get_setting(_xp, "earned_total_backfill_v1", "") and not _migr_done(_xp, "level_reset_backup"):
         _xp.execute(
             "UPDATE users SET earned_total = COALESCE("
             "(SELECT SUM(change) FROM points_log WHERE points_log.user_id = users.id AND change > 0), 0)")
@@ -149,11 +165,12 @@ finally:
 # i changelog hlášku hráčům, ať je jim jasné proč jim spadl level.
 _lr = get_conn()
 try:
-    if not get_setting(_lr, "level_reset_v1", ""):
+    if not get_setting(_lr, "level_reset_v1", "") and not _migr_done(_lr, "level_reset_backup"):
         from .db import local_date
         _lr.execute("CREATE TABLE IF NOT EXISTS level_reset_backup ("
                     "user_id INTEGER PRIMARY KEY, earned_total INTEGER NOT NULL)")
-        _lr.execute("INSERT OR REPLACE INTO level_reset_backup (user_id, earned_total) "
+        # OR IGNORE (ne REPLACE): zálohu pravého PŘED-reset stavu nikdy nepřepiš už-resetovanou hodnotou.
+        _lr.execute("INSERT OR IGNORE INTO level_reset_backup (user_id, earned_total) "
                     "SELECT id, earned_total FROM users")
         _lr.execute("UPDATE users SET earned_total = 0")
         _lr.execute("UPDATE battlepass SET baseline = 0 WHERE season = ?", (local_date()[:7],))
@@ -174,12 +191,12 @@ finally:
 # Body zustavaji, opravuje se jen XP/level progress. Idempotentni + zaloha pred upravou.
 _gx = get_conn()
 try:
-    if not get_setting(_gx, "gift_xp_repair_v1", ""):
+    if not get_setting(_gx, "gift_xp_repair_v1", "") and not _migr_done(_gx, "gift_xp_repair_backup"):
         _gx.execute("CREATE TABLE IF NOT EXISTS gift_xp_repair_backup ("
                     "user_id INTEGER PRIMARY KEY, earned_total_before INTEGER NOT NULL, "
                     "gift_xp INTEGER NOT NULL, created_at TEXT NOT NULL)")
         _gx.execute(
-            "INSERT OR REPLACE INTO gift_xp_repair_backup "
+            "INSERT OR IGNORE INTO gift_xp_repair_backup "
             "(user_id, earned_total_before, gift_xp, created_at) "
             "SELECT u.id, COALESCE(u.earned_total,0), COALESCE(g.gift_xp,0), ? "
             "FROM users u JOIN ("
@@ -202,12 +219,12 @@ finally:
 # Body z claimu zustavaji, opravuje se jen XP omylem pridane pres earned_total.
 _bpx = get_conn()
 try:
-    if not get_setting(_bpx, "battlepass_reward_xp_repair_v1", ""):
+    if not get_setting(_bpx, "battlepass_reward_xp_repair_v1", "") and not _migr_done(_bpx, "battlepass_xp_repair_backup"):
         _bpx.execute("CREATE TABLE IF NOT EXISTS battlepass_xp_repair_backup ("
                      "user_id INTEGER PRIMARY KEY, earned_total_before INTEGER NOT NULL, "
                      "bp_xp INTEGER NOT NULL, created_at TEXT NOT NULL)")
         _bpx.execute(
-            "INSERT OR REPLACE INTO battlepass_xp_repair_backup "
+            "INSERT OR IGNORE INTO battlepass_xp_repair_backup "
             "(user_id, earned_total_before, bp_xp, created_at) "
             "SELECT u.id, COALESCE(u.earned_total,0), COALESCE(b.bp_xp,0), ? "
             "FROM users u JOIN ("
