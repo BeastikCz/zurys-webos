@@ -30,7 +30,14 @@
     display: flex; align-items: center; justify-content: center; gap: 10px; }
   .subtitle::before, .subtitle::after { content: "🌿"; font-size: 12px; opacity: .85; }
 
-  .silo-wrap { margin: 22px auto 6px; width: 210px; }
+  .tierchip { display: inline-block; margin-top: 12px; padding: 5px 18px; border-radius: 999px;
+    font-size: 17px; font-weight: 900; letter-spacing: 1.2px; text-transform: uppercase; color: #1a1200;
+    background: linear-gradient(180deg, var(--gold2), var(--gold-d));
+    box-shadow: 0 0 18px rgba(244,180,26,.5), inset 0 1px 0 rgba(255,255,255,.45); }
+  .poster.done .tierchip { background: linear-gradient(180deg, #fff0bf, var(--gold));
+    box-shadow: 0 0 26px rgba(255,216,96,.7), inset 0 1px 0 rgba(255,255,255,.6); }
+
+  .silo-wrap { margin: 18px auto 6px; width: 210px; }
   .silo {
     position: relative; width: 190px; height: 300px; margin: 0 auto;
     border-radius: 95px 95px 14px 14px; overflow: hidden;
@@ -95,6 +102,7 @@
     <div class="sprig">🌿</div>
     <div class="title">SUB SKLIZEŇ</div>
     <div class="subtitle">naplňte silo společně</div>
+    <div class="tierchip" id="tierchip">TIER 1</div>
     <div class="silo-wrap">
       <div class="silo">
         <div class="grain" id="grain"></div>
@@ -106,18 +114,18 @@
       <div class="base"></div>
     </div>
     <div class="count"><span class="now" id="num">0</span><span class="slash">/</span><span class="tgt" id="tgt">0</span></div>
-    <div class="footer"><span class="leaf">🌿</span> <span><b id="rew">+0</b> sedláků pro HH giftery</span></div>
+    <div class="footer"><span class="leaf">🌿</span> <span><b id="rew">+0</b> sedláků každému gifterovi</span></div>
   </div>
 </div>
 <script>
-  // Náhled bez API: /overlay/subgoal.html?demo  (volitelně ?demo=12,20,300 = progress,target,reward)
+  // Náhled bez API: /overlay/subgoal.html?demo  (volitelně ?demo=12,20,2000,1 = progress,target,reward,hotových_tierů)
   function demoData() {
     var p = new URLSearchParams(location.search);
     if (!p.has("demo")) return null;
     var v = (p.get("demo") || "").split(",").map(function (x) { return parseInt(x, 10); });
-    var prog = v[0] || 12, tgt = v[1] || 20, rew = (v[2] === 0 ? 0 : v[2] || 300);
-    return { enabled: true, progress: prog, target: tgt, reward: rew, done: prog >= tgt,
-             pct: Math.min(100, Math.round(prog * 100 / tgt)) };
+    var prog = v[0] || 12, tgt = v[1] || 20, rew = (v[2] === 0 ? 0 : v[2] || 2000), tier = v[3] || 1;
+    return { enabled: true, progress: prog, target: tgt, reward: rew, tier: tier, tier_max: 10,
+             maxed: false, done: false, pct: Math.min(100, Math.round(prog * 100 / tgt)) };
   }
   var last = -1;
   function paint(g) {
@@ -128,7 +136,11 @@
     document.getElementById("num").textContent = g.progress;
     document.getElementById("tgt").textContent = g.target;
     document.getElementById("rew").textContent = "+" + (g.reward || 0).toLocaleString("cs-CZ");
-    document.getElementById("poster").classList.toggle("done", !!g.done);
+    // tier chip: ukazuje tier, KTERÝ se právě plní (= hotových+1), nebo MAX při dosažení stropu
+    var tier = g.tier || 0;
+    var nextT = g.maxed ? (g.tier_max || tier) : tier + 1;
+    document.getElementById("tierchip").textContent = g.maxed ? "MAX TIER 🏆" : "TIER " + nextT;
+    document.getElementById("poster").classList.toggle("done", !!g.maxed);
     if (last >= 0 && g.progress > last) {
       var po = document.getElementById("poster");
       po.style.transform = "scale(1.025)"; setTimeout(function () { po.style.transform = ""; }, 220);
