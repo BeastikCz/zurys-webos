@@ -2304,17 +2304,12 @@ def ban_user(user_id: int, data: BanIn, request: Request,
         "SELECT DISTINCT fp_hash FROM client_signals WHERE user_id = ? AND fp_hash IS NOT NULL", (user_id,))]
     if data.banned:
         conn.execute("DELETE FROM sessions WHERE user_id = ?", (user_id,))  # odhlásí
-        # Ban i zařízení (aby se alt ze stejného prohlížeče zabanoval sám) – ALE jen u otisku, který
-        # NEsdílí moc účtů. Otisk je slabý (model+prohlížeč+jazyk), takže sdílený = nejspíš různí lidé
-        # se stejným mobilem, ne alty → banovat takový otisk = sestřelit nevinné (false positive).
-        for fp in fps:
-            shared = conn.execute(
-                "SELECT COUNT(DISTINCT user_id) AS c FROM client_signals WHERE fp_hash = ?", (fp,)).fetchone()["c"]
-            if shared <= FP_DEVICE_BAN_MAX_SHARED:
-                conn.execute("INSERT OR IGNORE INTO fingerprint_bans (fp_hash, reason, created_at) VALUES (?, ?, ?)",
-                             (fp, (data.reason or "")[:100], now_iso()))
+        # Ban je JEN na tento účet, NE na zařízení (fingerprint). Slabý otisk (model+prohlížeč+jazyk)
+        # sdílí i cizí lidi / sourozenci / spolubydlící → device-ban střílel nevinné (false positive).
+        # Zrušeno na žádost (2026-06-18): fingerprint_bans se už neplní. (Enforce zůstává off; tabulka
+        # zůstává jen pro případnou budoucí PŘESNĚJŠÍ fingerprint logiku.)
     else:
-        for fp in fps:  # odban uvolní i zařízení
+        for fp in fps:  # odban pro jistotu uvolní i případný starý device-ban
             conn.execute("DELETE FROM fingerprint_bans WHERE fp_hash = ?", (fp,))
     record_audit(conn, admin, request, "user.ban" if data.banned else "user.unban",
                  f"#{user_id} {u['username']}", (data.reason or "")[:200])

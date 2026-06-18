@@ -1,8 +1,7 @@
-"""Ban účtu device-banuje otisk JEN když ho nesdílí moc účtů (slabý/sdílený otisk = false positive).
-
-Bug, který tohle hlídá: otisk zařízení je slabý (model+prohlížeč+jazyk), takže ho sdílí i různí
-lidé na stejném mobilu. Banování účtu dřív přidalo jeho otisk na blacklist zařízení → tím se
-automaticky zabanoval každý se stejným otiskem (i nevinní). Nově se sdílený otisk přeskočí.
+"""Ban účtu je JEN na účet – NEdevice-banuje otisk (zrušeno 2026-06-18). Slabý otisk
+(model+prohlížeč+jazyk) sdílí i různí lidé / sourozenci na stejném zařízení, takže device-ban
+střílel nevinné (false positive). Nově se `fingerprint_bans` z banu vůbec neplní; odban pro
+jistotu pořád uvolní i případný STARÝ device-ban (legacy cleanup).
 
     .venv/Scripts/python.exe -m pytest tests/test_ban_device_fp.py -v
 """
@@ -65,34 +64,40 @@ def _hdr(t):
     return {"Cookie": f"{SESSION_COOKIE}={t}"}
 
 
-def test_shared_fingerprint_is_not_device_banned(client):
-    """3 účty sdílí otisk → ban jednoho NESMÍ otisk dát na blacklist zařízení."""
-    a, b, c = _mkuser(), _mkuser(), _mkuser()
-    fp = "shared_" + secrets.token_hex(8)
-    for u in (a, b, c):
-        _sig(u, fp)
-    r = client.post(f"/api/admin/users/{a}/ban", json={"banned": True, "reason": "test"}, headers=_hdr(_login("admin")))
-    assert r.status_code == 200, r.text
-    assert not _fp_banned(fp), "sdílený otisk (3 účty) se NESMÍ device-banovat (false positive)"
-
-
-def test_unique_fingerprint_is_device_banned(client):
-    """Unikátní otisk (1 účet) se device-banuje normálně (legit anti-alt)."""
+def test_ban_does_not_device_ban_unique_fp(client):
+    """Ban účtu s UNIKÁTNÍM otiskem (1 účet) už NEpřidá otisk na blacklist – ban je jen na účet."""
     d = _mkuser()
     fp = "uniq_" + secrets.token_hex(8)
     _sig(d, fp)
     r = client.post(f"/api/admin/users/{d}/ban", json={"banned": True, "reason": "test"}, headers=_hdr(_login("admin")))
     assert r.status_code == 200, r.text
-    assert _fp_banned(fp), "unikátní otisk (1 účet) se má device-banovat"
+    assert not _fp_banned(fp), "ban už NESMÍ device-banovat (jen účet)"
 
 
-def test_unban_lifts_device_ban(client):
-    """Odban účtu uvolní i otisk ze zařízení-banu."""
+def test_ban_does_not_device_ban_shared_fp(client):
+    """Ani sdílený otisk se nedevice-banuje (nikdy se neplní)."""
+    a, b = _mkuser(), _mkuser()
+    fp = "shared_" + secrets.token_hex(8)
+    _sig(a, fp)
+    _sig(b, fp)
+    r = client.post(f"/api/admin/users/{a}/ban", json={"banned": True, "reason": "test"}, headers=_hdr(_login("admin")))
+    assert r.status_code == 200, r.text
+    assert not _fp_banned(fp)
+
+
+def test_unban_clears_legacy_device_ban(client):
+    """Odban pořád uvolní případný STARÝ device-ban v tabulce (legacy cleanup)."""
     d = _mkuser()
-    fp = "uniq2_" + secrets.token_hex(8)
+    fp = "legacy_" + secrets.token_hex(8)
     _sig(d, fp)
-    tok = _login("admin")
-    client.post(f"/api/admin/users/{d}/ban", json={"banned": True, "reason": "x"}, headers=_hdr(tok))
+    conn = get_conn()
+    try:
+        conn.execute("INSERT OR IGNORE INTO fingerprint_bans (fp_hash, reason, created_at) VALUES (?,?,?)",
+                     (fp, "legacy", now_iso()))
+        conn.execute("UPDATE users SET banned=1 WHERE id=?", (d,))
+        conn.commit()
+    finally:
+        conn.close()
     assert _fp_banned(fp)
-    client.post(f"/api/admin/users/{d}/ban", json={"banned": False, "reason": "x"}, headers=_hdr(tok))
-    assert not _fp_banned(fp), "odban má otisk uvolnit"
+    client.post(f"/api/admin/users/{d}/ban", json={"banned": False, "reason": "x"}, headers=_hdr(_login("admin")))
+    assert not _fp_banned(fp), "odban má uvolnit i starý device-ban"
