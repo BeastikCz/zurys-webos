@@ -13,9 +13,10 @@ from .db import now_iso
 N_PLOTS = 4
 SEED_PCT = 0.75       # cena semínka = 75 % výnosu; zahrádka je fun bonus, ne hlavní faucet
 SEED_PCT_SUB = 0.65   # sub perk: lepší marže, ale pořád bez tisku sedláků
-PEST_CHANCE = 0.35    # šance že plodina chytí škůdce (riziko – zahrádka není 100% jistý plus)
+PEST_CHANCE = 0.70    # base pest chance; garden decor reduces this down to PEST_MIN_CHANCE
 PEST_RESCUE_PCT = 0.20  # záchrana před škůdci = 20 % výnosu (sink). Nezachráníš → sklizeň jen poloviční.
 PEST_PENALTY = 0.5    # neošetření škůdci sežerou půlku úrody
+PEST_MIN_CHANCE = 0.25
 
 # (key, ikona, název, hodiny růstu, výnos při sklizni). Cena semínka = % z výnosu (počítá se dle subu).
 CROPS = [
@@ -25,6 +26,18 @@ CROPS = [
     {"key": "klas",     "icon": "🌾", "name": "Zlatý klas",  "hours": 24, "reward": 1400},
 ]
 _BY_KEY = {c["key"]: c for c in CROPS}
+
+DECOR_PEST_REDUCTION = {
+    "sunflower": 0.04,
+    "tree": 0.05,
+    "well": 0.06,
+    "tractor": 0.07,
+    "house": 0.08,
+    "rainbow": 0.10,
+    "scarecrow": 0.12,
+    "fountain": 0.14,
+    "manor": 0.18,
+}
 
 
 def _is_sub(user) -> bool:
@@ -44,12 +57,19 @@ def _rescue_cost(crop) -> int:
     return max(5, round(crop["reward"] * PEST_RESCUE_PCT))
 
 
-def _crops_public(is_sub: bool) -> list:
+def _pest_chance(conn, user_id: int) -> float:
+    owned = [r["decor_key"] for r in conn.execute(
+        "SELECT decor_key FROM garden_decor WHERE user_id = ?", (user_id,))]
+    reduction = sum(DECOR_PEST_REDUCTION.get(k, 0.0) for k in owned)
+    return max(PEST_MIN_CHANCE, PEST_CHANCE - reduction)
+
+
+def _crops_public(is_sub: bool, pest_chance: float) -> list:
     out = []
     for c in CROPS:
         seed = _seed_cost(c, is_sub)
-        expected_no_rescue = round(c["reward"] * ((1 - PEST_CHANCE) + PEST_CHANCE * PEST_PENALTY) - seed)
-        expected_rescue = round(c["reward"] - seed - (_rescue_cost(c) * PEST_CHANCE))
+        expected_no_rescue = round(c["reward"] * ((1 - pest_chance) + pest_chance * PEST_PENALTY) - seed)
+        expected_rescue = round(c["reward"] - seed - (_rescue_cost(c) * pest_chance))
         out.append({"key": c["key"], "icon": c["icon"], "name": c["name"], "hours": c["hours"],
                     "reward": c["reward"], "cost": seed, "net": c["reward"] - seed,
                     "expected_no_rescue": expected_no_rescue,
@@ -59,6 +79,7 @@ def _crops_public(is_sub: bool) -> list:
 
 def status(conn, user) -> dict:
     now = datetime.now(timezone.utc)
+    pest_chance = _pest_chance(conn, user["id"])
     rows = {r["plot"]: r for r in conn.execute(
         "SELECT * FROM garden WHERE user_id = ?", (user["id"],))}
     plots = []
@@ -75,9 +96,12 @@ def status(conn, user) -> dict:
                       "name": c.get("name"), "reward": c.get("reward"),
                       "ready": ready, "seconds_left": secs,
                       "pest": pest, "rescue_cost": _rescue_cost(c) if pest else 0})
-    return {"plots": plots, "crops": _crops_public(_is_sub(user)), "n_plots": N_PLOTS,
+    return {"plots": plots, "crops": _crops_public(_is_sub(user), pest_chance), "n_plots": N_PLOTS,
             "sub": _is_sub(user), "seed_pct": int(SEED_PCT * 100), "seed_pct_sub": int(SEED_PCT_SUB * 100),
-            "pest_chance": int(PEST_CHANCE * 100), "rescue_pct": int(PEST_RESCUE_PCT * 100)}
+            "pest_chance": int(round(pest_chance * 100)),
+            "pest_base_chance": int(PEST_CHANCE * 100),
+            "pest_min_chance": int(PEST_MIN_CHANCE * 100),
+            "rescue_pct": int(PEST_RESCUE_PCT * 100)}
 
 
 def plant(conn, user, plot: int, crop_key: str) -> dict:
@@ -93,7 +117,7 @@ def plant(conn, user, plot: int, crop_key: str) -> dict:
     if not try_debit(conn, user["id"], seed, f"Zasazení: {c['name']} 🌱"):
         return {"ok": False, "error": f"Nemáš dost sedláků (semínko {seed})."}
     now = datetime.now(timezone.utc)
-    pest = 1 if random.random() < PEST_CHANCE else 0   # náhodně škůdci → riziko (zaplať záchranu, nebo půlka sklizně)
+    pest = 1 if random.random() < _pest_chance(conn, user["id"]) else 0   # decor reduces pest risk
     conn.execute("INSERT INTO garden (user_id, plot, crop, planted_at, ready_at, pest) VALUES (?,?,?,?,?,?)",
                  (user["id"], plot, crop_key, now.isoformat(), (now + timedelta(hours=c["hours"])).isoformat(), pest))
     conn.commit()
@@ -157,8 +181,15 @@ def decor_status(conn, user) -> dict:
     owned = {r["decor_key"] for r in conn.execute(
         "SELECT decor_key FROM garden_decor WHERE user_id = ?", (user["id"],))}
     items = [{"key": d["key"], "icon": d["icon"], "name": d["name"], "cost": d["cost"],
-              "owned": d["key"] in owned} for d in DECOR]
-    return {"items": items, "owned_icons": [d["icon"] for d in DECOR if d["key"] in owned]}
+              "owned": d["key"] in owned,
+              "pest_reduction": int(round(DECOR_PEST_REDUCTION.get(d["key"], 0.0) * 100))}
+             for d in DECOR]
+    reduction = sum(DECOR_PEST_REDUCTION.get(k, 0.0) for k in owned)
+    return {"items": items, "owned_icons": [d["icon"] for d in DECOR if d["key"] in owned],
+            "pest_reduction": int(round(reduction * 100)),
+            "pest_chance": int(round(_pest_chance(conn, user["id"]) * 100)),
+            "pest_base_chance": int(PEST_CHANCE * 100),
+            "pest_min_chance": int(PEST_MIN_CHANCE * 100)}
 
 
 def buy_decor(conn, user, key: str) -> dict:
