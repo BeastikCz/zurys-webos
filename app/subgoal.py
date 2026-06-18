@@ -114,28 +114,39 @@ def _announce_async(text: str) -> None:
 
 
 def _fire(conn, cfg) -> None:
-    """Atomicky claimni výplatu (jen jednou za den) a rozdej JEN dnešním gifterům z happy hour."""
-    cur = conn.execute(
-        "UPDATE app_settings SET value = '1', updated_at = ? WHERE key = 'subgoal_done' AND value != '1'",
-        (now_iso(),))
-    if cur.rowcount == 0:
-        return                                   # už vyplaceno dnes (race)
+    """Cíl je splněný → vyplať KAŽDÉMU dnešnímu HH gifterovi, který ještě nedostal (paid=0).
+    Idempotentní PER-GIFTER (atomický claim paid 0→1) → každý HH gifter dostane odměnu právě jednou,
+    ať giftnul PŘED i PO naplnění lišty. Žádný forfeit ani lock-out: když cíl naplní jen gifty MIMO
+    happy hour (0 eligible), prostě se zatím nic nevyplatí a `done` se nenastaví – vyplatí se, jakmile
+    dorazí HH gifter (volá se z ticku při každém gift eventu, dokud progress >= target).
+    subgoal_done = jen pro UI/oznámení (1×/den, při prvním reálném vyplacení)."""
     today, reward = _today(), cfg["reward"]
-    ids = [r["user_id"] for r in conn.execute(
-        "SELECT user_id FROM subgoal_gifters WHERE day = ? AND hh_subs > 0", (today,)).fetchall()]
-    if ids and reward > 0:
-        qm = ",".join("?" * len(ids))
-        conn.execute(f"UPDATE users SET points = points + ? WHERE id IN ({qm})", [reward, *ids])
+    eligible = [r["user_id"] for r in conn.execute(
+        "SELECT user_id FROM subgoal_gifters WHERE day = ? AND hh_subs > 0 AND paid = 0", (today,)).fetchall()]
+    newly = []
+    for uid in eligible:                             # atomicky zaber každého → anti-double-pay i při souběhu
+        if conn.execute("UPDATE subgoal_gifters SET paid = 1 WHERE day = ? AND user_id = ? AND paid = 0",
+                        (today, uid)).rowcount == 1:
+            newly.append(uid)
+    if newly and reward > 0:
+        qm = ",".join("?" * len(newly))
+        conn.execute(f"UPDATE users SET points = points + ? WHERE id IN ({qm})", [reward, *newly])
         conn.executemany(
             "INSERT INTO points_log (user_id, change, reason, created_at) "
             "VALUES (?, ?, 'Sub cíl komunity 🟣🎁', ?)",
-            [(uid, reward, now_iso()) for uid in ids])
-    n = len(ids)
+            [(uid, reward, now_iso()) for uid in newly])
+        from .deps import notify
+        for uid in newly:
+            notify(conn, uid, "🟣", "Sub cíl splněn!",
+                   f"Komunita naplnila SUB cíl – bereš +{reward} sedláků za gift sub v happy hour! 🎁", "#/profile")
+    # „done" + oznámení do chatu jen JEDNOU za den – při prvním reálném vyplacení (aspoň 1 HH gifter)
+    first_done = bool(newly) and conn.execute(
+        "UPDATE app_settings SET value = '1', updated_at = ? WHERE key = 'subgoal_done' AND value != '1'",
+        (now_iso(),)).rowcount == 1
     conn.commit()
-    if n > 0:
+    if first_done:
+        n = conn.execute("SELECT COUNT(*) c FROM subgoal_gifters WHERE day = ? AND hh_subs > 0 AND paid = 1",
+                         (today,)).fetchone()["c"]
         who = "gifter" if n == 1 else "gifterů"
         _announce_async(f"🟣 KOMUNITA SPLNILA SUB CÍL! {n} {who} z happy hour bere +{reward} sedláků! "
                         f"Děkujeme za gift suby! 🎁🌾")
-    else:
-        _announce_async("🟣 SUB CÍL SPLNĚN! Dnes ale nikdo nedaroval sub během happy hour, "
-                        "takže odměna propadá – příště věnujte gift sub během happy hour! 🎁")

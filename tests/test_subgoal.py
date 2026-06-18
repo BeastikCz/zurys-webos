@@ -64,16 +64,47 @@ def test_subgoal_rewards_only_hh_gifters(client):
         conn.close()
 
 
-def test_subgoal_fires_even_without_gifters(client):
-    """Cíl se naplní, ale dnes nikdo nedaroval v HH → done=True, nikomu se nic nevyplatí (nespadne)."""
+def test_subgoal_no_forfeit_waits_for_hh_gifter(client):
+    """Cíl naplněn MIMO HH (0 eligible) → NEdokončuje se (žádný forfeit/lock). Jakmile dorazí HH
+    gifter, vyplatí se mu (oprava: dřív cíl 'dohrál' a HH gifteři pak nedostali nic)."""
     from app.db import get_conn
     from app import subgoal
     conn = get_conn()
     try:
         _reset(conn, target=2, reward=4000)
-        subgoal.tick(conn, 2)
-        st = subgoal.status(conn)
-        assert st["done"] is True and st["gifters"] == 0
+        subgoal.tick(conn, 2)                     # cíl naplněn, ale 0 HH gifterů
+        assert subgoal.status(conn)["done"] is False, "bez HH gifterů se cíl nedokončuje (žádný forfeit)"
+        hh = _mk_user(conn)                       # teď dorazí HH gifter
+        subgoal.record_gifter(conn, hh, 1, in_hh=True)
+        conn.commit()
+        subgoal.tick(conn, 1)                     # gift event → settle vyplatí HH giftera
+        assert subgoal.status(conn)["done"] is True
+        assert conn.execute("SELECT points FROM users WHERE id=?", (hh,)).fetchone()["points"] == 4000
+    finally:
+        conn.close()
+
+
+def test_subgoal_pays_late_hh_gifter_after_completion(client):
+    """KAŽDÝ HH gifter dostane odměnu, i když giftne AŽ PO naplnění lišty (oprava lock-outu).
+    A nikdo se nezdvojí (paid flag)."""
+    from app.db import get_conn
+    from app import subgoal
+    conn = get_conn()
+    try:
+        _reset(conn, target=2, reward=5000)
+        early = _mk_user(conn)
+        subgoal.record_gifter(conn, early, 2, in_hh=True)
+        conn.commit()
+        subgoal.tick(conn, 2)                     # cíl hit → early vyplacen
+        assert conn.execute("SELECT points FROM users WHERE id=?", (early,)).fetchone()["points"] == 5000
+        late = _mk_user(conn)                     # pozdní HH gifter PO naplnění
+        subgoal.record_gifter(conn, late, 1, in_hh=True)
+        conn.commit()
+        subgoal.tick(conn, 1)                     # další gift event → late taky vyplacen
+        assert conn.execute("SELECT points FROM users WHERE id=?", (late,)).fetchone()["points"] == 5000, \
+            "pozdní HH gifter taky bere (žádný lock-out)"
+        assert conn.execute("SELECT points FROM users WHERE id=?", (early,)).fetchone()["points"] == 5000, \
+            "early se nezdvojí (paid=1)"
     finally:
         conn.close()
 

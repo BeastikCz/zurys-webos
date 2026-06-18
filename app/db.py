@@ -268,6 +268,7 @@ CREATE TABLE IF NOT EXISTS subgoal_gifters (
     user_id  INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     subs     INTEGER NOT NULL DEFAULT 0,   -- kolik subů dnes giftnul celkem
     hh_subs  INTEGER NOT NULL DEFAULT 0,   -- z toho během happy hour
+    paid     INTEGER NOT NULL DEFAULT 0,   -- 1 = odměnu za splněný cíl už dostal (idempotence per-gifter)
     PRIMARY KEY (day, user_id)
 );
 
@@ -689,6 +690,7 @@ _MIGRATIONS = [
     ("users", "cos_banner", "TEXT"),     # nasazený profil banner
     ("users", "gamble_block_until", "TEXT"),  # sebevyloučení ze sázek: ISO konec / "permanent" / NULL
     ("users", "timeout_until", "TEXT"),       # timeout (dočasný blok webu): ISO konec / NULL. Zrcadlí Kick timeout.
+    ("subgoal_gifters", "paid", "INTEGER NOT NULL DEFAULT 0"),  # SUB cíl: gifter už dostal odměnu (per-gifter idempotence)
     ("users", "fair_server_seed", "TEXT"),    # provably fair: tajný server seed (aktuální)
     ("users", "fair_server_hash", "TEXT"),    # SHA-256 commit (ukázán předem)
     ("users", "fair_client_seed", "TEXT"),    # client seed (hráč si mění)
