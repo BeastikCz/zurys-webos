@@ -75,12 +75,20 @@ def _auto_off() -> None:
         pass
 
 
-def is_admin_request(request) -> bool:
-    """Je požadavek od přihlášeného ADMINA? (jediný, kdo vidí web i během údržby)
+def _allow_uids(conn) -> set:
+    """Ručně whitelistnutá uid co smí na web i během údržby (maintenance_allow_uids = JSON list)."""
+    import json
+    try:
+        return set(json.loads(get_setting(conn, "maintenance_allow_uids", "") or "[]"))
+    except (ValueError, TypeError):
+        return set()
 
-    Záměrně JEN role admin (= vlastník), ne celý staff – aby běžní moderátoři
-    ani broadcasteři během údržby web neviděli. Vlastní krátký dotaz mimo Depends
-    (middleware běží před routingem). Spouští se jen když je údržba zapnutá."""
+
+def bypasses_maintenance(request) -> bool:
+    """Vidí web i během údržby? ADMIN (vlastník) VŽDY + ručně whitelistnutá uid
+    (maintenance_allow_uids – např. tester / důvěryhodný hráč). Záměrně NE celý staff
+    (mod/broadcaster taky vidí údržbu). Krátký dotaz mimo Depends (middleware běží před
+    routingem). Spouští se jen když je údržba zapnutá."""
     token = request.cookies.get(SESSION_COOKIE)
     if not token:
         return False
@@ -91,8 +99,11 @@ def is_admin_request(request) -> bool:
         ).fetchone()
         if not sess or sess["expires_at"] < now_iso():
             return False
-        u = conn.execute("SELECT role FROM users WHERE id = ?", (sess["user_id"],)).fetchone()
-        return bool(u and u["role"] == ROLE_ADMIN)
+        uid = sess["user_id"]
+        u = conn.execute("SELECT role FROM users WHERE id = ?", (uid,)).fetchone()
+        if u and u["role"] == ROLE_ADMIN:
+            return True
+        return uid in _allow_uids(conn)
     except Exception:
         return False
     finally:

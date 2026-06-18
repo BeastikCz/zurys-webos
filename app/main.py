@@ -484,7 +484,7 @@ async def maintenance_guard(request: Request, call_next):
             or path == "/maintenance.png" or path == "/og-image.png"
             or path.startswith("/maint-")):   # health + maintenance obrázky/slideshow (/maint-N.jpg) musí projít i návštěvníkům
         return await call_next(request)
-    if maintenance.is_admin_request(request):
+    if maintenance.bypasses_maintenance(request):
         return await call_next(request)
     if path.startswith("/api/") or path.startswith("/uploads/"):
         return JSONResponse(

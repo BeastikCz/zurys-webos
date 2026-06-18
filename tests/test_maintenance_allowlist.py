@@ -49,3 +49,41 @@ def test_static_assets_bypass_maintenance(client, maint_on):
 def test_root_still_shows_maintenance(client, maint_on):
     """Pojistka: SPA shell na '/' návštěvníkovi dál ukazuje údržbu (X-Maintenance)."""
     assert client.get("/").headers.get("X-Maintenance") == "1"
+
+
+def test_allowlisted_user_bypasses_maintenance(client, maint_on):
+    """Uživatel v maintenance_allow_uids vidí web (běžné API projde) i během údržby; jiný ne."""
+    import secrets, json
+    from app.db import get_conn, now_iso, set_setting
+    from app.config import SESSION_COOKIE
+    conn = get_conn()
+    try:
+        uname = f"mn_{secrets.token_hex(3)}"
+        uid = conn.execute(
+            "INSERT INTO users (kick_username, username, role, points, created_at) VALUES (?,?,?,0,?)",
+            (uname, uname, "user", now_iso())).lastrowid
+        tok = secrets.token_hex(24)
+        conn.execute("INSERT INTO sessions (token, user_id, created_at, expires_at) VALUES (?,?,?,?)",
+                     (tok, uid, now_iso(), (datetime.now(timezone.utc) + timedelta(days=1)).isoformat()))
+        set_setting(conn, "maintenance_allow_uids", json.dumps([uid]))
+        conn.commit()
+    finally:
+        conn.close()
+    h = {"Cookie": f"{SESSION_COOKIE}={tok}"}
+    try:
+        assert client.get("/api/shop/products", headers=h).status_code == 200, "allowlistnutý má vidět web"
+        # bez allowlistu → zase 503
+        c2 = get_conn()
+        try:
+            set_setting(c2, "maintenance_allow_uids", "[]")
+            c2.commit()
+        finally:
+            c2.close()
+        assert client.get("/api/shop/products", headers=h).status_code == 503, "mimo allowlist → údržba"
+    finally:
+        c3 = get_conn()           # úklid pro ostatní testy
+        try:
+            set_setting(c3, "maintenance_allow_uids", "")
+            c3.commit()
+        finally:
+            c3.close()
