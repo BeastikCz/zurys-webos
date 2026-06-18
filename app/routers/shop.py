@@ -52,10 +52,11 @@ def list_products(
     if ending:
         order, order_params = "p.ends_at ASC", []
     else:
-        # Default: nejdřív odměny co brzy KONČÍ (dle data konce, nejdřív končící první),
-        # pak položky bez limitu (hot/skladem/id), expirované úplně naposled.
-        order = ("CASE WHEN p.ends_at IS NULL THEN 1 WHEN p.ends_at > ? THEN 0 ELSE 2 END, "
-                 "p.ends_at ASC, p.hot DESC, (p.stock = 0) ASC, p.id ASC")
+        # Default: NEJNOVĚJŠÍ odměny nahoře (co admin přidal naposled). Skončené (expirované)
+        # úplně dolů, ručně zvýrazněné (🔥 hot) nad ostatní, vyprodané níž. Pak id DESC = nejnovější.
+        # ('ending soon' urgence má vlastní filtr ?ending=1.)
+        order = ("CASE WHEN p.ends_at IS NOT NULL AND p.ends_at <= ? THEN 1 ELSE 0 END, "
+                 "p.hot DESC, (p.stock = 0) ASC, p.id DESC")
         order_params = [now_iso()]
 
     total = conn.execute(
