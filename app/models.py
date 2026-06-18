@@ -385,6 +385,7 @@ class ProductIn(BaseModel):
     stock: int = -1
     description: Optional[str] = ""
     active: bool = True
+    hot: bool = False                  # 🔥 zvýraznit – pin nahoru v shopu (nad nejnovější) + HOT odznak
     ends_at: Optional[str] = None      # ISO datum/čas „k dispozici do" (prázdné = bez limitu)
     max_per_person_pct: int = Field(default=0, ge=0, le=100000)  # tombola: max POČET ticketů na osobu (0 = neomezeno)
 

@@ -610,12 +610,12 @@ def create_product(data: ProductIn, request: Request,
     _validate_product(data)
     cur = conn.execute(
         "INSERT INTO products (name, image_url, cost_points, category, type, period, "
-        "subs_only, vip_only, stock, description, ends_at, max_per_person_pct, active, created_at) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "subs_only, vip_only, stock, description, ends_at, max_per_person_pct, hot, active, created_at) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         (data.name, data.image_url or "", data.cost_points, data.category or "",
          data.type, data.period or "", int(data.subs_only), int(data.vip_only), data.stock,
          data.description or "", _norm_ends(data.ends_at), int(data.max_per_person_pct or 0),
-         int(data.active), now_iso()),
+         int(data.hot), int(data.active), now_iso()),
     )
     record_audit(conn, admin, request, "product.create", f"#{cur.lastrowid} {data.name}",
                  f"{data.cost_points} PTS, typ {data.type}")
@@ -709,11 +709,11 @@ def update_product(product_id: int, data: ProductIn, request: Request,
         raise HTTPException(status_code=404, detail="Odměna nenalezena.")
     conn.execute(
         "UPDATE products SET name=?, image_url=?, cost_points=?, category=?, type=?, period=?, "
-        "subs_only=?, vip_only=?, stock=?, description=?, ends_at=?, max_per_person_pct=?, active=? WHERE id=?",
+        "subs_only=?, vip_only=?, stock=?, description=?, ends_at=?, max_per_person_pct=?, hot=?, active=? WHERE id=?",
         (data.name, data.image_url or "", data.cost_points, data.category or "",
          data.type, data.period or "", int(data.subs_only), int(data.vip_only), data.stock,
          data.description or "", _norm_ends(data.ends_at), int(data.max_per_person_pct or 0),
-         int(data.active), product_id),
+         int(data.hot), int(data.active), product_id),
     )
     record_audit(conn, admin, request, "product.update", f"#{product_id} {data.name}",
                  f"{data.cost_points} PTS, typ {data.type}, aktivní {int(data.active)}")

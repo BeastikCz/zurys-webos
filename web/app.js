@@ -3243,7 +3243,7 @@ function localInputToIso(val) {
 }
 
 function productForm(p) {
-  p = p || { name: "", image_url: "", cost_points: 100, category: "", type: "instant", period: "", subs_only: false, vip_only: false, stock: -1, description: "", active: true, ends_at: null, max_per_person_pct: 0 };
+  p = p || { name: "", image_url: "", cost_points: 100, category: "", type: "instant", period: "", subs_only: false, vip_only: false, stock: -1, description: "", active: true, hot: false, ends_at: null, max_per_person_pct: 0 };
   const types = Object.entries(TYPE_LABEL).map(([k, l]) => `<option value="${k}" ${p.type === k ? "selected" : ""}>${l}</option>`).join("");
   const periods = PERIOD_OPTIONS.map(([k, l]) => `<option value="${k}" ${(p.period || "") === k ? "selected" : ""}>${l}</option>`).join("");
   openModal(`<div class="modal-body">
@@ -3291,6 +3291,7 @@ function productForm(p) {
         <label class="check"><input type="checkbox" id="pf_subs" ${p.subs_only ? "checked" : ""}> Jen pro suby</label>
         <label class="check"><input type="checkbox" id="pf_vip" ${p.vip_only ? "checked" : ""}> Jen pro VIP</label>
         <label class="check"><input type="checkbox" id="pf_active" ${p.active ? "checked" : ""}> Aktivní</label>
+        <label class="check" title="Připne odměnu na začátek shopu (nad nejnovější) + HOT odznak"><input type="checkbox" id="pf_hot" ${p.hot ? "checked" : ""}> 🔥 Zvýraznit (nahoru)</label>
       </div>
       <button class="btn btn-primary btn-block" type="submit">${p.id ? "Uložit změny" : "Vytvořit odměnu"}</button>
     </form></div>`);
@@ -3303,7 +3304,7 @@ async function saveProduct() {
     type: $("#pf_type").value, period: $("#pf_period") ? $("#pf_period").value : "",
     subs_only: $("#pf_subs").checked, vip_only: $("#pf_vip").checked,
     stock: parseInt($("#pf_stock").value, 10), description: $("#pf_description").value.trim(),
-    active: $("#pf_active").checked, ends_at: localInputToIso($("#pf_ends").value),
+    active: $("#pf_active").checked, hot: $("#pf_hot").checked, ends_at: localInputToIso($("#pf_ends").value),
     max_per_person_pct: parseInt(($("#pf_maxpct") && $("#pf_maxpct").value) || "0", 10),
   };
   if (!body.name) { toast("Zadej název.", "error"); return; }
