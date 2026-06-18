@@ -2852,6 +2852,15 @@ function retentionHTML(r) {
       <div class="faint" style="font-size:12px;margin-top:10px">Týdenní retence: z <b>${r.prev_week_active}</b> aktivních minulý týden se <b>${r.retained}</b> vrátilo i tento týden. Stickiness 20 %+ = zdravé · celkem účtů ${r.total_users}.</div>
     </div>`;
 }
+function eggFindersHTML(eggs) {
+  if (!eggs) return "";
+  const rows = (eggs.finders || []).map((f) => `<tr><td>${esc(f.username)}</td><td class="faint">${f.found_at ? new Date(f.found_at).toLocaleString("cs-CZ") : "—"}</td><td style="color:var(--accent)">+${fmtPts(f.reward)}</td></tr>`).join("");
+  return `<div class="panel" style="margin-bottom:16px">
+    <div class="section-title" style="margin-top:0">🥚 Easter egg — kdo našel tajný klas</div>
+    <p class="muted" style="font-size:12.5px;margin:0 0 12px">Našlo <b>${eggs.count}</b> hráčů · celkem vyplaceno <b style="color:var(--accent)">${fmtPts(eggs.total_reward || 0)}</b> 🌾</p>
+    ${eggs.count ? `<div class="table-wrap"><table class="tbl"><thead><tr><th>Hráč</th><th>Kdy našel</th><th>Odměna</th></tr></thead><tbody>${rows}</tbody></table></div>` : `<p class="faint" style="font-size:13px">Zatím nikdo nenašel. 🤫</p>`}
+  </div>`;
+}
 function gardenEconomyHTML(g) {
   if (!g || !g.by_window) return "";
   const win = (key, label) => {
@@ -2887,13 +2896,14 @@ function gardenEconomyHTML(g) {
 async function adminEconomy() {
   const box = $("#adminContent");
   try {
-    const [e, lv, dash, rake, health, hh, ret, garden] = await Promise.all([api("/admin/economy"), api("/admin/economy/live"), api("/admin/economy/dashboard"), api("/admin/economy/games-rake"), api("/admin/economy/health?days=14").catch(() => null), api("/admin/shop-discount").catch(() => ({ pct: 0, live_only: false, active_now: 0 })), api("/admin/analytics/retention").catch(() => null), api("/admin/economy/garden").catch(() => null)]);
+    const [e, lv, dash, rake, health, hh, ret, garden, eggs] = await Promise.all([api("/admin/economy"), api("/admin/economy/live"), api("/admin/economy/dashboard"), api("/admin/economy/games-rake"), api("/admin/economy/health?days=14").catch(() => null), api("/admin/shop-discount").catch(() => ({ pct: 0, live_only: false, active_now: 0 })), api("/admin/analytics/retention").catch(() => null), api("/admin/economy/garden").catch(() => null), api("/admin/egg-finders").catch(() => null)]);
     const modeBtn = (m, label) => `<button class="btn btn-sm ${lv.mode === m ? "btn-primary" : "btn-ghost"}" data-action="eco-live-mode" data-mode="${m}">${label}</button>`;
     box.innerHTML = `
       ${economyDashboardHTML(dash)}
       ${retentionHTML(ret)}
       ${economyHealthHTML(health)}
       ${gardenEconomyHTML(garden)}
+      ${eggFindersHTML(eggs)}
       ${coinIconCardHTML()}
       <div class="panel" style="margin-bottom:16px">
         <div class="section-title" style="margin-top:0">📡 Stream — body za sledování jen když je LIVE</div>
