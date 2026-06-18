@@ -5192,7 +5192,7 @@ function handleAction(action, el) {
     case "bp-claim-premium": claimBpTier(el.dataset.tier, true); break;
     case "lp-claim": claimLevelPass(el.dataset.level); break;
     case "user-sort": setUserSort(el.dataset.sort); break;
-    case "egg": claimEgg(); break;
+    case "ft-spk": claimEgg(); break;
     case "bp-daily": claimBpDaily(); break;
     case "grd-pick": grdPick(el.dataset.crop); break;
     case "grd-plant": grdPlant(el.dataset.plot); break;
@@ -5407,7 +5407,7 @@ document.addEventListener("click", (e) => {
   handleAction(actEl.dataset.action, actEl);
 });
 
-// 🥚 Easter egg – „tajný klas": Konami kód (↑↑↓↓←→←→ B A) NEBO skrytý 🌾 v rohu → +1337 sedláků (1×/uživatel)
+// (skrytá drobnost) – rohová tečka / sekvence kláves
 let _eggBusy = false;
 async function claimEgg() {
   if (_eggBusy) return;
