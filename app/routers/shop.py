@@ -12,7 +12,7 @@ from ..services import product_public, validate_items, apply_purchase, shop_disc
 router = APIRouter(prefix="/shop", tags=["shop"])
 
 EXCHANGE_CATEGORY = "Směnárna"
-EXCHANGE_ENABLED = False
+EXCHANGE_ENABLED = True
 # prodané tikety pro tomboly (progress bar)
 _TICKETS = "(SELECT COUNT(*) FROM raffle_entries e WHERE e.product_id = p.id) AS tickets_sold"
 
