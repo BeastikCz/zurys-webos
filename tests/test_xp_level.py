@@ -40,13 +40,15 @@ def test_add_points_feeds_earned_total(client):
 def test_auth_me_exposes_level(client):
     from app.db import get_conn, now_iso
     from app.config import SESSION_COOKIE
+    from app.deps import XP_DIV
     from datetime import datetime, timezone, timedelta
+    et = XP_DIV * 4                                         # → level 1 + floor(sqrt(4)) = 3 (XP_DIV-relativní)
     conn = get_conn()
     try:
         u = f"xp_{secrets.token_hex(3)}"
         uid = conn.execute(
             "INSERT INTO users (kick_username, username, role, points, earned_total, created_at) VALUES (?,?,?,0,?,?)",
-            (u, u, "user", 1200, now_iso())).lastrowid     # earned 1200 → level 3
+            (u, u, "user", et, now_iso())).lastrowid
         t = secrets.token_hex(24)
         conn.execute("INSERT INTO sessions (token, user_id, created_at, expires_at) VALUES (?,?,?,?)",
                      (t, uid, now_iso(), (datetime.now(timezone.utc) + timedelta(days=1)).isoformat()))
@@ -54,4 +56,4 @@ def test_auth_me_exposes_level(client):
     finally:
         conn.close()
     me = client.get("/api/auth/me", headers={"Cookie": f"{SESSION_COOKIE}={t}"}).json()["user"]
-    assert me["level"] == 3 and me["earned_total"] == 1200 and 0 <= me["level_pct"] <= 100
+    assert me["level"] == 3 and me["earned_total"] == et and 0 <= me["level_pct"] <= 100

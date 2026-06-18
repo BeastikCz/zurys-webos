@@ -39,8 +39,8 @@ def test_levelpass_locked_then_claim(client):
         # nedosažený milník nejde vyzvednout (server ověří úroveň)
         assert levelpass.claim(conn, _row(conn, uid), 10)["ok"] is False
 
-        # vylevluj na 10 (earned_total = 300 * 9^2 = 24300)
-        _set_earned(conn, uid, 24300)
+        # vylevluj na 10 (earned_total = 900 * 9^2 = 72900)
+        _set_earned(conn, uid, 72900)
         st = levelpass.status(conn, _row(conn, uid))
         assert st["level"] == 10
         m10 = next(m for m in st["milestones"] if m["level"] == 10)
@@ -68,7 +68,7 @@ def test_levelpass_legend_grants_both(client):
     from app import levelpass
     conn = get_conn()
     try:
-        uid = _mk(conn, earned=2940300)   # lvl 100 = 300 * 99^2
+        uid = _mk(conn, earned=8820900)   # lvl 100 = 900 * 99^2
         st = levelpass.status(conn, _row(conn, uid))
         assert st["level"] == 100
         m100 = next(m for m in st["milestones"] if m["level"] == 100)

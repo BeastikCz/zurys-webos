@@ -326,7 +326,7 @@ def admin_guard(request: Request, user: sqlite3.Row = Depends(require_user)) -> 
     return user
 
 
-XP_DIV = 300   # earned_total → level: level = 1 + floor(sqrt(earned_total / XP_DIV))
+XP_DIV = 900   # earned_total → level: level = 1 + floor(sqrt(earned_total / XP_DIV)). 900 (zvýšeno z 300, 3× pomalejší levelování – aby se nelevelovalo moc rychle; lvl 100 ≈ 8,8 mil XP)
 
 
 def level_info(earned_total) -> dict:
