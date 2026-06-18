@@ -75,12 +75,12 @@ main { padding: 0 0 80px; min-height: calc(100vh - var(--header-h)); overflow-x:
 /* ============ Topbar ============ */
 .topbar { position: sticky; top: 0; z-index: 50; height: var(--header-h); display: flex; align-items: center;
   background: rgba(10, 11, 22, .9); backdrop-filter: blur(12px); border-bottom: 1px solid var(--border); }
-.topbar-inner { display: flex; align-items: center; gap: 16px; width: 100%; }
+.topbar-inner { display: flex; align-items: center; gap: 13px; width: 100%; max-width: none; }   /* max-width:none → topbar přes celou šířku obrazovky (ne kapnutý na .container 1280), ať se vejde nav + chip + Odhlásit i na širších */
 .logo { display: flex; align-items: center; gap: 10px; font-weight: 900; font-size: 21px; letter-spacing: .02em; }
 .logo .mark { width: 34px; height: 34px; border-radius: 9px; display: grid; place-items: center; background: var(--accent-grad); color: var(--accent-ink); font-size: 20px; font-weight: 900; box-shadow: 0 0 16px var(--accent-glow); }
 .logo .brand { letter-spacing: .14em; }
-.nav { display: flex; align-items: center; gap: 2px; margin-left: 14px; }
-.nav-link { padding: 9px 14px; border-radius: 8px; color: var(--text-dim); font-weight: 700; font-size: 13px; text-transform: uppercase; letter-spacing: .07em; transition: .14s; position: relative; }
+.nav { display: flex; align-items: center; gap: 2px; margin-left: 6px; }
+.nav-link { padding: 9px 10px; border-radius: 8px; color: var(--text-dim); font-weight: 700; font-size: 12.5px; text-transform: uppercase; letter-spacing: .04em; transition: .14s; position: relative; }
 .nav-link:hover { color: #fff; }
 .nav-link.active { color: var(--accent); }
 .nav-link.active::after { content: ""; position: absolute; left: 14px; right: 14px; bottom: -1px; height: 3px; border-radius: 3px; background: var(--accent); box-shadow: 0 0 10px var(--accent-glow); }
@@ -93,7 +93,7 @@ main { padding: 0 0 80px; min-height: calc(100vh - var(--header-h)); overflow-x:
 .cart-badge { position: absolute; top: -6px; right: -6px; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: var(--accent); color: var(--accent-ink); font-size: 11px; font-weight: 800; display: grid; place-items: center; }
 .user-chip { display: flex; align-items: center; gap: 9px; background: var(--surface-2); border: 1px solid var(--border); padding: 4px 12px 4px 4px; border-radius: 999px; }
 .user-chip:hover { border-color: var(--accent); }
-.user-chip .uc-name { font-weight: 800; font-size: 13px; }
+.user-chip .uc-name { font-weight: 800; font-size: 13px; max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .user-chip .uc-tier { font-size: 9.5px; font-weight: 900; letter-spacing: .06em; color: var(--accent); text-transform: uppercase; }
 .avatar { width: 34px; height: 34px; border-radius: 9px; display: grid; place-items: center; font-weight: 800; font-size: 13px; color: #fff; flex: none; overflow: hidden; }
 .avatar img { width: 100%; height: 100%; object-fit: cover; }
@@ -830,10 +830,19 @@ footer.site-footer { border-top: 1px solid var(--border); padding: 22px 0; color
 /* ============ Responsive ============ */
 .kick-short { display: none; }   /* zkrácený label Kick tlačítka – jen na mobilu */
 
-@media (max-width: 1100px) {
-  /* hamburger zapnem dřív – plná nav lišta (8 položek + level pill + chip) se do ~1100 px nevejde a přetékala */
-  .nav { display: none; } .hamburger { display: grid; } .user-chip .uc-name, .user-chip .uc-tier { display: none; }
-  .da-head h1 { font-size: 26px; } .pts-pill .lbl { display: none; }
+/* Užší desktop / laptop: schovej "nice-to-have" v topbaru, ať se nav + balance + Odhlásit vejdou.
+   Plný layout (8 nav + balance + level + chip + jméno + Odhlásit) potřebuje ~1490 px → od ~1500 níž
+   pryč level pill, popisek "sedláků" a jméno (zůstane avatar). Tím se vejde až k ~1280. */
+@media (max-width: 1500px) {
+  .lvl-pill { display: none !important; }                        /* level je i na profilu */
+  .pts-pill .lbl { display: none; }                              /* "sedláků" popisek */
+  .user-chip .uc-name, .user-chip .uc-tier { display: none; }    /* zůstane jen avatar */
+  .topbar-inner { gap: 10px; } .top-right { gap: 8px; }
+}
+@media (max-width: 1280px) {
+  /* hamburger – plná nav (8 položek) se i po kompresi do ~1280 px nevejde, tak ji schovej do menu */
+  .nav { display: none; } .hamburger { display: grid; }
+  .da-head h1 { font-size: 26px; }
 }
 @media (max-width: 720px) {
   .podium { gap: 7px; padding-top: 42px; }
