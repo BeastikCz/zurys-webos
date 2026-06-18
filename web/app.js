@@ -1087,6 +1087,12 @@ function lbSectioned(rows, isMe) {       // seskupí řádky leaderboardu do feu
   return `<div class="lb-list lb-sectioned">${html}</div>`;
 }
 
+function lvlBadge(level) { return level ? `<span class="lvl-badge" title="Úroveň ${level} (nafarmeno)">⭐ ${level}</span>` : ""; }
+function profLevelHTML(p) {
+  if (!p || !p.level) return "";
+  const into = Number(p.level_into || 0).toLocaleString("cs-CZ"), span = Number(p.level_span || 0).toLocaleString("cs-CZ");
+  return `<div class="prof-level" title="Úroveň z nafarmeného (earned_total)"><span class="pl-badge">⭐ Úroveň ${p.level}</span><span class="pl-bar"><i style="width:${p.level_pct || 0}%"></i></span><span class="faint pl-xp">${into} / ${span} XP do dalšího</span></div>`;
+}
 function podiumCard(r, isMe) {
   const medal = r.rank === 1 ? "🥇" : r.rank === 2 ? "🥈" : "🥉";
   const crown = r.rank === 1 ? `<div class="pod-crown">👑</div>` : "";
@@ -1098,7 +1104,7 @@ function podiumCard(r, isMe) {
       ${rays}${sparks}${crown}<span class="pod-medal">${medal}</span>
       <div class="pod-av-wrap">${avatarHTML(r.username, r.avatar_url, "pod-av", cosF(r))}</div>
       <a class="pod-name prof-link ${cosN(r)}" href="#/u/${encodeURIComponent(r.username)}">${esc(r.username)}${meTag}</a>
-      <div class="pod-badges">${lbBadges(r)}</div>
+      <div class="pod-badges">${lvlBadge(r.level)}${lbBadges(r)}</div>
       <div class="pod-pts"><span class="pod-num" data-count="${r.points}">${Number(r.points).toLocaleString("cs-CZ")}</span><span>sedláků</span></div>
       ${tierChip(r.rank)}
       <div class="pod-base"><span class="pod-baseshine"></span><span class="pod-basenum">${r.rank}</span></div>
@@ -1117,7 +1123,7 @@ function lbRow(r, isMe) {
   return `
     <div class="lb-row${isMe ? " me" : ""}${r.climber ? " climber" : ""}" style="--d:${Math.min(r.rank, 24) * 0.025}s">
       <span class="lb-rank">${r.rank}</span>${avatarHTML(r.username, r.avatar_url, "", cosF(r))}
-      <div class="lb-id"><a class="uname prof-link ${cosN(r)}" href="#/u/${encodeURIComponent(r.username)}">${esc(r.username)}${meTag}</a> ${prestigeBadge(r.prestige)}<span class="lb-sub">${lbBadges(r)}${tierChip(r.rank)}${fire}</span></div>
+      <div class="lb-id"><a class="uname prof-link ${cosN(r)}" href="#/u/${encodeURIComponent(r.username)}">${esc(r.username)}${meTag}</a> ${prestigeBadge(r.prestige)}<span class="lb-sub">${lvlBadge(r.level)}${lbBadges(r)}${tierChip(r.rank)}${fire}</span></div>
       ${deltaTag(r.delta)}
       <span class="pts">${fmtPts(r.points)}</span>
     </div>`;
@@ -1332,6 +1338,7 @@ async function pageUserProfile(nick) {
         <div class="ph-info">
           <h1><span class="${cosN(p)}">${esc(p.username)}</span> ${roleBadge(p.role)} ${prestigeBadge(p.prestige)}</h1>
           <div class="faint">${league ? "★ " + esc(league) + " · " : ""}#${p.rank} v leaderboardu · člen od ${since}</div>
+          ${profLevelHTML(p)}
           <div class="ph-badges">${subVipBadges(p) || ""}</div>
         </div>
       </div>
@@ -1847,7 +1854,7 @@ function pageProfile() {
     <div class="panel">
       <div class="profile-head">
         ${avatarHTML(u.username, u.avatar_url, "", cosF(u))}
-        <div><div style="font-size:22px;font-weight:800"><span class="${cosN(u)}">${esc(u.username)}</span> ${roleBadge(u.role)} ${subVipBadges(u)} ${prestigeBadge(u.prestige)}</div><div class="muted">${u.kick_username ? "🟢 " + esc(u.kick_username) : esc(u.email || "")}</div><div class="muted" style="font-size:12.5px;margin-top:3px">🎂 V komunitě <b style="color:var(--text)">${memberSince(u.created_at)}</b>${loyaltyBadge(u.created_at)}</div></div>
+        <div><div style="font-size:22px;font-weight:800"><span class="${cosN(u)}">${esc(u.username)}</span> ${roleBadge(u.role)} ${subVipBadges(u)} ${prestigeBadge(u.prestige)}</div><div class="muted">${u.kick_username ? "🟢 " + esc(u.kick_username) : esc(u.email || "")}</div><div class="muted" style="font-size:12.5px;margin-top:3px">🎂 V komunitě <b style="color:var(--text)">${memberSince(u.created_at)}</b>${loyaltyBadge(u.created_at)}</div>${profLevelHTML(u)}</div>
         <div class="profile-points"><div class="v">${fmtPts(u.points)}</div><div class="faint">aktuální zůstatek</div></div>
       </div>
       <div class="prof-look-strip">

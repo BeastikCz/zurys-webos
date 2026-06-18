@@ -11,7 +11,7 @@ from ..anticheat import (check_or_block, is_new_account, new_account_redeem_pts,
 from ..config import ORDER_PENDING, UNLIMITED_STOCK, ROLE_ADMIN
 from ..db import now_iso, get_setting
 from ..deps import (db_dep, require_user, add_points, try_debit, record_audit, client_ip,
-                    user_rank, tier_for_rank, self_excluded_until)
+                    user_rank, tier_for_rank, self_excluded_until, level_info)
 from ..models import (RedeemIn, TradeUrlIn, GiftIn, QuestClaimIn, CosmeticIn, FairSeedIn, SelfExcludeIn,
                       ProfileBioIn, WagerLimitIn, ModApplyIn, BattlePassClaimIn, LoginCalClaimIn,
                       GardenPlantIn, GardenHarvestIn, DecorBuyIn, LevelPassClaimIn)
@@ -65,7 +65,7 @@ def stream_status(conn: sqlite3.Connection = Depends(db_dep)):
 def leaderboard(limit: int = Query(50, ge=1, le=200),
                 conn: sqlite3.Connection = Depends(db_dep)):
     rows = conn.execute(
-        "SELECT id, username, avatar_url, points, role, is_sub, is_vip, is_og, "
+        "SELECT id, username, avatar_url, points, role, is_sub, is_vip, is_og, earned_total, "
         "cos_name, cos_frame, cos_banner, prestige FROM users "
         "ORDER BY points DESC, username ASC LIMIT ?",
         (limit,),
@@ -101,6 +101,7 @@ def leaderboard(limit: int = Query(50, ge=1, le=200),
             "delta": delta,
             "climber": False,
             "prestige": (r["prestige"] if "prestige" in r.keys() else 0) or 0,
+            "level": level_info(r["earned_total"] if "earned_total" in r.keys() else 0)["level"],
         })
     if best_id is not None and best_gain >= 3:            # „stoupá týдne" jen při reálném skoku (≥3 pozice)
         for row, r in zip(out, rows):
@@ -202,6 +203,7 @@ def public_profile(nick: str = Query("", max_length=64),
     earned = conn.execute("SELECT COALESCE(SUM(change),0) c FROM points_log WHERE user_id=? AND change>0", (uid,)).fetchone()["c"]
     spent = conn.execute("SELECT COALESCE(SUM(-change),0) c FROM points_log WHERE user_id=? AND change<0", (uid,)).fetchone()["c"]
     biggest = conn.execute("SELECT COALESCE(MAX(change),0) c FROM points_log WHERE user_id=? AND change>0", (uid,)).fetchone()["c"]
+    lvl = level_info(u["earned_total"] if "earned_total" in u.keys() else 0)   # úroveň z lifetime XP (ne z gross earned)
     g = conn.execute(
         "SELECT COUNT(*) AS played, "
         "COALESCE(SUM(CASE WHEN (winner=1 AND p1_id=?) OR (winner=2 AND p2_id=?) THEN 1 ELSE 0 END),0) AS won "
@@ -246,6 +248,7 @@ def public_profile(nick: str = Query("", max_length=64),
         "created_at": u["created_at"], "points": u["points"],
         "rank": rank, "league": league_key, "league_mult": league_mult,
         "earned_total": earned, "spent_total": spent, "biggest_win": biggest,
+        "level": lvl["level"], "level_pct": lvl["pct"], "level_into": lvl["into"], "level_span": lvl["span"],
         "games_played": played, "games_won": won,
         "win_rate": round(won / played, 3) if played else 0,
         "raffle_wins": raffle_wins, "badges": badges, "showcase": showcase, "cos": cosmetics.resolve(u),
