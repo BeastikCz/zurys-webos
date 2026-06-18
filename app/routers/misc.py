@@ -430,7 +430,10 @@ def hall_of_fame(conn: sqlite3.Connection = Depends(db_dep)):
     subs = q("SELECT username, avatar_url, role, created_at FROM users "
              "WHERE banned=0 AND is_sub=1 ORDER BY created_at ASC LIMIT 10")
     # Nejštědřejší: počet darovaných subů (z reason „… ×N") + sedláky. Řadíme dle POČTU subů
-    # (× je u N první číslo v reason; „2×" z happy-hour přípony je až za ním). metric = sedláky (zpětná kompat).
+    # (× je u N první číslo v reason; „2×" z happy-hour přípony je až za ním).
+    # metric = sedláky v ZÁKLADNÍM kurzu BEZ happy-hour bonusu: HH gift má v points_log 2× body
+    # (reason končí „(happy 2×)"), tak ho vydělíme 2 → board ukazuje férový základ (≈ subs × základ),
+    # ne nafouknutý HH součet. Body v zůstatku hráče HH bonus pochopitelně mají dál – tohle je jen board.
     import re as _re
     _gagg = {}
     for r in conn.execute(
@@ -441,7 +444,10 @@ def hall_of_fame(conn: sqlite3.Connection = Depends(db_dep)):
         if g is None:
             g = _gagg[r["uid"]] = {"username": r["username"], "avatar_url": r["avatar_url"],
                                    "role": r["role"], "metric": 0, "subs": 0}
-        g["metric"] += r["change"] or 0
+        _ch = r["change"] or 0
+        if "happy" in (r["reason"] or "").lower():   # happy-hour 2× → odečti bonus, počítej jen základ
+            _ch //= 2
+        g["metric"] += _ch
         _m = _re.search(r"\d+", r["reason"] or "")
         g["subs"] += int(_m.group()) if _m else 1
     gifters = sorted(_gagg.values(), key=lambda x: (x["subs"], x["metric"]), reverse=True)[:10]

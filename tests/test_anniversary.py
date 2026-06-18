@@ -56,7 +56,8 @@ def test_hall_of_fame_shape(client):
 
 
 def test_hall_of_fame_gifters_counts_subs(client):
-    """Nejštědřejší: subs = součet darovaných subů z reason „… ×N" (i s happy-hour příponou)."""
+    """Nejštědřejší: subs = součet darovaných subů z reason „… ×N" (i s happy-hour příponou).
+    metric = sedláky v ZÁKLADNÍM kurzu BEZ happy-hour bonusu (HH záznam „(happy 2×)" se dělí 2)."""
     import secrets
     from app.db import get_conn, now_iso
     conn = get_conn()
@@ -65,7 +66,8 @@ def test_hall_of_fame_gifters_counts_subs(client):
         uid = conn.execute(
             "INSERT INTO users (kick_username, username, role, points, created_at) VALUES (?,?,?,0,?)",
             (u, u, "user", now_iso())).lastrowid
-        # 2 gift eventy: ×9000 (běžné) + ×123 (happy 2×). subs=9123, metric=9 000 000+246 000.
+        # 2 gift eventy: ×9000 (běžné, 9 000 000) + ×123 (happy 2×, 246 000 = 2× základ).
+        # subs=9123; metric BEZ HH = 9 000 000 + 246 000/2 = 9 123 000.
         conn.execute("INSERT INTO points_log (user_id, change, reason, created_at) VALUES (?,?,?,?)",
                      (uid, 9_000_000, "Kick gift sub 🎁 ×9000", now_iso()))
         conn.execute("INSERT INTO points_log (user_id, change, reason, created_at) VALUES (?,?,?,?)",
@@ -82,4 +84,4 @@ def test_hall_of_fame_gifters_counts_subs(client):
     me = next((x for x in g if x["username"] == u), None)
     assert me is not None, "gifter má být v žebříčku (×9000 = rank 1)"
     assert me["subs"] == 9123, f"subs měl být 9123, je {me['subs']}"
-    assert me["metric"] == 9_246_000
+    assert me["metric"] == 9_123_000, f"metric BEZ HH měl být 9 123 000, je {me['metric']}"
