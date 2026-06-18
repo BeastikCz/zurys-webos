@@ -269,6 +269,11 @@ class SelfExcludeIn(BaseModel):
     duration: str = Field(min_length=2, max_length=4)
 
 
+class TimeoutIn(BaseModel):
+    """Timeout (dočasný blok webu + Kick chatu). duration: 5m|15m|1h|6h|24h|7d|off."""
+    duration: str = Field(min_length=2, max_length=3)
+
+
 class DmIn(BaseModel):
     """Soukromá zpráva (PM) – tělo."""
     body: str = Field(min_length=1, max_length=2000)

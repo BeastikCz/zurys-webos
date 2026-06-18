@@ -3538,6 +3538,7 @@ async function adminUsers() {
           <button class="btn btn-danger btn-sm" data-action="user-points" data-id="${u.id}" data-sign="-1" data-name="${esc(u.username)}">－</button>
         </div></td>
         <td><div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+          ${u.timeout_until ? `<span style="background:#3a2e0a;color:#ffd25a;border:1px solid #6b5512;border-radius:999px;padding:2px 7px;font-size:11px;font-weight:800;white-space:nowrap" title="V timeoutu do ${esc(String(u.timeout_until).slice(0, 16).replace("T", " "))}">⏳ TIMEOUT</span>` : ""}
           ${u.role === "admin" ? `<span class="faint">—</span>` : u.banned
             ? `<button class="btn btn-ghost btn-sm" data-action="unban-user" data-id="${u.id}">Odbanovat</button>`
             : `<button class="btn btn-danger btn-sm" data-action="ban-user" data-id="${u.id}">Ban</button>`}
@@ -3549,6 +3550,16 @@ async function adminUsers() {
             <option value="30d">Blok 30 dní</option>
             <option value="perm">Blok napořád</option>
             <option value="off">Odemknout</option>
+          </select>
+          <select class="select" style="width:130px;padding:6px 8px" data-action="user-timeout" data-id="${u.id}" data-name="${esc(u.username)}" title="Timeout: dočasně zablokovat web i Kick chat">
+            <option value="">⏳ Timeout…</option>
+            <option value="5m">Timeout 5 min</option>
+            <option value="15m">Timeout 15 min</option>
+            <option value="1h">Timeout 1 h</option>
+            <option value="6h">Timeout 6 h</option>
+            <option value="24h">Timeout 24 h</option>
+            <option value="7d">Timeout 7 dní</option>
+            <option value="off">Zrušit timeout</option>
           </select>
         </div></td>
       </tr>`).join("")}
@@ -5494,7 +5505,9 @@ document.addEventListener("change", (e) => {
   const flag = e.target.closest('[data-action="user-flag"]');
   if (flag) { setUserFlag(parseInt(flag.dataset.id, 10), flag.dataset.flag, flag.checked); return; }
   const gb = e.target.closest('[data-action="user-gamble"]');
-  if (gb) { if (gb.value) adminGambleBlock(parseInt(gb.dataset.id, 10), gb.value, gb.dataset.name); gb.value = ""; }
+  if (gb) { if (gb.value) adminGambleBlock(parseInt(gb.dataset.id, 10), gb.value, gb.dataset.name); gb.value = ""; return; }
+  const to = e.target.closest('[data-action="user-timeout"]');
+  if (to) { if (to.value) adminTimeout(parseInt(to.dataset.id, 10), to.value, to.dataset.name); to.value = ""; }
 });
 
 async function adminGambleBlock(id, dur, name) {
@@ -5504,6 +5517,21 @@ async function adminGambleBlock(id, dur, name) {
   try {
     await api(`/admin/users/${id}/gamble-block`, { method: "POST", body: { duration: dur } });
     toast(dur === "off" ? "Sázení odemčeno" : `Sázení zablokováno (${lbl}) 🔒`, "success");
+  } catch (e) { toast(e.message, "error"); }
+}
+
+async function adminTimeout(id, dur, name) {
+  const lbl = { "5m": "5 min", "15m": "15 min", "1h": "1 hodina", "6h": "6 hodin", "24h": "24 hodin", "7d": "7 dní", "off": "ZRUŠIT" }[dur];
+  const msg = dur === "off"
+    ? `Zrušit timeout uživateli ${name}?`
+    : `Dát timeout (${lbl}) uživateli ${name}?\n\nPo celou dobu nebude moct používat web (žádné farmění/sázky/shop) ani psát do Kick chatu.`;
+  if (!confirm(msg)) return;
+  try {
+    const r = await api(`/admin/users/${id}/timeout`, { method: "POST", body: { duration: dur } });
+    const k = r.kick || {};
+    const kickNote = k.ok ? " + Kick chat" : (k.skipped ? " (bez Kicku)" : " (Kick chat selhal)");
+    toast(dur === "off" ? "Timeout zrušen" : `Timeout ${lbl} ⏳${kickNote}`, "success");
+    adminUsers();
   } catch (e) { toast(e.message, "error"); }
 }
 

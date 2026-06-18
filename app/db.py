@@ -688,6 +688,7 @@ _MIGRATIONS = [
     ("users", "cos_frame", "TEXT"),      # nasazený rámeček avataru
     ("users", "cos_banner", "TEXT"),     # nasazený profil banner
     ("users", "gamble_block_until", "TEXT"),  # sebevyloučení ze sázek: ISO konec / "permanent" / NULL
+    ("users", "timeout_until", "TEXT"),       # timeout (dočasný blok webu): ISO konec / NULL. Zrcadlí Kick timeout.
     ("users", "fair_server_seed", "TEXT"),    # provably fair: tajný server seed (aktuální)
     ("users", "fair_server_hash", "TEXT"),    # SHA-256 commit (ukázán předem)
     ("users", "fair_client_seed", "TEXT"),    # client seed (hráč si mění)

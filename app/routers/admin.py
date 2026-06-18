@@ -24,7 +24,7 @@ from ..models import (ProductIn, SkinLookupIn, SkinSearchIn, ImageUploadIn, User
                       BanIn, DropCreateIn, AutoDropIn, RuleIn, EconomyIn, IpBanIn, IpUnbanIn, BotToggleIn,
                       LiveModeIn, LegacyImportIn, PatchNoteIn, CommunityGoalIn, SubGoalIn, ModAppDecideIn, ManualOrderIn, ManualOrderBulkIn,
                       PointsLogPurgeIn, PartnerLinkIn, PartnerFlashConfigIn, GamesRakeIn, LiveHappyIn,
-                      SelfExcludeIn, ShopDiscountIn, BanClusterIn, MinesBanIn)
+                      SelfExcludeIn, TimeoutIn, ShopDiscountIn, BanClusterIn, MinesBanIn)
 from ..services import product_public, shop_discount_pct
 from ..security import new_code, secure_choice
 
@@ -2350,6 +2350,43 @@ def ban_user(user_id: int, data: BanIn, request: Request,
         kick = {"ok": False, "skipped": True, "error": "Účet nemá propojený Kick (bez kick_id)."}
     return {"ok": True, "banned": data.banned,
             "devices_banned": len(fps) if data.banned else 0, "kick": kick}
+
+
+_TIMEOUT_MIN = {"5m": 5, "15m": 15, "1h": 60, "6h": 360, "24h": 1440, "7d": 10080}
+
+
+@router.post("/users/{user_id}/timeout")
+def timeout_user(user_id: int, data: TimeoutIn, request: Request,
+                 conn: sqlite3.Connection = Depends(db_dep),
+                 admin: sqlite3.Row = Depends(require_broadcaster)):   # timeout: broadcaster+admin, mod ne (jako ban)
+    """Dočasný timeout: zablokuje uživateli CELÝ web (require_user → 403) na danou dobu a zrcadlí
+    timeout i do Kick chatu (moderate_ban s duration_min). 'off' = zrušit. Session se nemaže –
+    po vypršení se vše samo odemkne. Admina umlčet nelze; staff jen admin."""
+    u = conn.execute("SELECT username, role, kick_id FROM users WHERE id = ?", (user_id,)).fetchone()
+    if not u:
+        raise HTTPException(status_code=404, detail="Uživatel nenalezen.")
+    if u["role"] == ROLE_ADMIN:
+        raise HTTPException(status_code=400, detail="Admina nelze umlčet.")
+    if admin["role"] != ROLE_ADMIN and u["role"] in STAFF_ROLES:
+        raise HTTPException(status_code=403, detail="Členy týmu (staff) může timeoutovat jen admin.")
+    if data.duration == "off":
+        newval, minutes = None, None
+    elif data.duration in _TIMEOUT_MIN:
+        minutes = _TIMEOUT_MIN[data.duration]
+        newval = (datetime.now(timezone.utc) + timedelta(minutes=minutes)).isoformat()
+    else:
+        raise HTTPException(status_code=400, detail="Neplatná délka (5m/15m/1h/6h/24h/7d/off).")
+    conn.execute("UPDATE users SET timeout_until = ? WHERE id = ?", (newval, user_id))
+    record_audit(conn, admin, request, "user.timeout" if newval else "user.timeout_off",
+                 f"#{user_id} {u['username']}", data.duration)
+    conn.commit()
+    # Kick mirror (po commitu – web timeout platí, i kdyby Kick API selhalo/timeoutlo)
+    if u["kick_id"]:
+        kick = (kickbot.moderate_ban(conn, u["kick_id"], reason="Timeout ze zurys.live", duration_min=minutes)
+                if newval else kickbot.moderate_unban(conn, u["kick_id"]))
+    else:
+        kick = {"ok": False, "skipped": True, "error": "Účet nemá propojený Kick (bez kick_id)."}
+    return {"ok": True, "timeout_until": newval, "duration": data.duration, "kick": kick}
 
 
 # ---------------- Dropy (závod o kód) ----------------

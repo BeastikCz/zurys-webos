@@ -144,6 +144,18 @@ def self_excluded_until(row):
     return v if v > now_iso() else None
 
 
+def timed_out_until(row):
+    """ISO konec aktivního timeoutu (dočasný blok celého webu), nebo None (neaktivní/vypršelo).
+    Na rozdíl od banu je časový a sám vyprší – session se nemaže, jen request během timeoutu padá."""
+    try:
+        v = row["timeout_until"]
+    except (KeyError, IndexError, TypeError):
+        return None
+    if not v:
+        return None
+    return v if v > now_iso() else None
+
+
 def require_can_gamble(row) -> None:
     """Tipsport-style sebevyloučení: vyhodí 403, když má user aktivní zámek. Volat na začátku
     KAŽDÉHO sázkového endpointu (duely, piškvorky, blackjack, predikce)."""
@@ -235,6 +247,7 @@ def to_public(row: sqlite3.Row, include_email: bool = False) -> dict:
     except Exception:
         data["cos"] = {"name": "", "frame": "", "banner": ""}
     data["gamble_block_until"] = self_excluded_until(row)   # Tipsport-style sebevyloučení (None = může sázet)
+    data["timeout_until"] = timed_out_until(row)            # dočasný timeout (None = bez timeoutu)
     if include_email:
         data["email"] = row["email"]
         data["ban_reason"] = row["ban_reason"]
@@ -279,6 +292,11 @@ def require_user(user: Optional[sqlite3.Row] = Depends(get_current_user)) -> sql
     if user["banned"] and user["role"] != ROLE_ADMIN:
         raise HTTPException(status_code=403,
                             detail="Tvůj účet byl zablokován (anticheat). Kontaktuj streamera.")
+    to = timed_out_until(user)
+    if to and user["role"] != ROLE_ADMIN:
+        raise HTTPException(status_code=403,
+                            detail=f"Jsi v timeoutu do {to[:16].replace('T', ' ')} ⏳ "
+                                   f"Po tu dobu nemůžeš web používat. Po vypršení se vše samo odemkne.")
     return user
 
 
