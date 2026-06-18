@@ -116,30 +116,43 @@ def set_config(conn, values: dict) -> dict:
     return get_config(conn)
 
 
-def _check(conn) -> None:
-    if not _enabled(conn):
+def _reset_subgoal_on_stream_end(conn) -> None:
+    """Konec streamu → vynuluj komunitní SUB cíl (ať další stream začíná s čistou lištou).
+    Přepínatelné settingem subgoal_reset_on_stream_end (default ON). Nikdy nesmí shodit _check."""
+    if (get_setting(conn, "subgoal_reset_on_stream_end", "1") or "1") != "1":
         return
+    try:
+        from . import subgoal
+        subgoal.reset(conn)
+    except Exception:
+        traceback.print_exc()
+
+
+def _check(conn) -> None:
+    # Přechody live↔offline trackujeme VŽDY (nezávisle na livehappy toggle) – aby reset SUB cíle
+    # na konci streamu jel i s vyplým auto-Happy-Hour. Gated je jen samotná HH akce.
     is_live = live.is_live(conn)
     was = (get_setting(conn, "live_was_live", "0") or "0") == "1"
     if is_live and not was:
-        # přechod offline → LIVE: zapni Happy Hour + oznam v chatu
-        mins = _minutes(conn)
-        mult = _mult(conn)
-        until = (datetime.now(timezone.utc) + timedelta(minutes=mins)).isoformat()
-        set_setting(conn, "happy_until", until)
+        # přechod offline → LIVE
         set_setting(conn, "live_was_live", "1")
+        announce = None
+        if _enabled(conn):                       # Happy Hour na startu streamu (jen když auto-režim zapnutý)
+            mins, mult = _minutes(conn), _mult(conn)
+            set_setting(conn, "happy_until",
+                        (datetime.now(timezone.utc) + timedelta(minutes=mins)).isoformat())
+            announce = (f"🔴 Jsme LIVE! Příštích {mins} min jsou sedláci ×{mult:g} "
+                        f"za sledování i chat – sleduj a piš na zurys.live 🌾⚡")
         conn.commit()
-        try:
-            kickbot.send_message(
-                conn,
-                f"🔴 Jsme LIVE! Příštích {mins} min jsou sedláci ×{mult:g} "
-                f"za sledování i chat – sleduj a piš na zurys.live 🌾⚡",
-                kind="live",
-            )
-        except Exception:
-            traceback.print_exc()
+        if announce:
+            try:
+                kickbot.send_message(conn, announce, kind="live")
+            except Exception:
+                traceback.print_exc()
     elif not is_live and was:
+        # přechod LIVE → offline (konec streamu)
         set_setting(conn, "live_was_live", "0")
+        _reset_subgoal_on_stream_end(conn)
         conn.commit()
 
 

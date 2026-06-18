@@ -127,6 +127,67 @@ def test_record_gifter_upsert_counts(client):
         conn.close()
 
 
+def test_reset_clears_everything(client):
+    """subgoal.reset() vynuluje progress, done i seznam gifterů."""
+    from app.db import get_conn
+    from app import subgoal
+    conn = get_conn()
+    try:
+        _reset(conn, target=5, reward=1000)
+        uid = _mk_user(conn)
+        subgoal.record_gifter(conn, uid, 2, in_hh=True)
+        subgoal.tick(conn, 3)
+        conn.commit()
+        subgoal.reset(conn)
+        conn.commit()
+        st = subgoal.status(conn)
+        assert st["progress"] == 0 and st["done"] is False and st["gifters"] == 0
+        assert conn.execute("SELECT COUNT(*) c FROM subgoal_gifters").fetchone()["c"] == 0
+    finally:
+        conn.close()
+
+
+def test_stream_end_resets_subgoal(client, monkeypatch):
+    """Přechod LIVE → offline (konec streamu) vynuluje SUB cíl (live_events._check)."""
+    from app.db import get_conn, set_setting
+    from app import subgoal, live_events
+    conn = get_conn()
+    try:
+        _reset(conn, target=5, reward=1000)
+        set_setting(conn, "live_was_live", "1")               # byl live
+        set_setting(conn, "subgoal_reset_on_stream_end", "1")
+        uid = _mk_user(conn)
+        subgoal.record_gifter(conn, uid, 1, in_hh=True)
+        subgoal.tick(conn, 4)
+        conn.commit()
+        monkeypatch.setattr("app.live.is_live", lambda c: False)   # stream skončil
+        live_events._check(conn)                              # přechod live→offline → reset
+        assert subgoal.status(conn)["progress"] == 0, "konec streamu měl vynulovat lištu"
+        assert conn.execute("SELECT COUNT(*) c FROM subgoal_gifters").fetchone()["c"] == 0
+    finally:
+        conn.close()
+
+
+def test_stream_end_reset_can_be_disabled(client, monkeypatch):
+    """Když subgoal_reset_on_stream_end=0, konec streamu lištu NEvynuluje."""
+    from app.db import get_conn, set_setting
+    from app import subgoal, live_events
+    conn = get_conn()
+    try:
+        _reset(conn, target=5, reward=1000)
+        set_setting(conn, "live_was_live", "1")
+        set_setting(conn, "subgoal_reset_on_stream_end", "0")   # vypnuto
+        subgoal.tick(conn, 4)
+        conn.commit()
+        monkeypatch.setattr("app.live.is_live", lambda c: False)
+        live_events._check(conn)
+        assert subgoal.status(conn)["progress"] == 4, "s vyplým resetem zůstává progress"
+    finally:
+        set_setting(conn, "subgoal_reset_on_stream_end", "1")   # úklid pro ostatní testy
+        conn.commit()
+        conn.close()
+
+
 def test_subgoal_disabled_does_nothing(client):
     from app.db import get_conn, set_setting
     from app import subgoal

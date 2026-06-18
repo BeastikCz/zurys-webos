@@ -42,6 +42,14 @@ def _ensure_day(conn) -> None:
         conn.execute("DELETE FROM subgoal_gifters WHERE day != ?", (_today(),))
 
 
+def reset(conn) -> None:
+    """Plný reset SUB cíle: počítadlo, příznak výplaty i seznam gifterů na nulu. Volá se na KONCI
+    streamu (live_events), ať každý stream začíná s čistou lištou. Necommituje – commit dělá caller."""
+    set_setting(conn, "subgoal_progress", "0")
+    set_setting(conn, "subgoal_done", "0")
+    conn.execute("DELETE FROM subgoal_gifters")
+
+
 def status(conn) -> dict:
     """Stav cíle pro UI lištu (veřejné)."""
     _ensure_day(conn)
