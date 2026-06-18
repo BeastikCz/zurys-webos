@@ -5167,6 +5167,7 @@ function handleAction(action, el) {
     case "bp-claim-premium": claimBpTier(el.dataset.tier, true); break;
     case "lp-claim": claimLevelPass(el.dataset.level); break;
     case "user-sort": setUserSort(el.dataset.sort); break;
+    case "egg": claimEgg(); break;
     case "bp-daily": claimBpDaily(); break;
     case "grd-pick": grdPick(el.dataset.crop); break;
     case "grd-plant": grdPlant(el.dataset.plot); break;
@@ -5378,6 +5379,32 @@ document.addEventListener("click", (e) => {
   if (!actEl) return;  // běžné odkazy (#/...) projdou přirozeně přes hashchange
   e.preventDefault();
   handleAction(actEl.dataset.action, actEl);
+});
+
+// 🥚 Easter egg – „tajný klas": Konami kód (↑↑↓↓←→←→ B A) NEBO skrytý 🌾 v rohu → +1337 sedláků (1×/uživatel)
+let _eggBusy = false;
+async function claimEgg() {
+  if (_eggBusy) return;
+  if (!state.user) { toast("🌾 Tajný klas! Přihlas se přes Kick a vyzvedni si ho.", "info"); return; }
+  _eggBusy = true;
+  try {
+    const r = await api("/egg/claim", { method: "POST" });
+    if (r.already) { toast("🌾 Tajný klas už jsi našel dřív. 😉", "info"); }
+    else {
+      if (state.user) state.user.points = r.balance;
+      toast(`🥚 NAŠEL JSI TAJNÝ KLAS! +${fmtPts(r.reward)} 🌾🎉`, "success");
+      try { confettiBurst(); } catch (e) {}
+      renderHeader();
+    }
+  } catch (e) { toast(e.message, "error"); }
+  finally { setTimeout(() => { _eggBusy = false; }, 800); }
+}
+const _konami = ["arrowup", "arrowup", "arrowdown", "arrowdown", "arrowleft", "arrowright", "arrowleft", "arrowright", "b", "a"];
+let _konamiPos = 0;
+document.addEventListener("keydown", (e) => {
+  const k = (e.key || "").toLowerCase();
+  if (k === _konami[_konamiPos]) { _konamiPos++; if (_konamiPos === _konami.length) { _konamiPos = 0; claimEgg(); } }
+  else { _konamiPos = (k === _konami[0]) ? 1 : 0; }
 });
 
 document.addEventListener("change", (e) => {

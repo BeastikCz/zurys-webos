@@ -482,6 +482,23 @@ def battlepass_claim(data: BattlePassClaimIn, user: sqlite3.Row = Depends(requir
     return r
 
 
+EGG_REWARD = 1337   # easter egg „tajný klas" – jednorázová odměna za nalezení (Konami kód / skrytý 🌾)
+
+
+@router.post("/egg/claim")
+def egg_claim(user: sqlite3.Row = Depends(require_user),
+              conn: sqlite3.Connection = Depends(db_dep)):
+    """Easter egg: jednorázová odměna za nalezení tajného klasu. points_log reason = ledger (1×/uživatel)."""
+    reason = "Tajný klas 🥚"
+    if conn.execute("SELECT 1 FROM points_log WHERE user_id = ? AND reason = ? LIMIT 1",
+                    (user["id"], reason)).fetchone():
+        return {"ok": False, "already": True}
+    add_points(conn, user["id"], EGG_REWARD, reason)
+    conn.commit()
+    bal = conn.execute("SELECT points FROM users WHERE id = ?", (user["id"],)).fetchone()["points"]
+    return {"ok": True, "reward": EGG_REWARD, "balance": bal}
+
+
 @router.get("/level-pass")
 def level_pass_status(user: sqlite3.Row = Depends(require_user),
                       conn: sqlite3.Connection = Depends(db_dep)):
