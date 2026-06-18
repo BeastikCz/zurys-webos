@@ -45,6 +45,28 @@ def test_battlepass_progress_and_claim(client):
         conn.close()
 
 
+def test_battlepass_late_first_open_counts_current_season_xp(client):
+    from app.db import get_conn, now_iso
+    from app.deps import add_points
+    from app import battlepass
+    conn = get_conn()
+    try:
+        uid = _mk(conn, earned=0)
+        conn.commit()
+
+        # User farms before ever opening Battle Pass. First status must not set
+        # baseline to current XP, otherwise the pass appears locked forever.
+        add_points(conn, uid, 6000, "Sledovani streamu")
+        conn.commit()
+
+        st = battlepass.status(conn, {"id": uid})
+        assert st["tier"] == 2
+        assert st["claimable"] == 2
+        assert st["xp"] == 6000
+    finally:
+        conn.close()
+
+
 def test_battlepass_api(client):
     from app.db import get_conn, now_iso
     from app.config import SESSION_COOKIE
