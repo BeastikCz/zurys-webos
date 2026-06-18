@@ -1180,7 +1180,7 @@ def garden_harvest(data: GardenHarvestIn, user: sqlite3.Row = Depends(require_us
 @router.post("/garden/rescue")
 def garden_rescue(data: GardenHarvestIn, user: sqlite3.Row = Depends(require_user),
                   conn: sqlite3.Connection = Depends(db_dep)):
-    """Zaplať záchranu před škůdci na záhonu (plná sklizeň místo poloviční)."""
+    """Zaplať záchranu před chrobáky na záhonu (plná sklizeň místo poloviční)."""
     _garden_guard()
     from .. import garden
     r = garden.rescue(conn, user, data.plot)

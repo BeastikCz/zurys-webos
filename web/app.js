@@ -2066,11 +2066,11 @@ async function loadGardenDecor() {
     const shelf = d.owned_icons.length
       ? `<div class="decor-shelf">${d.owned_icons.map((i) => `<span>${i}</span>`).join("")}</div>`
       : `<p class="muted" style="font-size:12.5px;margin:0 0 10px">Zatím žádné dekorace — kup si je dole a oživ zahrádku! 🌻</p>`;
-    const pestInfo = `<p class="muted" style="font-size:12.5px;margin:0 0 10px">Skudci: <b>${d.pest_chance || 0}%</b> sance · dekorace snizuji o <b>${d.pest_reduction || 0}%</b> · minimum <b>${d.pest_min_chance || 0}%</b>.</p>`;
+    const pestInfo = `<p class="muted" style="font-size:12.5px;margin:0 0 10px">Chrobáci: <b>${d.pest_chance || 0}%</b> šance · dekorace snižují o <b>${d.pest_reduction || 0}%</b> · minimum <b>${d.pest_min_chance || 0}%</b>.</p>`;
     const shop = d.items.map((it) => {
       const btn = it.owned ? `<span class="decor-owned">✓ máš</span>`
         : `<button class="bp-claim" data-action="decor-buy" data-key="${it.key}">${fmtPts(it.cost)}</button>`;
-      return `<div class="decor-card${it.owned ? " owned" : ""}"><div class="decor-ico">${it.icon}</div><b>${esc(it.name)}</b><span class="faint" style="font-size:12px">-${it.pest_reduction || 0}% skudci</span>${btn}</div>`;
+      return `<div class="decor-card${it.owned ? " owned" : ""}"><div class="decor-ico">${it.icon}</div><b>${esc(it.name)}</b><span class="faint" style="font-size:12px">-${it.pest_reduction || 0}% chrobáci</span>${btn}</div>`;
     }).join("");
     box.innerHTML = `<div class="section-title" style="margin:26px 0 8px">🎨 Dekorace zahrádky</div>
       ${pestInfo}
