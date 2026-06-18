@@ -14,97 +14,85 @@ def _mk_user(conn):
         (u, u, "user", 0, now_iso())).lastrowid
 
 
-def _reset(conn, target, reward):
+def _reset(conn, target, reward, tier_max=10):
+    """target = KROK (subů na tier), reward = odměna za tier, tier_max = strop tierů."""
     from app.db import set_setting
     from app import subgoal
     set_setting(conn, "subgoal_enabled", "1")
     set_setting(conn, "subgoal_target", str(target))
     set_setting(conn, "subgoal_reward", str(reward))
+    set_setting(conn, "subgoal_tier_max", str(tier_max))
     set_setting(conn, "subgoal_day", subgoal._today())   # dnešní den → žádný reset uprostřed testu
     set_setting(conn, "subgoal_progress", "0")
+    set_setting(conn, "subgoal_tier", "0")
     set_setting(conn, "subgoal_done", "0")
     conn.execute("DELETE FROM subgoal_gifters")           # izolace mezi testy (sdílená session DB)
     conn.commit()
 
 
-def test_subgoal_rewards_only_hh_gifters(client):
-    from app.db import get_conn, now_iso, local_date
+def _points(conn, uid):
+    return conn.execute("SELECT points FROM users WHERE id=?", (uid,)).fetchone()["points"]
+
+
+def test_subgoal_escalating_tiers(client):
+    """Eskalace: tier 1 (step subů) → reward_step, tier 2 (2×step) → 2×reward_step. Pozdější gifter
+    bere vyšší tier; nikdo se nezdvojí; gifter pod 1. milníkem zatím nebere."""
+    from app.db import get_conn
     from app import subgoal
     conn = get_conn()
     try:
-        _reset(conn, target=3, reward=4000)
-        day = local_date()
-        hh = _mk_user(conn)          # giftnul v happy hour → BERE
-        plain = _mk_user(conn)       # giftnul mimo HH → nebere
-        viewer = _mk_user(conn)      # aktivní divák, negifter → nebere
-        conn.execute("INSERT INTO activity_state (user_id, day, watch_today, chat_today) VALUES (?,?,1,0)",
-                     (viewer, day))
+        _reset(conn, target=3, reward=1000)          # krok 3 subů, 1000/tier
+        g1 = _mk_user(conn)
+        subgoal.record_gifter(conn, g1, 2, in_hh=False)
         conn.commit()
+        subgoal.tick(conn, 2)                         # progress 2 < 3 → nic
+        assert _points(conn, g1) == 0, "pod 1. milníkem se nevyplácí"
+        subgoal.tick(conn, 1)                         # progress 3 → TIER 1 → g1 bere 1000
+        assert _points(conn, g1) == 1000
+        assert subgoal.status(conn)["tier"] == 1
+        g2 = _mk_user(conn)                           # nový gifter, naplní tier 2
+        subgoal.record_gifter(conn, g2, 1, in_hh=False)
+        conn.commit()
+        subgoal.tick(conn, 3)                         # progress 6 → TIER 2 → g2 bere 2000
+        assert _points(conn, g2) == 2000, "pozdější gifter bere vyšší tier"
+        assert _points(conn, g1) == 1000, "g1 se nezdvojí (paid)"
+        assert subgoal.status(conn)["tier"] == 2
+    finally:
+        conn.close()
 
-        subgoal.record_gifter(conn, hh, 2, in_hh=True)
+
+def test_subgoal_pays_all_gifters_not_just_hh(client):
+    """Odměnu bere KAŽDÝ gifter sub cíle, ne jen happy-hour (HH gating zrušen)."""
+    from app.db import get_conn
+    from app import subgoal
+    conn = get_conn()
+    try:
+        _reset(conn, target=2, reward=1000)
+        hh = _mk_user(conn); plain = _mk_user(conn)
+        subgoal.record_gifter(conn, hh, 1, in_hh=True)
         subgoal.record_gifter(conn, plain, 1, in_hh=False)
         conn.commit()
-
-        subgoal.tick(conn, 2)
-        assert conn.execute("SELECT points FROM users WHERE id=?", (hh,)).fetchone()["points"] == 0, \
-            "pod cílem se nic nevyplácí"
-
-        subgoal.tick(conn, 1)        # 3. sub = dosažení cíle → výplata
-        assert subgoal.status(conn)["done"] is True
-        assert conn.execute("SELECT points FROM users WHERE id=?", (hh,)).fetchone()["points"] == 4000, \
-            "HH gifter bere odměnu"
-        assert conn.execute("SELECT points FROM users WHERE id=?", (plain,)).fetchone()["points"] == 0, \
-            "gifter mimo happy hour nebere"
-        assert conn.execute("SELECT points FROM users WHERE id=?", (viewer,)).fetchone()["points"] == 0, \
-            "pasivní aktivní divák nebere"
-
-        subgoal.tick(conn, 5)        # další subby už nevyplácí (1×/den)
-        assert conn.execute("SELECT points FROM users WHERE id=?", (hh,)).fetchone()["points"] == 4000
+        subgoal.tick(conn, 2)                         # progress 2 → TIER 1 → OBA berou 1000
+        assert _points(conn, hh) == 1000
+        assert _points(conn, plain) == 1000, "gifter mimo HH teď taky bere"
     finally:
         conn.close()
 
 
-def test_subgoal_no_forfeit_waits_for_hh_gifter(client):
-    """Cíl naplněn MIMO HH (0 eligible) → NEdokončuje se (žádný forfeit/lock). Jakmile dorazí HH
-    gifter, vyplatí se mu (oprava: dřív cíl 'dohrál' a HH gifteři pak nedostali nic)."""
+def test_subgoal_tier_cap(client):
+    """Strop: tier nepřekročí tier_max, i když progress vyletí výš."""
     from app.db import get_conn
     from app import subgoal
     conn = get_conn()
     try:
-        _reset(conn, target=2, reward=4000)
-        subgoal.tick(conn, 2)                     # cíl naplněn, ale 0 HH gifterů
-        assert subgoal.status(conn)["done"] is False, "bez HH gifterů se cíl nedokončuje (žádný forfeit)"
-        hh = _mk_user(conn)                       # teď dorazí HH gifter
-        subgoal.record_gifter(conn, hh, 1, in_hh=True)
+        _reset(conn, target=2, reward=1000, tier_max=2)   # max tier 2
+        g = _mk_user(conn)
+        subgoal.record_gifter(conn, g, 10, in_hh=False)
         conn.commit()
-        subgoal.tick(conn, 1)                     # gift event → settle vyplatí HH giftera
-        assert subgoal.status(conn)["done"] is True
-        assert conn.execute("SELECT points FROM users WHERE id=?", (hh,)).fetchone()["points"] == 4000
-    finally:
-        conn.close()
-
-
-def test_subgoal_pays_late_hh_gifter_after_completion(client):
-    """KAŽDÝ HH gifter dostane odměnu, i když giftne AŽ PO naplnění lišty (oprava lock-outu).
-    A nikdo se nezdvojí (paid flag)."""
-    from app.db import get_conn
-    from app import subgoal
-    conn = get_conn()
-    try:
-        _reset(conn, target=2, reward=5000)
-        early = _mk_user(conn)
-        subgoal.record_gifter(conn, early, 2, in_hh=True)
-        conn.commit()
-        subgoal.tick(conn, 2)                     # cíl hit → early vyplacen
-        assert conn.execute("SELECT points FROM users WHERE id=?", (early,)).fetchone()["points"] == 5000
-        late = _mk_user(conn)                     # pozdní HH gifter PO naplnění
-        subgoal.record_gifter(conn, late, 1, in_hh=True)
-        conn.commit()
-        subgoal.tick(conn, 1)                     # další gift event → late taky vyplacen
-        assert conn.execute("SELECT points FROM users WHERE id=?", (late,)).fetchone()["points"] == 5000, \
-            "pozdní HH gifter taky bere (žádný lock-out)"
-        assert conn.execute("SELECT points FROM users WHERE id=?", (early,)).fetchone()["points"] == 5000, \
-            "early se nezdvojí (paid=1)"
+        subgoal.tick(conn, 10)                        # progress 10 → tier = min(5, 2) = 2 → 2×1000
+        assert _points(conn, g) == 2000, "strop drží tier na tier_max"
+        st = subgoal.status(conn)
+        assert st["tier"] == 2 and st["maxed"] is True
     finally:
         conn.close()
 

@@ -1,16 +1,21 @@
-"""Komunitní SUB cíl: společná lišta se plní z Kick subů (sub/resub = +1, gift sub = +n).
-Když se naplní, odměnu dostanou JEN dnešní gifteři z happy hour (kdo dnes giftnul aspoň
-1 sub během happy hour) + bot to oznámí v chatu. Reset každý den. Stav/konfig v app_settings,
-seznam dnešních gifterů v tabulce subgoal_gifters.
+"""Komunitní SUB cíl: ESKALUJÍCÍ žebříček. Společná lišta se plní z Kick subů (sub/resub = +1,
+gift sub = +n). Po každém TIERU (milníku po `step` subech) dostane každý dosud nevyplacený GIFTER
+odměnu ve výši aktuálního tieru (tier × reward_step) – a cíl se zvedne na další tier. Tier 1 = step
+subů → reward_step, tier 2 = 2×step → 2×reward_step, … až do `tier_max` (strop, dál cíl neroste).
 
-Flywheel: happy hour → giftni suby → naplň cíl → gifteři berou odměnu → motivace giftnout
-právě v happy hour. Sourozenec community_goal.py (chat cíl) – plní se stejně, jen odměnu
-tam berou všichni aktivní (sub cíl ji cílí na giftery).
+Každý gifter dostane odměnu PRÁVĚ JEDNOU (paid flag) – ve výši tieru, ve kterém se vyplácí → kdo
+giftne v pozdějším (vyšším) tieru, bere víc. NENÍ vázané na happy hour (odměnu bere každý gifter
+sub cíle). Reset = konec streamu (live_events) nebo nový den. Stav/konfig v app_settings, seznam
+dnešních gifterů + jejich paid stav v tabulce subgoal_gifters.
+
+Flywheel: giftni suby → naplň tier → gifteři berou (eskalující) odměnu → motivace giftovat dál,
+ať se odemkne vyšší tier s vyšší odměnou. Sourozenec community_goal.py (chat cíl).
 """
 from .db import now_iso, get_setting, set_setting, local_date
 
-DEFAULT_TARGET = 20      # kolik subů za den naplní cíl
-DEFAULT_REWARD = 300     # kolik sedláků dostane každý dnešní aktivní divák
+DEFAULT_STEP = 10        # KROK: o kolik subů se posune cíl každý tier (setting subgoal_target)
+DEFAULT_REWARD = 1000    # odměna za 1 tier; gifter ji dostane 1× ve výši svého tieru (setting subgoal_reward)
+DEFAULT_TIER_MAX = 10    # strop: po tomhle tieru už cíl neroste (chrání ekonomiku) (setting subgoal_tier_max)
 
 
 def _today() -> str:
@@ -28,52 +33,70 @@ def _int(conn, key: str, default: int) -> int:
 def _cfg(conn) -> dict:
     return {
         "enabled": _int(conn, "subgoal_enabled", 1),
-        "target": max(1, _int(conn, "subgoal_target", DEFAULT_TARGET)),
-        "reward": max(0, _int(conn, "subgoal_reward", DEFAULT_REWARD)),
+        "step": max(1, _int(conn, "subgoal_target", DEFAULT_STEP)),            # subů na 1 tier
+        "reward_step": max(0, _int(conn, "subgoal_reward", DEFAULT_REWARD)),   # sedláků za 1 tier
+        "tier_max": max(1, _int(conn, "subgoal_tier_max", DEFAULT_TIER_MAX)),  # strop tierů
     }
 
 
+def _reached_tier(progress: int, cfg: dict) -> int:
+    """Kolik tierů (milníků) je hotových při daném progressu, stropnuto na tier_max."""
+    return min(progress // cfg["step"], cfg["tier_max"])
+
+
 def _ensure_day(conn) -> None:
-    """Nový den → vynuluj počítadlo, příznak výplaty i seznam dnešních gifterů."""
+    """Nový den → vynuluj počítadlo, tier, příznak stropu i seznam dnešních gifterů."""
     if get_setting(conn, "subgoal_day") != _today():
         set_setting(conn, "subgoal_day", _today())
         set_setting(conn, "subgoal_progress", "0")
+        set_setting(conn, "subgoal_tier", "0")
         set_setting(conn, "subgoal_done", "0")
         conn.execute("DELETE FROM subgoal_gifters WHERE day != ?", (_today(),))
 
 
 def reset(conn) -> None:
-    """Plný reset SUB cíle: počítadlo, příznak výplaty i seznam gifterů na nulu. Volá se na KONCI
-    streamu (live_events), ať každý stream začíná s čistou lištou. Necommituje – commit dělá caller."""
+    """Plný reset SUB cíle: počítadlo, tier, příznak stropu i seznam gifterů na nulu. Volá se na KONCI
+    streamu (live_events), ať každý stream začíná na tieru 1. Necommituje – commit dělá caller."""
     set_setting(conn, "subgoal_progress", "0")
+    set_setting(conn, "subgoal_tier", "0")
     set_setting(conn, "subgoal_done", "0")
     conn.execute("DELETE FROM subgoal_gifters")
 
 
 def status(conn) -> dict:
-    """Stav cíle pro UI lištu (veřejné)."""
+    """Stav cíle pro UI lištu (veřejné). target/reward = DALŠÍ tier (kam lišta míří)."""
     _ensure_day(conn)
     cfg = _cfg(conn)
     progress = _int(conn, "subgoal_progress", 0)
-    done = get_setting(conn, "subgoal_done") == "1"
+    tier = _reached_tier(progress, cfg)
+    maxed = tier >= cfg["tier_max"]
+    next_tier = tier if maxed else tier + 1
+    target = next_tier * cfg["step"]                       # absolutní cíl dalšího milníku
+    reward = next_tier * cfg["reward_step"]                # odměna za příští tier
     gifters = conn.execute(
-        "SELECT COUNT(*) c FROM subgoal_gifters WHERE day = ? AND hh_subs > 0", (_today(),)
+        "SELECT COUNT(*) c FROM subgoal_gifters WHERE day = ?", (_today(),)
     ).fetchone()["c"]
     conn.commit()
     return {
         "enabled": bool(cfg["enabled"]),
-        "progress": min(progress, cfg["target"]),
-        "target": cfg["target"],
-        "reward": cfg["reward"],
-        "done": done,
-        "gifters": gifters,        # kolik dnešních HH gifterů odměnu vezme (zatím)
-        "pct": min(100, round(progress * 100 / cfg["target"])) if cfg["target"] else 0,
+        "progress": min(progress, target),
+        "target": target,
+        "reward": reward,
+        "tier": tier,                  # kolik tierů už hotových
+        "tier_max": cfg["tier_max"],
+        "maxed": maxed,
+        "done": maxed,                 # „done" (zlatý stav overlaye) = dosažen strop tierů
+        "gifters": gifters,            # kolik lidí dnes giftlo (engagement)
+        "pct": min(100, round(progress * 100 / target)) if target else 0,
+        # RAW konfig (pro admin formulář – edituje se KROK a odměna ZA TIER, ne computed milník):
+        "step": cfg["step"],
+        "reward_step": cfg["reward_step"],
     }
 
 
 def tick(conn, count: int = 1) -> None:
-    """+count subů do cíle. Po překročení atomicky 'claimne' výplatu a rozdá ji.
-    Necommituje increment (commituje caller); _fire si commit dělá sám."""
+    """+count subů do lišty. Po každém ticku zkusí vyplatit dosažené tiery (eskalující žebříček).
+    Necommituje increment (commituje caller); _settle si commit dělá sám."""
     if count <= 0:
         return
     cfg = _cfg(conn)
@@ -83,8 +106,7 @@ def tick(conn, count: int = 1) -> None:
     conn.execute(
         "UPDATE app_settings SET value = CAST(COALESCE(value,'0') AS INTEGER) + ?, updated_at = ? "
         "WHERE key = 'subgoal_progress'", (count, now_iso()))
-    if _int(conn, "subgoal_progress", 0) >= cfg["target"]:
-        _fire(conn, cfg)
+    _settle(conn, cfg)
 
 
 def record_gifter(conn, user_id: int, n: int, in_hh: bool) -> None:
@@ -121,16 +143,19 @@ def _announce_async(text: str) -> None:
     threading.Thread(target=_bg, daemon=True).start()
 
 
-def _fire(conn, cfg) -> None:
-    """Cíl je splněný → vyplať KAŽDÉMU dnešnímu HH gifterovi, který ještě nedostal (paid=0).
-    Idempotentní PER-GIFTER (atomický claim paid 0→1) → každý HH gifter dostane odměnu právě jednou,
-    ať giftnul PŘED i PO naplnění lišty. Žádný forfeit ani lock-out: když cíl naplní jen gifty MIMO
-    happy hour (0 eligible), prostě se zatím nic nevyplatí a `done` se nenastaví – vyplatí se, jakmile
-    dorazí HH gifter (volá se z ticku při každém gift eventu, dokud progress >= target).
-    subgoal_done = jen pro UI/oznámení (1×/den, při prvním reálném vyplacení)."""
-    today, reward = _today(), cfg["reward"]
+def _settle(conn, cfg) -> None:
+    """Eskalující výplata. Při dosaženém tieru (progress // step, stropnuto tier_max) vyplať KAŽDÉMU
+    dosud nevyplacenému gifterovi (paid=0) odměnu ve výši AKTUÁLNÍHO tieru (tier × reward_step) a označ
+    paid=1. Každý gifter tak bere právě jednou – ve výši tieru, ve kterém se vyplácí (kdo giftne výš,
+    bere víc). Volá se z ticku po každém gift eventu. Oznámení do chatu při dosažení NOVÉHO tieru."""
+    today = _today()
+    progress = _int(conn, "subgoal_progress", 0)
+    tier = _reached_tier(progress, cfg)
+    if tier < 1:
+        return                                       # ještě ani první milník
+    reward = tier * cfg["reward_step"]
     eligible = [r["user_id"] for r in conn.execute(
-        "SELECT user_id FROM subgoal_gifters WHERE day = ? AND hh_subs > 0 AND paid = 0", (today,)).fetchall()]
+        "SELECT user_id FROM subgoal_gifters WHERE day = ? AND paid = 0", (today,)).fetchall()]
     newly = []
     for uid in eligible:                             # atomicky zaber každého → anti-double-pay i při souběhu
         if conn.execute("UPDATE subgoal_gifters SET paid = 1 WHERE day = ? AND user_id = ? AND paid = 0",
@@ -140,21 +165,25 @@ def _fire(conn, cfg) -> None:
         qm = ",".join("?" * len(newly))
         conn.execute(f"UPDATE users SET points = points + ? WHERE id IN ({qm})", [reward, *newly])
         conn.executemany(
-            "INSERT INTO points_log (user_id, change, reason, created_at) "
-            "VALUES (?, ?, 'Sub cíl komunity 🟣🎁', ?)",
-            [(uid, reward, now_iso()) for uid in newly])
+            "INSERT INTO points_log (user_id, change, reason, created_at) VALUES (?, ?, ?, ?)",
+            [(uid, reward, f"Sub cíl tier {tier} 🟣🎁", now_iso()) for uid in newly])
         from .deps import notify
         for uid in newly:
-            notify(conn, uid, "🟣", "Sub cíl splněn!",
-                   f"Komunita naplnila SUB cíl – bereš +{reward} sedláků za gift sub v happy hour! 🎁", "#/profile")
-    # „done" + oznámení do chatu jen JEDNOU za den – při prvním reálném vyplacení (aspoň 1 HH gifter)
-    first_done = bool(newly) and conn.execute(
-        "UPDATE app_settings SET value = '1', updated_at = ? WHERE key = 'subgoal_done' AND value != '1'",
-        (now_iso(),)).rowcount == 1
+            notify(conn, uid, "🟣", f"Sub cíl – tier {tier}!",
+                   f"Komunita dosáhla tier {tier} – bereš +{reward} sedláků za gift sub! 🎁", "#/profile")
+    # oznámení do chatu při dosažení NOVÉHO tieru (1× na tier)
+    stored = _int(conn, "subgoal_tier", 0)
+    leveled = tier > stored
+    if leveled:
+        set_setting(conn, "subgoal_tier", str(tier))
+        set_setting(conn, "subgoal_done", "1" if tier >= cfg["tier_max"] else "0")
     conn.commit()
-    if first_done:
-        n = conn.execute("SELECT COUNT(*) c FROM subgoal_gifters WHERE day = ? AND hh_subs > 0 AND paid = 1",
-                         (today,)).fetchone()["c"]
-        who = "gifter" if n == 1 else "gifterů"
-        _announce_async(f"🟣 KOMUNITA SPLNILA SUB CÍL! {n} {who} z happy hour bere +{reward} sedláků! "
-                        f"Děkujeme za gift suby! 🎁🌾")
+    if leveled:
+        nxt = "MAX 🏆" if tier >= cfg["tier_max"] else f"{(tier + 1) * cfg['step']} subů"
+        if newly:
+            who = "gifter" if len(newly) == 1 else "gifterů"
+            _announce_async(f"🟣 SUB CÍL — TIER {tier}! {len(newly)} {who} bere +{reward} sedláků za gift suby! "
+                            f"Další tier = {nxt}. 🎁🌾")
+        else:
+            _announce_async(f"🟣 SUB CÍL — TIER {tier} odemčen! Kdo teď giftne sub, bere +{reward} sedláků. "
+                            f"Další tier = {nxt}. 🎁")

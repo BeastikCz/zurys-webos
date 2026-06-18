@@ -1414,15 +1414,17 @@ def set_community_goal(data: CommunityGoalIn, request: Request,
 def set_sub_goal(data: SubGoalIn, request: Request,
                  conn: sqlite3.Connection = Depends(db_dep),
                  admin: sqlite3.Row = Depends(require_admin)):
-    """Naladí komunitní SUB cíl (target / reward / zap-vyp). Admin only."""
+    """Naladí komunitní SUB cíl (krok / odměna za tier / strop tierů / zap-vyp). Admin only."""
     if data.enabled is not None:
         set_setting(conn, "subgoal_enabled", "1" if data.enabled else "0")
     if data.target is not None:
-        set_setting(conn, "subgoal_target", str(data.target))
+        set_setting(conn, "subgoal_target", str(data.target))          # KROK subů na tier
     if data.reward is not None:
-        set_setting(conn, "subgoal_reward", str(data.reward))
+        set_setting(conn, "subgoal_reward", str(data.reward))          # odměna za tier
+    if data.tier_max is not None:
+        set_setting(conn, "subgoal_tier_max", str(data.tier_max))      # strop tierů
     record_audit(conn, admin, request, "subgoal.update", "",
-                 f"enabled={data.enabled} target={data.target} reward={data.reward}")
+                 f"enabled={data.enabled} step={data.target} reward={data.reward} tier_max={data.tier_max}")
     conn.commit()
     from ..subgoal import status
     return status(conn)
