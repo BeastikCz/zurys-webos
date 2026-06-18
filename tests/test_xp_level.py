@@ -57,3 +57,21 @@ def test_auth_me_exposes_level(client):
         conn.close()
     me = client.get("/api/auth/me", headers={"Cookie": f"{SESSION_COOKIE}={t}"}).json()["user"]
     assert me["level"] == 3 and me["earned_total"] == et and 0 <= me["level_pct"] <= 100
+
+
+def test_add_points_xp_false_skips_earned(client):
+    """Admin grant (xp=False) přidá body, ale NE do earned_total (žádný level up za darované body)."""
+    from app.db import get_conn, now_iso
+    from app.deps import add_points
+    conn = get_conn()
+    try:
+        u = f"xp_{secrets.token_hex(3)}"
+        uid = conn.execute(
+            "INSERT INTO users (kick_username, username, role, points, earned_total, created_at) "
+            "VALUES (?,?,?,0,0,?)", (u, u, "user", now_iso())).lastrowid
+        add_points(conn, uid, 5000, "Úprava adminem", xp=False)
+        conn.commit()
+        r = conn.execute("SELECT points, earned_total FROM users WHERE id=?", (uid,)).fetchone()
+        assert r["points"] == 5000 and r["earned_total"] == 0   # body +5000, XP/level beze změny
+    finally:
+        conn.close()

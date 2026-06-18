@@ -910,7 +910,7 @@ def change_user_points(user_id: int, data: UserPointsIn, request: Request,
         raise HTTPException(status_code=400, detail="Uveď důvod úpravy bodů (kvůli audit logu).")
     if admin["role"] == ROLE_MOD and abs(int(data.change)) > MOD_POINTS_MAX:
         raise HTTPException(status_code=403, detail=f"Moderátor smí upravit nejvýše ±{MOD_POINTS_MAX} sedláků najednou.")
-    add_points(conn, user_id, data.change, reason)
+    add_points(conn, user_id, data.change, reason, xp=False)   # admin grant = body ANO, level/XP NE (jinak by šel level koupit/darovat)
     record_audit(conn, admin, request, "user.points", f"#{user_id} {target['username']}",
                  f"{'+' if data.change > 0 else ''}{data.change} PTS – {reason}")
     conn.commit()

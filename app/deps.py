@@ -371,10 +371,11 @@ def counts_as_earned(reason: str) -> bool:
     return earn_factor(reason) > 0
 
 
-def add_points(conn: sqlite3.Connection, user_id: int, change: int, reason: str) -> None:
+def add_points(conn: sqlite3.Connection, user_id: int, change: int, reason: str, *, xp: bool = True) -> None:
     """Změní body uživatele a zapíše záznam do points_log. Kladný přírůstek navíc naskládá do
-    earned_total (lifetime XP – nikdy neklesá): farmení 100 %, suby 50 %, gambling/vratky 0 %."""
-    earn = int(round(max(0, change) * earn_factor(reason)))
+    earned_total (lifetime XP – nikdy neklesá): farmení 100 %, suby 50 %, gambling/vratky 0 %.
+    xp=False → přírůstek se do earned_total NEpočítá vůbec (admin granty: body ano, level NE)."""
+    earn = int(round(max(0, change) * earn_factor(reason))) if xp else 0
     conn.execute("UPDATE users SET points = points + ?, earned_total = earned_total + ? WHERE id = ?",
                  (change, earn, user_id))
     conn.execute(
