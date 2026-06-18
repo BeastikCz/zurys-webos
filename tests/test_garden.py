@@ -88,15 +88,15 @@ def test_garden_decor_buy(client):
         st = garden.decor_status(conn, user)
         assert len(st["items"]) == len(garden.DECOR) and not st["owned_icons"]
         assert st["pest_chance"] == 70
-        assert next(i for i in st["items"] if i["key"] == "sunflower")["pest_reduction"] == 4
+        assert next(i for i in st["items"] if i["key"] == "sunflower")["pest_reduction"] == 2
 
         r = garden.buy_decor(conn, user, "sunflower")   # cost 500
         assert r["ok"] and r["balance"] == 2500
         assert garden.buy_decor(conn, user, "sunflower")["ok"] is False     # už vlastní
         st2 = garden.decor_status(conn, user)
         assert "🌻" in st2["owned_icons"]
-        assert st2["pest_reduction"] == 4 and st2["pest_chance"] == 66
-        assert garden.status(conn, user)["pest_chance"] == 66
+        assert st2["pest_reduction"] == 2 and st2["pest_chance"] == 68   # 70 − 2 (slunečnice)
+        assert garden.status(conn, user)["pest_chance"] == 68
 
         assert garden.buy_decor(conn, user, "rainbow")["ok"] is False       # 9000 > 2500
         assert garden.buy_decor(conn, user, "neznama")["ok"] is False       # neznámá
