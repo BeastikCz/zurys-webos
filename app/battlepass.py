@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 
 from .db import now_iso, local_date, local_now, LOCAL_TZ
 
-TIER_XP = 2500     # earned_total na 1 tier
+TIER_XP = 5000     # XP (sezónní) na 1 tier = přesně 1 gift sub (supporter šplhá 1 tier/gift; free grinduje pomaleji)
 N_TIERS = 20       # délka dráhy za sezónu
 
 

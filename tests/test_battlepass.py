@@ -24,8 +24,9 @@ def test_battlepass_progress_and_claim(client):
         st = battlepass.status(conn, {"id": uid})
         assert st["tier"] == 0 and st["claimable"] == 0 and len(st["tiers"]) == battlepass.N_TIERS
 
-        # nafarmi 6000 XP → 2 tiery (TIER_XP 2500)
-        conn.execute("UPDATE users SET earned_total = 6000 WHERE id=?", (uid,))
+        # nafarmi 2 tiery XP (vztaženo ke konstantě, ať drží i při změně TIER_XP)
+        bp2 = battlepass.TIER_XP * 2
+        conn.execute("UPDATE users SET earned_total = ? WHERE id=?", (bp2, uid))
         conn.commit()
         st = battlepass.status(conn, {"id": uid})
         assert st["tier"] == 2 and st["claimable"] == 2
@@ -33,7 +34,7 @@ def test_battlepass_progress_and_claim(client):
         # claim tier 1 → odměna
         r = battlepass.claim(conn, {"id": uid}, 1)
         assert r["ok"] and r["reward"] == battlepass.tier_reward(1)
-        assert conn.execute("SELECT earned_total FROM users WHERE id=?", (uid,)).fetchone()["earned_total"] == 6000
+        assert conn.execute("SELECT earned_total FROM users WHERE id=?", (uid,)).fetchone()["earned_total"] == bp2
 
         # claim stejného znovu → fail; claim neodemčeného (tier 5) → fail
         assert battlepass.claim(conn, {"id": uid}, 1)["ok"] is False
@@ -56,14 +57,14 @@ def test_battlepass_late_first_open_counts_current_season_xp(client):
 
         # XP nasbírané PŘED prvním otevřením passu se musí započítat – baseline = stav na ZAČÁTKU
         # sezóny (dopočteno), ne earned_total při otevření, jinak by pass vypadal navždy zamčený.
-        # Supporter event = uncapped, 1 sub × 5000 = 5000 XP → 2 tiery (TIER_XP 2500).
-        add_points(conn, uid, 1000, "Kick gift sub 🎁 ×1")
+        # Supporter event = uncapped, 2 suby × XP_PER_SUB = 2 tiery (TIER_XP == XP_PER_SUB).
+        add_points(conn, uid, 2000, "Kick gift sub 🎁 ×2")
         conn.commit()
 
         st = battlepass.status(conn, {"id": uid})
         assert st["tier"] == 2
         assert st["claimable"] == 2
-        assert st["xp"] == XP_PER_SUB                       # 1 sub = 5000 XP
+        assert st["xp"] == 2 * XP_PER_SUB                   # 2 suby = 10000 XP
     finally:
         conn.close()
 
@@ -75,8 +76,8 @@ def test_battlepass_api(client):
     conn = get_conn()
     try:
         from app import battlepass
-        uid = _mk(conn, earned=8000)
-        # baseline 0 pro aktuální sezónu (jako by sezóna začala když měl 0) → 8000 XP = 3 tiery
+        uid = _mk(conn, earned=3 * battlepass.TIER_XP)
+        # baseline 0 pro aktuální sezónu (jako by sezóna začala když měl 0) → 3 tiery
         conn.execute("INSERT INTO battlepass (user_id, season, baseline, claimed, created_at) VALUES (?,?,0,'[]',?)",
                      (uid, battlepass._season(), now_iso()))
         t = secrets.token_hex(24)
@@ -105,7 +106,7 @@ def test_battlepass_premium(client):
         sub = {"id": uid, "is_sub": 1, "role": "user"}
         non = {"id": uid, "is_sub": 0, "role": "user"}
         st = battlepass.status(conn, sub)                 # baseline = 0 (earned=0)
-        conn.execute("UPDATE users SET earned_total = 6000 WHERE id=?", (uid,))   # → 2 tiery odemčené
+        conn.execute("UPDATE users SET earned_total = ? WHERE id=?", (battlepass.TIER_XP * 2, uid))  # → 2 tiery
         conn.commit()
         st = battlepass.status(conn, sub)
         assert st["is_premium"] is True
@@ -115,7 +116,7 @@ def test_battlepass_premium(client):
         # sub claimne premium tier 1 → 3× odměna
         r = battlepass.claim(conn, sub, 1, premium=True)
         assert r["ok"] and r["premium"] and r["reward"] == battlepass.premium_reward(1)
-        assert conn.execute("SELECT earned_total FROM users WHERE id=?", (uid,)).fetchone()["earned_total"] == 6000
+        assert conn.execute("SELECT earned_total FROM users WHERE id=?", (uid,)).fetchone()["earned_total"] == battlepass.TIER_XP * 2
         # znovu premium tier 1 → fail (už vyzvednuto)
         assert battlepass.claim(conn, sub, 1, premium=True)["ok"] is False
         # free řada tier 1 je nezávislá → pořád jde claimnout
