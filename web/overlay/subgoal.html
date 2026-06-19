@@ -3,127 +3,141 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>ZURYS — SUB sklizeň overlay</title>
+<title>ZURYS — SUB cíl overlay (Zlatá sklizeň)</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  html, body { background: transparent; overflow: hidden; font-family: "Segoe UI", system-ui, Arial, sans-serif; }
-  :root { --g: #9bee4f; --g2: #7fe03a; --gd: #4fae22; --gold: #f4b41a; --gold2: #ffd860; --gold-d: #d2820f; }
-  #wrap { padding: 20px; display: inline-block; }
+  html, body { background: transparent; overflow: hidden; font-family: "Rajdhani", "Segoe UI", system-ui, Arial, sans-serif; }
+  :root {
+    --g: #9bee4f; --g2: #7fe03a; --gd: #4fae22;
+    --gold: #f4b41a; --gold2: #ffd24a; --gold-d: #b9760c;
+    --pp: #9147ff; --ink: #eef3e6; --dim: #8c9a82;
+  }
+  #wrap { padding: 26px; display: inline-block; }
   #wrap.hidden { display: none; }
 
-  .poster {
-    position: relative; width: 384px; padding: 26px 28px 24px; text-align: center; color: #fff;
-    background: radial-gradient(125% 80% at 50% 0%, #0e1708, #06090400 62%), #05070b;
-    border: 3px solid var(--g); border-radius: 26px;
-    box-shadow: 0 0 0 1px rgba(155,238,79,.25), 0 0 34px rgba(127,224,58,.45), 0 0 90px rgba(127,224,58,.16),
-                inset 0 0 60px rgba(0,0,0,.72);
-    transition: transform .22s cubic-bezier(.2,.8,.2,1);
+  .panel {
+    position: relative; width: 760px; padding: 26px 30px 20px;
+    background: linear-gradient(160deg, #0c1109 0%, #0a0d07 55%, #0c0f08 100%);
+    clip-path: polygon(0 16px, 22px 0, calc(100% - 70px) 0, 100% 34px, 100% 100%, 70px 100%, 0 calc(100% - 22px));
+    box-shadow: inset 0 0 0 1.5px rgba(155,238,79,.28), inset 0 0 70px rgba(0,0,0,.6), 0 0 40px rgba(127,224,58,.10);
   }
-  .poster.done { border-color: var(--gold2);
-    box-shadow: 0 0 0 1px rgba(255,216,96,.5), 0 0 50px rgba(255,216,96,.55), 0 0 120px rgba(127,224,58,.22),
-                inset 0 0 60px rgba(0,0,0,.72); }
+  .panel.done { box-shadow: inset 0 0 0 1.5px rgba(255,210,74,.55), inset 0 0 70px rgba(0,0,0,.6), 0 0 50px rgba(255,210,74,.30); }
 
-  .sprig { font-size: 24px; line-height: 1; margin-bottom: 4px; filter: drop-shadow(0 0 8px rgba(127,224,58,.55)); }
-  .title { font-size: 46px; font-weight: 900; letter-spacing: 1px; text-transform: uppercase; color: var(--g);
-    line-height: 1; text-shadow: 0 0 18px rgba(127,224,58,.55), 0 3px 12px rgba(0,0,0,.6); }
-  .subtitle { margin-top: 8px; font-size: 16px; font-weight: 700; letter-spacing: .4px; color: #9aa893;
-    display: flex; align-items: center; justify-content: center; gap: 10px; }
-  .subtitle::before, .subtitle::after { content: "🌿"; font-size: 12px; opacity: .85; }
+  .corner { position: absolute; width: 26px; height: 26px; pointer-events: none; }
+  .corner.tl { top: 8px; left: 8px; border-top: 2px solid var(--g); border-left: 2px solid var(--g); }
+  .corner.bl { bottom: 8px; left: 8px; border-bottom: 2px solid var(--g); border-left: 2px solid var(--g); }
+  .pp-tick { position: absolute; pointer-events: none; }
+  .pp-tick.tr { top: 13px; right: 16px; }
+  .pp-tick.br { bottom: 13px; right: 16px; }
+  .pp-tick span { display: inline-block; width: 7px; height: 7px; margin-left: 3px; transform: skewX(-18deg);
+    background: var(--pp); box-shadow: 0 0 7px rgba(145,71,255,.7); }
+  .dots { position: absolute; bottom: 14px; left: 30px; color: var(--pp); letter-spacing: 3px; font-size: 13px; opacity: .8; }
 
-  .tierchip { display: inline-block; margin-top: 12px; padding: 5px 18px; border-radius: 999px;
-    font-size: 17px; font-weight: 900; letter-spacing: 1.2px; text-transform: uppercase; color: #1a1200;
-    background: linear-gradient(180deg, var(--gold2), var(--gold-d));
-    box-shadow: 0 0 18px rgba(244,180,26,.5), inset 0 1px 0 rgba(255,255,255,.45); }
-  .poster.done .tierchip { background: linear-gradient(180deg, #fff0bf, var(--gold));
-    box-shadow: 0 0 26px rgba(255,216,96,.7), inset 0 1px 0 rgba(255,255,255,.6); }
+  .head { display: flex; align-items: center; gap: 9px; margin-bottom: 14px; }
+  .head .cross { color: var(--g); font-size: 15px; }
+  .head .url { color: var(--g); font-size: 19px; font-weight: 700; letter-spacing: .5px; }
+  .head .rule { flex: 1; height: 2px; max-width: 120px; margin-left: 4px;
+    background: linear-gradient(90deg, rgba(155,238,79,.5), transparent); }
+  .head .rule2 { width: 24px; height: 2px; background: repeating-linear-gradient(90deg, var(--dim) 0 5px, transparent 5px 9px); }
 
-  .silo-wrap { margin: 18px auto 6px; width: 210px; }
-  .silo {
-    position: relative; width: 190px; height: 300px; margin: 0 auto;
-    border-radius: 95px 95px 14px 14px; overflow: hidden;
-    background: linear-gradient(105deg, #0b0f0a 0%, #18201400 40%), linear-gradient(180deg, #11160d, #0a0e08);
-    border: 5px solid #1c241a;
-    box-shadow: inset 0 0 0 2px rgba(255,255,255,.05), inset 0 -10px 30px rgba(0,0,0,.6), 0 14px 40px rgba(0,0,0,.5);
-  }
-  .grain {
-    position: absolute; left: 0; right: 0; bottom: 0; height: 55%;
-    background:
-      radial-gradient(1.2px 1.2px at 20% 30%, rgba(255,255,255,.4), transparent 60%),
-      radial-gradient(1.2px 1.2px at 62% 52%, rgba(90,40,0,.35), transparent 60%),
-      radial-gradient(1.2px 1.2px at 82% 72%, rgba(255,255,255,.32), transparent 60%),
-      linear-gradient(180deg, var(--gold2) 0, var(--gold) 16%, var(--gold-d) 100%);
-    background-size: 13px 13px, 17px 17px, 15px 15px, auto;
-    box-shadow: inset 0 14px 22px rgba(255,255,255,.18), inset 0 -22px 34px rgba(120,60,0,.42);
-    transition: height 1s cubic-bezier(.2,.8,.2,1);
-  }
-  .grain::before {
-    content: ""; position: absolute; left: 0; right: 0; top: -12px; height: 15px;
-    background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='80' height='15' viewBox='0 0 80 15'%3E%3Cpath d='M0 8 Q20 0 40 8 T80 8 V15 H0 Z' fill='%23ffd860'/%3E%3C/svg%3E") repeat-x;
-    background-size: 80px 15px;
-  }
-  .gloss { position: absolute; inset: 0; pointer-events: none;
-    background:
-      radial-gradient(58% 36% at 34% 15%, rgba(255,255,255,.5), rgba(255,255,255,0) 70%),
-      linear-gradient(100deg, rgba(255,255,255,.13) 5%, transparent 24%); }
-  .ticks { position: absolute; top: 66px; right: 14px; bottom: 36px; width: 16px; pointer-events: none;
-    background: repeating-linear-gradient(180deg, rgba(255,255,255,.4) 0 1.5px, transparent 1.5px 12px);
-    -webkit-mask: linear-gradient(90deg, transparent, #000 55%); mask: linear-gradient(90deg, transparent, #000 55%); }
-  .ticks::before { content: ""; position: absolute; right: 0; top: 0; bottom: 0; width: 10px;
-    background: repeating-linear-gradient(180deg, rgba(255,255,255,.5) 0 1.5px, transparent 1.5px 60px); }
-  .band { position: absolute; top: 56px; bottom: 14px; width: 13px;
-    background: linear-gradient(90deg, #232b1d, #3c4a31 50%, #1f271a); box-shadow: inset 0 0 0 1px rgba(0,0,0,.4); }
-  .band-l { left: 0; border-radius: 0 7px 7px 0; }
-  .band-r { right: 0; border-radius: 7px 0 0 7px; }
-  .band i { position: absolute; left: 50%; width: 5px; height: 5px; margin-left: -2.5px; border-radius: 50%;
-    background: radial-gradient(circle at 35% 30%, #d6ecb6, #5b6b46 70%, #2c3622); }
-  .band i:nth-child(1) { top: 16px; } .band i:nth-child(2) { top: 50%; } .band i:nth-child(3) { bottom: 16px; }
+  .body { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; }
+  .left { flex: 1; min-width: 0; }
+  .eyebrow { color: var(--g); font-size: 14px; font-weight: 700; letter-spacing: 4px; }
+  .title { font-size: 52px; font-weight: 800; line-height: .95; letter-spacing: 1px; text-transform: uppercase;
+    margin-top: 2px; color: var(--ink); text-shadow: 0 2px 14px rgba(0,0,0,.6); }
+  .title .gold { color: var(--gold2);
+    background: linear-gradient(180deg, #ffe48a, var(--gold) 60%, var(--gold-d));
+    -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+    filter: drop-shadow(0 0 16px rgba(244,180,26,.4)); }
+  .sub { display: flex; align-items: center; gap: 7px; margin-top: 10px; color: var(--dim); font-size: 15px; font-weight: 600; }
+  .sub .t { color: var(--g); font-size: 12px; }
+  .sub b { color: #c7d2bd; font-weight: 700; }
 
-  .base { width: 212px; height: 19px; margin: -3px auto 0; border-radius: 7px;
-    background: linear-gradient(180deg, #3c4a31, #19200f);
-    box-shadow: inset 0 2px 0 rgba(255,255,255,.12), 0 8px 18px rgba(0,0,0,.5); }
+  .count { text-align: right; padding-top: 6px; white-space: nowrap; }
+  .count .now { font-size: 60px; font-weight: 800; color: var(--g); line-height: 1;
+    font-variant-numeric: tabular-nums; text-shadow: 0 0 24px rgba(127,224,58,.5); }
+  .count .sl { font-size: 40px; font-weight: 700; color: #4d5647; transform: skewX(-10deg); margin: 0 2px; display: inline-block; }
+  .count .tgt { font-size: 40px; font-weight: 800; color: var(--ink); font-variant-numeric: tabular-nums; }
+  .count .unit { font-size: 16px; font-weight: 700; letter-spacing: 2px; color: var(--dim); margin-left: 6px; }
 
-  .count { margin-top: 16px; font-size: 64px; font-weight: 900; line-height: 1; letter-spacing: 1px;
-    font-variant-numeric: tabular-nums; display: flex; align-items: baseline; justify-content: center; gap: 8px; }
-  .count .now { color: var(--g); text-shadow: 0 0 22px rgba(127,224,58,.5); }
-  .count .slash { color: #5c6650; font-weight: 800; transform: skewX(-8deg); }
-  .count .tgt { color: #eef3e6; text-shadow: 0 0 16px rgba(255,255,255,.14); }
+  .emblem { flex: none; width: 118px; height: 118px; }
 
-  .footer { margin-top: 18px; padding: 12px 16px; border-radius: 14px;
-    border: 1.5px solid rgba(127,224,58,.55); background: rgba(127,224,58,.08);
-    font-size: 18px; font-weight: 800; color: #eef3e6;
-    display: flex; align-items: center; justify-content: center; gap: 8px; }
-  .footer .leaf { color: var(--g); font-size: 20px; filter: drop-shadow(0 0 6px rgba(127,224,58,.5)); }
-  .footer b { color: var(--g); font-weight: 900; }
+  .barwrap { position: relative; margin: 18px 0 4px; }
+  .bar { position: relative; height: 30px; border-radius: 16px; overflow: hidden;
+    background: linear-gradient(180deg, #11160d, #0a0e07); box-shadow: inset 0 0 0 1.5px rgba(127,224,58,.30), inset 0 4px 10px rgba(0,0,0,.5); }
+  .bar > i { position: absolute; left: 0; top: 0; bottom: 0; width: 46%; border-radius: 16px;
+    background: linear-gradient(180deg, #c2ff6e, var(--g2) 55%, var(--gd));
+    box-shadow: 0 0 18px rgba(127,224,58,.6), inset 0 2px 0 rgba(255,255,255,.35);
+    transition: width 1s cubic-bezier(.2,.8,.2,1); }
+  .bar .stripe { position: absolute; inset: 0; background: repeating-linear-gradient(115deg, transparent 0 12px, rgba(244,180,26,.10) 12px 14px); }
+  .barwrap .glow { position: absolute; left: 4px; right: 4px; bottom: -3px; height: 4px; border-radius: 4px;
+    background: linear-gradient(90deg, transparent, rgba(244,180,26,.7), transparent); filter: blur(1px); }
+
+  .foot { display: flex; align-items: center; gap: 16px; margin-top: 16px; padding-left: 70px; }
+  .foot .it { display: flex; align-items: center; gap: 7px; color: var(--g); font-size: 14px; font-weight: 700; letter-spacing: 1px; }
+  .foot .it .ic { font-size: 15px; }
+  .foot .it .lbl { color: #cdd7c2; }
+  .foot .sep { width: 1px; height: 16px; background: rgba(155,238,79,.3); }
+  .foot .dash { width: 22px; height: 2px; background: repeating-linear-gradient(90deg, var(--dim) 0 4px, transparent 4px 8px); }
 </style>
 </head>
 <body>
 <div id="wrap" class="hidden">
-  <div class="poster" id="poster">
-    <div class="sprig">🌿</div>
-    <div class="title">SUB SKLIZEŇ</div>
-    <div class="subtitle">naplňte silo společně</div>
-    <div class="tierchip" id="tierchip">TIER 1</div>
-    <div class="silo-wrap">
-      <div class="silo">
-        <div class="grain" id="grain"></div>
-        <div class="gloss"></div>
-        <div class="ticks"></div>
-        <div class="band band-l"><i></i><i></i><i></i></div>
-        <div class="band band-r"><i></i><i></i><i></i></div>
-      </div>
-      <div class="base"></div>
+  <div class="panel" id="panel">
+    <span class="corner tl"></span><span class="corner bl"></span>
+    <span class="pp-tick tr"><span></span></span>
+    <span class="pp-tick br"><span></span><span></span></span>
+    <span class="dots">• • •</span>
+
+    <div class="head">
+      <span class="cross">◎</span><span class="url">zurys.live</span>
+      <span class="rule"></span><span class="rule2"></span>
     </div>
-    <div class="count"><span class="now" id="num">0</span><span class="slash">/</span><span class="tgt" id="tgt">0</span></div>
-    <div class="footer"><span class="leaf">🌿</span> <span><b id="rew">+0</b> sedláků každému gifterovi</span></div>
+
+    <div class="body">
+      <div class="left">
+        <div class="eyebrow" id="eyebrow">SUB CÍL</div>
+        <div class="title"><span class="gold">ZLATÁ</span> SKLIZEŇ</div>
+        <div class="sub"><span class="t">◈</span> <span id="subtext">Po dosažení: <b>komunitní event + odměny pro chat</b></span></div>
+      </div>
+      <div class="count">
+        <span class="now" id="num">0</span><span class="sl">/</span><span class="tgt" id="tgt">0</span><span class="unit">SUBŮ</span>
+      </div>
+      <svg class="emblem" viewBox="0 0 100 100" aria-hidden="true">
+        <polygon points="50,6 88,28 88,72 50,94 12,72 12,28" fill="none" stroke="#3a2e0a" stroke-width="6"/>
+        <polygon points="50,6 88,28 88,72 50,94 12,72 12,28" fill="none" stroke="url(#gg)" stroke-width="2.5"/>
+        <defs><linearGradient id="gg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffe48a"/><stop offset="1" stop-color="#b9760c"/></linearGradient></defs>
+        <g stroke="url(#gg)" stroke-width="4.5" stroke-linecap="round" fill="none">
+          <path d="M50 78 V40"/>
+          <path d="M50 44 L38 34 M50 44 L62 34"/>
+          <path d="M50 52 L37 42 M50 52 L63 42"/>
+          <path d="M50 60 L38 51 M50 60 L62 51"/>
+          <path d="M50 40 L43 31 M50 40 L57 31"/>
+        </g>
+      </svg>
+    </div>
+
+    <div class="barwrap">
+      <div class="bar"><i id="bar"></i><span class="stripe"></span></div>
+      <span class="glow"></span>
+    </div>
+
+    <div class="foot">
+      <span class="it"><span class="ic">◎</span><span class="lbl">FARMI</span></span><span class="dash"></span>
+      <span class="sep"></span>
+      <span class="it"><span class="ic">🎁</span><span class="lbl">ODMĚNY</span></span><span class="dash"></span>
+      <span class="sep"></span>
+      <span class="it"><span class="ic">👥</span><span class="lbl">KOMUNITA</span></span><span class="dash"></span>
+    </div>
   </div>
 </div>
 <script>
-  // Náhled bez API: /overlay/subgoal.html?demo  (volitelně ?demo=12,20,2000,1 = progress,target,reward,hotových_tierů)
+  // Náhled bez API: /overlay/subgoal.html?demo  (volitelně ?demo=23,50,2000,2 = progress,target,reward,tier)
   function demoData() {
     var p = new URLSearchParams(location.search);
     if (!p.has("demo")) return null;
     var v = (p.get("demo") || "").split(",").map(function (x) { return parseInt(x, 10); });
-    var prog = v[0] || 12, tgt = v[1] || 20, rew = (v[2] === 0 ? 0 : v[2] || 2000), tier = v[3] || 1;
+    var prog = v[0] || 23, tgt = v[1] || 50, rew = (v[2] === 0 ? 0 : v[2] || 2000), tier = v[3] || 2;
     return { enabled: true, progress: prog, target: tgt, reward: rew, tier: tier, tier_max: 10,
              maxed: false, done: false, pct: Math.min(100, Math.round(prog * 100 / tgt)) };
   }
@@ -132,18 +146,18 @@
     var wrap = document.getElementById("wrap");
     if (!g || !g.enabled) { wrap.classList.add("hidden"); last = -1; return; }
     wrap.classList.remove("hidden");
-    document.getElementById("grain").style.height = Math.max(6, g.pct || 0) + "%";
     document.getElementById("num").textContent = g.progress;
     document.getElementById("tgt").textContent = g.target;
-    document.getElementById("rew").textContent = "+" + (g.reward || 0).toLocaleString("cs-CZ");
-    // tier chip: ukazuje tier, KTERÝ se právě plní (= hotových+1), nebo MAX při dosažení stropu
-    var tier = g.tier || 0;
-    var nextT = g.maxed ? (g.tier_max || tier) : tier + 1;
-    document.getElementById("tierchip").textContent = g.maxed ? "MAX TIER 🏆" : "TIER " + nextT;
-    document.getElementById("poster").classList.toggle("done", !!g.maxed);
+    document.getElementById("bar").style.width = Math.max(2, g.pct || 0) + "%";
+    document.getElementById("panel").classList.toggle("done", !!g.done);
+    var tierTxt = g.maxed ? "MAX TIER 🏆" : (g.tier != null ? "SUB CÍL · TIER " + ((g.tier || 0) + 1) : "SUB CÍL");
+    document.getElementById("eyebrow").textContent = tierTxt;
+    if (g.reward != null && g.reward > 0) {
+      document.getElementById("subtext").innerHTML = "Po dosažení: <b>+" + g.reward.toLocaleString("cs-CZ") + " sedláků</b> gifterům";
+    }
     if (last >= 0 && g.progress > last) {
-      var po = document.getElementById("poster");
-      po.style.transform = "scale(1.025)"; setTimeout(function () { po.style.transform = ""; }, 220);
+      var po = document.getElementById("panel");
+      po.style.transform = "scale(1.012)"; setTimeout(function () { po.style.transform = ""; }, 240);
     }
     last = g.progress;
   }

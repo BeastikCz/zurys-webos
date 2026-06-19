@@ -6,77 +6,116 @@
 <title>ZURYS — Happy Hour overlay</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  html, body { background: transparent; overflow: hidden; font-family: "Segoe UI", system-ui, Arial, sans-serif; }
-  #wrap { padding: 16px; }
+  html, body { background: transparent; overflow: hidden; font-family: "Rajdhani", "Segoe UI", system-ui, Arial, sans-serif; }
+  :root { --g: #cde82e; --g2: #d8ff3a; --gd: #8fae1f; --pp: #9147ff; --ink: #f2f5e8; --dim: #99a382; }
+  #wrap { padding: 26px; display: inline-block; }
   #wrap.hidden { display: none; }
-  .card {
-    display: flex; align-items: center; gap: 16px; max-width: 460px;
-    background: linear-gradient(135deg, rgba(48,30,8,.92), rgba(28,18,6,.92));
-    border: 2px solid #ff9d2e; border-radius: 18px; padding: 14px 20px;
-    box-shadow: 0 0 0 2px rgba(255,157,46,.22), 0 10px 40px rgba(0,0,0,.5), 0 0 46px rgba(255,157,46,.4);
-    color: #fff; animation: glow 2.2s ease-in-out infinite;
-  }
-  @keyframes glow {
-    0%,100% { box-shadow: 0 0 0 2px rgba(255,157,46,.22), 0 10px 40px rgba(0,0,0,.5), 0 0 40px rgba(255,157,46,.35); }
-    50%     { box-shadow: 0 0 0 2px rgba(255,157,46,.38), 0 10px 40px rgba(0,0,0,.5), 0 0 62px rgba(255,157,46,.6); }
-  }
-  .flame { font-size: 40px; line-height: 1; animation: bob 1.4s ease-in-out infinite; }
-  @keyframes bob { 0%,100% { transform: translateY(0) rotate(-4deg); } 50% { transform: translateY(-3px) rotate(4deg); } }
-  .mid { display: flex; flex-direction: column; }
-  .ttl { font-size: 19px; font-weight: 900; letter-spacing: .5px; text-shadow: 0 2px 8px rgba(0,0,0,.6); }
-  .ttl b { color: #ffd23e; }
-  .sub { font-size: 13px; color: #ffcf9a; font-weight: 700; margin-top: 1px; }
-  .clock {
-    margin-left: auto; font-variant-numeric: tabular-nums; font-weight: 900; font-size: 34px;
-    color: #ffd23e; text-shadow: 0 2px 10px rgba(255,157,46,.6); letter-spacing: 1px; min-width: 96px; text-align: right;
-  }
-  .clock small { display: block; font-size: 10px; color: #ffcf9a; font-weight: 700; letter-spacing: 1.5px; text-align: right; }
+
+  .panel { position: relative; width: 720px; padding: 14px 40px 30px; text-align: center;
+    background: radial-gradient(120% 80% at 50% -10%, #161a0c, #0a0d0700 60%), #0a0c07; }
+  .corner { position: absolute; width: 30px; height: 30px; pointer-events: none; }
+  .corner.tl { top: 6px; left: 6px; border-top: 2.5px solid var(--g); border-left: 2.5px solid var(--g); }
+  .corner.tr { top: 6px; right: 6px; border-top: 2.5px solid var(--g); border-right: 2.5px solid var(--g); }
+  .corner.bl { bottom: 6px; left: 6px; border-bottom: 2.5px solid var(--g); border-left: 2.5px solid var(--g); }
+  .corner.br { bottom: 6px; right: 6px; border-bottom: 2.5px solid var(--g); border-right: 2.5px solid var(--g); }
+  .radar { position: absolute; top: 22px; right: 30px; width: 92px; height: 92px; opacity: .8; }
+
+  .url { color: var(--g); font-size: 22px; font-weight: 600; letter-spacing: 1px; margin-top: 4px; }
+  .title { font-size: 76px; font-weight: 800; line-height: .92; letter-spacing: 2px; text-transform: uppercase;
+    color: var(--g); text-shadow: 0 0 30px rgba(205,232,46,.45), 0 4px 16px rgba(0,0,0,.6); margin: 2px 0; }
+  .perk { display: inline-flex; align-items: center; gap: 11px; margin-top: 6px; font-size: 24px; font-weight: 700; color: var(--ink); }
+  .perk .dot { width: 18px; height: 18px; border-radius: 50%; background: var(--pp); box-shadow: 0 0 14px rgba(145,71,255,.7); }
+
+  .clockbox { margin: 22px auto 0; max-width: 560px; border: 2px solid rgba(205,232,46,.5); border-radius: 18px;
+    background: linear-gradient(180deg, rgba(205,232,46,.05), rgba(0,0,0,.25));
+    box-shadow: inset 0 0 40px rgba(0,0,0,.5), 0 0 30px rgba(205,232,46,.12); padding: 6px 0 10px; }
+  .clock { font-size: 132px; font-weight: 800; line-height: 1; color: var(--g2); letter-spacing: 4px;
+    font-variant-numeric: tabular-nums; text-shadow: 0 0 36px rgba(205,232,46,.5); }
+
+  .info { display: inline-flex; align-items: center; gap: 11px; margin-top: 18px; padding: 11px 22px; border-radius: 12px;
+    border: 1.5px solid rgba(205,232,46,.4); background: rgba(205,232,46,.06);
+    font-size: 19px; font-weight: 600; color: var(--ink); }
+  .info .i { display: grid; place-items: center; width: 24px; height: 24px; border-radius: 50%;
+    border: 2px solid var(--g); color: var(--g); font-size: 14px; font-weight: 800; }
+  .info b { color: var(--g); font-weight: 800; }
+
+  .row { display: flex; gap: 16px; margin-top: 22px; }
+  .box { flex: 1; display: flex; align-items: center; justify-content: center; gap: 12px; padding: 16px 14px;
+    border: 1.5px solid rgba(205,232,46,.35); border-radius: 14px; background: rgba(255,255,255,.015); }
+  .box .bi { font-size: 22px; color: var(--g); }
+  .box .bl { font-size: 18px; font-weight: 700; letter-spacing: 1px; color: var(--ink); }
+  .box .bm { font-size: 18px; font-weight: 800; color: var(--g); }
 </style>
 </head>
 <body>
 <div id="wrap" class="hidden">
-  <div class="card">
-    <div class="flame">🔥</div>
-    <div class="mid">
-      <div class="ttl">HAPPY HOUR</div>
-      <div class="sub" id="subtxt">víc bodů pro všechny!</div>
+  <div class="panel">
+    <span class="corner tl"></span><span class="corner tr"></span><span class="corner bl"></span><span class="corner br"></span>
+    <svg class="radar" viewBox="0 0 100 100" aria-hidden="true">
+      <circle cx="50" cy="50" r="44" fill="none" stroke="#cde82e" stroke-width="1.5" opacity=".5"/>
+      <circle cx="50" cy="50" r="30" fill="none" stroke="#cde82e" stroke-width="1" opacity=".35"/>
+      <circle cx="50" cy="50" r="15" fill="none" stroke="#cde82e" stroke-width="1" opacity=".25"/>
+      <line x1="50" y1="50" x2="50" y2="6" stroke="#cde82e" stroke-width="1.5" opacity=".55"/>
+      <circle cx="68" cy="40" r="3" fill="#d8ff3a"/>
+    </svg>
+
+    <div class="url">zurys.live</div>
+    <div class="title">HAPPY HOUR</div>
+    <div class="perk"><span class="dot"></span><span id="perktxt">2× body za subs a gift subs</span></div>
+
+    <div class="clockbox"><div class="clock" id="time">00:00</div></div>
+
+    <div class="info"><span class="i">i</span><span>Během happy hour získáš <b id="infomult">dvojnásobek</b> sedláků</span></div>
+
+    <div class="row">
+      <div class="box"><span class="bi">👤</span><span class="bl">SUBY</span><span class="bm" id="m1">/ 2× BODY</span></div>
+      <div class="box"><span class="bi">🎁</span><span class="bl">GIFT SUBY</span><span class="bm" id="m2">/ 2× BODY</span></div>
+      <div class="box"><span class="bi">⭐</span><span class="bl">BONUS</span><span class="bm" id="m3">/ 2× BODY</span></div>
     </div>
-    <div class="clock"><span id="time">00:00</span><small>zbývá</small></div>
   </div>
 </div>
 <script>
-  // Čte stejný /api/happy-hour jako web → synced. Odpočet tiká lokálně po 1 s, re-sync po 5 s.
+  // Náhled bez API: /overlay/happyhour.html?demo  (volitelně ?demo=900,2 = sekundy,mult)
   let left = 0, active = false;
-  function fmt(s) {
-    s = Math.max(0, s | 0);
-    const m = (s / 60) | 0, ss = s % 60;
-    return (m < 10 ? "0" : "") + m + ":" + (ss < 10 ? "0" : "") + ss;
-  }
+  function fmtMult(m) { return Number.isInteger(m) ? m : (Math.round(m * 10) / 10); }
+  function fmt(s) { s = Math.max(0, s | 0); const m = (s / 60) | 0, ss = s % 60;
+    return (m < 10 ? "0" : "") + m + ":" + (ss < 10 ? "0" : "") + ss; }
   function render() {
     const wrap = document.getElementById("wrap");
     if (!active || left <= 0) { wrap.classList.add("hidden"); return; }
     wrap.classList.remove("hidden");
     document.getElementById("time").textContent = fmt(left);
   }
+  function applyPerks(g) {
+    const wm = g.watch_mult || g.mult || 1;
+    const sub2 = !!g.sub_2x;
+    const mult = sub2 ? 2 : (wm > 1 ? wm : 2);
+    const perks = [];
+    if (sub2) perks.push("2× body za subs a gift subs");
+    if (wm > 1) perks.push("×" + fmtMult(wm) + " za sledování & chat");
+    if (g.shop_pct > 0) perks.push("−" + g.shop_pct + "% v shopu");
+    document.getElementById("perktxt").textContent = perks.length ? perks.join(" · ") : "víc bodů pro všechny!";
+    document.getElementById("infomult").textContent = (mult === 2 ? "dvojnásobek" : "×" + fmtMult(mult));
+    ["m1", "m2", "m3"].forEach(function (id) { document.getElementById(id).textContent = "/ " + fmtMult(mult) + "× BODY"; });
+  }
+  function demoData() {
+    const p = new URLSearchParams(location.search);
+    if (!p.has("demo")) return null;
+    const v = (p.get("demo") || "").split(",").map(function (x) { return parseInt(x, 10); });
+    return { active: true, seconds_left: v[0] || 900, watch_mult: 1, sub_2x: true, shop_pct: 0, mult: v[1] || 2 };
+  }
   async function sync() {
-    try {
-      const r = await fetch("/api/happy-hour", { cache: "no-store" });
-      const g = await r.json();
-      active = !!g.active;
-      left = g.seconds_left || 0;
-      // poskládej co je zrovna aktivní (×mult za sledování / sleva v shopu / 2× subs)
-      const perks = [];
-      const wm = g.watch_mult || g.mult || 1;
-      if (wm > 1) perks.push("×" + (Number.isInteger(wm) ? wm : wm.toFixed(1)) + " za sledování & chat");
-      if (g.shop_pct > 0) perks.push("−" + g.shop_pct + "% v shopu");
-      if (g.sub_2x) perks.push("2× za subs");
-      document.getElementById("subtxt").textContent = perks.length ? perks.join(" · ") : "víc bodů pro všechny!";
-    } catch (e) { /* tiše */ }
-    render();
+    const d = demoData();
+    let g = d;
+    if (!d) {
+      try { g = await (await fetch("/api/happy-hour", { cache: "no-store" })).json(); } catch (e) { return; }
+    }
+    active = !!g.active; left = g.seconds_left || 0;
+    applyPerks(g); render();
   }
   sync();
-  setInterval(sync, 5000);                       // re-sync se serverem
-  setInterval(function () { if (active && left > 0) { left--; render(); } }, 1000);  // lokální tik
+  setInterval(sync, 5000);
+  setInterval(function () { if (active && left > 0) { left--; render(); } }, 1000);
 </script>
 </body>
 </html>
