@@ -116,7 +116,7 @@ def test_subgoal_unlimited_no_cap(client):
 
 
 def test_record_gifter_upsert_counts(client):
-    from app.db import get_conn, local_date
+    from app.db import get_conn
     from app import subgoal
     conn = get_conn()
     try:
@@ -126,9 +126,29 @@ def test_record_gifter_upsert_counts(client):
         subgoal.record_gifter(conn, uid, 3, in_hh=False)    # přičte se k existujícímu řádku
         conn.commit()
         row = conn.execute("SELECT subs, hh_subs FROM subgoal_gifters WHERE day=? AND user_id=?",
-                           (local_date(), uid)).fetchone()
+                           (subgoal._session(conn), uid)).fetchone()   # gifteři keyovaní relací, ne kalendářním dnem
         assert row["subs"] == 5 and row["hh_subs"] == 2     # 2 v HH, 3 mimo
         assert subgoal.status(conn)["gifters"] == 1          # 1 HH gifter v hře
+    finally:
+        conn.close()
+
+
+def test_midnight_does_not_reset(client):
+    """Přechod kalendářního dne (půlnoc) NESMÍ vynulovat cíl – reset jen na konci streamu (reset())."""
+    from app.db import get_conn, set_setting
+    from app import subgoal
+    conn = get_conn()
+    try:
+        _reset(conn, target=10, reward=0)
+        uid = _mk_user(conn)
+        subgoal.record_gifter(conn, uid, 15, in_hh=False)
+        subgoal.tick(conn, 15)                              # progress 15 → tier 1
+        conn.commit()
+        set_setting(conn, "subgoal_day", "1999-01-01")      # dřív by „starý den" triggernul midnight reset
+        conn.commit()
+        st = subgoal.status(conn)                           # status volá _ensure_session – nesmí nulovat
+        assert st["progress"] == 15, "půlnoc/přechod dne NESMÍ vynulovat progress"
+        assert st["tier"] == 1 and st["gifters"] == 1
     finally:
         conn.close()
 

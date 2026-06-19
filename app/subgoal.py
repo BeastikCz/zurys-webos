@@ -54,19 +54,27 @@ def _reached_tier(progress: int, cfg: dict) -> int:
     return t if _unlimited(cfg) else min(t, cfg["tier_max"])
 
 
-def _ensure_day(conn) -> None:
-    """Nový den → vynuluj počítadlo, tier, příznak stropu i seznam dnešních gifterů."""
-    if get_setting(conn, "subgoal_day") != _today():
-        set_setting(conn, "subgoal_day", _today())
-        set_setting(conn, "subgoal_progress", "0")
-        set_setting(conn, "subgoal_tier", "0")
-        set_setting(conn, "subgoal_done", "0")
-        conn.execute("DELETE FROM subgoal_gifters WHERE day != ?", (_today(),))
+def _session(conn) -> str:
+    """Stabilní klíč RELACE sub cíle – mění se JEN na reset() (konec streamu), NE o půlnoci. Gifteři
+    jsou keyovaní tímhle (ne kalendářním dnem _today), aby stream PŘES PŮLNOC držel jeden cíl. Cíl
+    se tak nuluje výhradně koncem streamu, ne přechodem dne."""
+    s = get_setting(conn, "subgoal_session")
+    if not s:
+        s = now_iso()
+        set_setting(conn, "subgoal_session", s)
+    return s
+
+
+def _ensure_session(conn) -> None:
+    """Jen zajistí, že relace existuje. ŽÁDNÝ midnight reset – cíl nuluje výhradně reset() (konec streamu)."""
+    _session(conn)
 
 
 def reset(conn) -> None:
-    """Plný reset SUB cíle: počítadlo, tier, příznak stropu i seznam gifterů na nulu. Volá se na KONCI
-    streamu (live_events), ať každý stream začíná na tieru 1. Necommituje – commit dělá caller."""
+    """Plný reset SUB cíle na KONCI streamu (live_events): NOVÁ relace (staří gifteři přestávají platit),
+    počítadlo, tier, příznak stropu i seznam gifterů na nulu. Každý stream začíná na tieru 1. Tohle je
+    JEDINÝ reset – přechod kalendářního dne (půlnoc) cíl NEnuluje. Necommituje – commit dělá caller."""
+    set_setting(conn, "subgoal_session", now_iso())   # nová relace → DELETE gifterů níž je tím i čistý start
     set_setting(conn, "subgoal_progress", "0")
     set_setting(conn, "subgoal_tier", "0")
     set_setting(conn, "subgoal_done", "0")
@@ -75,7 +83,7 @@ def reset(conn) -> None:
 
 def status(conn) -> dict:
     """Stav cíle pro UI lištu (veřejné). target/reward = DALŠÍ tier (kam lišta míří)."""
-    _ensure_day(conn)
+    _ensure_session(conn)
     cfg = _cfg(conn)
     progress = _int(conn, "subgoal_progress", 0)
     tier = _reached_tier(progress, cfg)
@@ -84,7 +92,7 @@ def status(conn) -> dict:
     target = next_tier * cfg["step"]                       # absolutní cíl dalšího milníku
     reward = next_tier * cfg["reward_step"]                # odměna za příští tier
     gifters = conn.execute(
-        "SELECT COUNT(*) c FROM subgoal_gifters WHERE day = ?", (_today(),)
+        "SELECT COUNT(*) c FROM subgoal_gifters WHERE day = ?", (_session(conn),)
     ).fetchone()["c"]
     conn.commit()
     return {
@@ -112,7 +120,7 @@ def tick(conn, count: int = 1) -> None:
     cfg = _cfg(conn)
     if not cfg["enabled"]:
         return
-    _ensure_day(conn)
+    _ensure_session(conn)
     conn.execute(
         "UPDATE app_settings SET value = CAST(COALESCE(value,'0') AS INTEGER) + ?, updated_at = ? "
         "WHERE key = 'subgoal_progress'", (count, now_iso()))
@@ -125,13 +133,13 @@ def record_gifter(conn, user_id: int, n: int, in_hh: bool) -> None:
     Volá kickevents při gift sub eventu PŘED tickem. Necommituje – commit dělá caller / _settle."""
     if not user_id or n <= 0:
         return
-    _ensure_day(conn)
+    _ensure_session(conn)
     cur_tier = _reached_tier(_int(conn, "subgoal_progress", 0), _cfg(conn))   # tiery už hotové = nedostane zpětně
     hh = n if in_hh else 0
     conn.execute(
         "INSERT INTO subgoal_gifters (day, user_id, subs, hh_subs, paid_tier) VALUES (?, ?, ?, ?, ?) "
         "ON CONFLICT(day, user_id) DO UPDATE SET subs = subs + ?, hh_subs = hh_subs + ?",
-        (_today(), user_id, n, hh, cur_tier, n, hh))
+        (_session(conn), user_id, n, hh, cur_tier, n, hh))
 
 
 def _announce_async(text: str) -> None:
@@ -159,21 +167,21 @@ def _settle(conn, cfg) -> None:
     nemá (od paid_tier+1 do T) – odměna za tier k = k × reward_step. EARLY gifteři tak berou každý další
     tier znova (1k + 2k + 3k…), POZDNÍ jen od svého příchodu (record_gifter jim dá baseline paid_tier =
     tehdy hotové tiery). Atomický claim paid_tier → anti-double-pay. Oznámení při NOVÉM tieru."""
-    today = _today()
+    session = _session(conn)
     progress = _int(conn, "subgoal_progress", 0)
     tier = _reached_tier(progress, cfg)
     if tier < 1:
         return                                       # ještě ani první milník
     rs = cfg["reward_step"]
     rows = conn.execute(
-        "SELECT user_id, paid_tier FROM subgoal_gifters WHERE day = ? AND paid_tier < ?", (today, tier)).fetchall()
+        "SELECT user_id, paid_tier FROM subgoal_gifters WHERE day = ? AND paid_tier < ?", (session, tier)).fetchall()
     newly = []                                       # (uid, amount)
     for r in rows:
         uid, p = r["user_id"], r["paid_tier"] or 0
         amount = rs * sum(range(p + 1, tier + 1))    # součet tierů p+1..T (kumulativně)
         if amount > 0 and conn.execute(              # atomicky zaber (paid_tier p → T) – anti-double-pay
                 "UPDATE subgoal_gifters SET paid_tier = ? WHERE day = ? AND user_id = ? AND paid_tier = ?",
-                (tier, today, uid, p)).rowcount == 1:
+                (tier, session, uid, p)).rowcount == 1:
             conn.execute("UPDATE users SET points = points + ? WHERE id = ?", (amount, uid))
             conn.execute("INSERT INTO points_log (user_id, change, reason, created_at) VALUES (?, ?, ?, ?)",
                          (uid, amount, f"Sub cíl tier {tier} 🟣🎁", now_iso()))
