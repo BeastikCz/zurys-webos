@@ -417,13 +417,15 @@ async function loadSubGoal() {
     const g = await api("/sub-goal");
     if (!g.enabled) { box.innerHTML = ""; return; }
     const pct = g.pct || 0;
-    box.innerHTML = `<div class="cgoal cgoal--sub${g.done ? " done" : ""}">
+    const tier = g.tier != null ? g.tier : 0;
+    const tierTxt = g.maxed ? " — MAX TIER 🏆" : (g.tier != null ? ` · Tier ${tier + 1}` : "");
+    box.innerHTML = `<div class="cgoal cgoal--sub${g.maxed ? " done" : ""}">
       <div class="cgoal-top">
-        <span class="cgoal-title">🟣 Dnešní SUB cíl${g.done ? " — SPLNĚNO! 🎉" : ""}</span>
-        <span class="cgoal-rew">Odměna <b>+${fmtPts(g.reward)}</b> gifterům z happy hour 🎁</span>
+        <span class="cgoal-title">🟣 SUB cíl${tierTxt}</span>
+        <span class="cgoal-rew">Odměna <b>+${fmtPts(g.reward)}</b> gifterům 🎁</span>
       </div>
       <div class="cgoal-bar"><span style="width:${pct}%"></span></div>
-      <div class="cgoal-sub">${g.progress} / ${g.target} subů · ${g.done ? "rozdáno dnešním gifterům z happy hour! 🎁" : "subněte nebo giftněte a naplňte to společně! 🟣"}</div>
+      <div class="cgoal-sub">${g.progress} / ${g.target} subů · ${g.maxed ? "max tier dosažen! 🏆" : "giftni sub a posuň tier — odměnu berou všichni gifteři! 🟣"}</div>
     </div>`;
   } catch (e) { box.innerHTML = ""; }
 }
