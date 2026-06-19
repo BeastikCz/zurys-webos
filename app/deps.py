@@ -429,8 +429,8 @@ XP_PER_SUB = 5000          # XP za 1 sub (vlastní/resub/darovaný)
 FARM_XP_CAP = 2000         # denní strop XP z farmení (non-sub)
 FARM_XP_CAP_SUB = 3000     # denní strop XP z farmení pro suby (×1.5)
 SUB_FARM_MULT = 1.5        # sub farmí XP rychleji
-GARDEN_XP_FACTOR = 0.1     # zahrádka „Sklizeň…": UNCAPPED (mimo denní strop) → nízký faktor, ať to není loophole
-                           #   (4 plots × klas/den = max ~560 XP/den; pasivní bonus, ne náhrada chatu)
+GARDEN_XP_FACTOR = 0.2     # zahrádka „Sklizeň…": UNCAPPED (mimo denní strop) → nízký faktor, ať to není loophole
+                           #   (4 plots × klas/den = max ~1120 XP/den non-sub; pasivní bonus, ne náhrada chatu)
 
 _XP_ZERO_KW = ("battle pass", "mines", "blackjack", "coinflip", "duel", "predikce", "piškvor",
                "kostky", "stůl – win", "sázka", "výhra v", "zrušen", "zrušená", "vrácen", "vráceno",

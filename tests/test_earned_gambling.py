@@ -2,7 +2,7 @@
  • supporter (vlastní sub / resub / gift sub giver) = PEVNÝCH 5000 XP za KAŽDÝ sub (z počtu v reason,
    ne z bodů → HH 2× bonus XP nezdvojí), BEZ stropu = náskok podporovatelů
  • poctivé farmení = body × faktor (kolo/drop/partner 0.5, zbytek 1.0), DENNÍ strop XP (sub ×1.5 + vyšší strop)
-• zahrádka (Sklizeň) = uncapped (MIMO denní strop), nízký faktor 0.1
+• zahrádka (Sklizeň) = uncapped (MIMO denní strop), nízký faktor 0.2
  • gambling / dary / admin / komunitní cíle / botrix = 0
  • import staré platformy = plně, bez stropu
 Zůstatek (points) se mění vždy plně.
@@ -42,8 +42,8 @@ def test_classify_xp():
     # farmení (faktor)
     assert classify_xp("Sledování streamu") == ("farm", 1.0)
     assert classify_xp("Aktivita v chatu") == ("farm", 1.0)
-    assert classify_xp("Sklizeň: Mrkev 🌾") == ("garden", 0.1)          # zahrádka = uncapped, nízký faktor
-    assert classify_xp("Sklizeň (chrobáci ji načali) 🐛") == ("garden", 0.1)
+    assert classify_xp("Sklizeň: Mrkev 🌾") == ("garden", 0.2)          # zahrádka = uncapped, nízký faktor
+    assert classify_xp("Sklizeň (chrobáci ji načali) 🐛") == ("garden", 0.2)
     assert classify_xp("Kolo štěstí 🎡") == ("farm", 0.5)
     assert classify_xp("Drop #5 – 1. místo") == ("farm", 0.5)
     assert classify_xp("Flash partner: XY") == ("farm", 0.5)
