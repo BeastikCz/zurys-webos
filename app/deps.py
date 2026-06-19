@@ -426,8 +426,10 @@ def counts_as_earned(reason: str) -> bool:
 # = body × faktor s DENNÍM stropem XP (sub má ×1.5 a vyšší strop). Gambling/dary/admin/komunitní cíle/
 # botrix = 0. Import staré platformy = plně (veteráni). Klasifikace MUSÍ sedět se zpětným přepočtem.
 XP_PER_SUB = 5000          # XP za 1 sub (vlastní/resub/darovaný)
-FARM_XP_CAP = 2000         # denní strop XP z farmení (non-sub)
-FARM_XP_CAP_SUB = 3000     # denní strop XP z farmení pro suby (×1.5)
+FARM_XP_CAP = 2000         # denní strop XP z farmení (non-sub) – free farmař zůstává pomalý (lvl 100 ~7,7 let)
+FARM_XP_CAP_SUB = 8000     # denní strop XP z farmení pro suby (×1.5). Zvýšeno z 3000 → dedikovaný SUB
+                           #   (8000 farm + 1680 zahrádka ≈ 9,7k/den) trefí lvl 100 za ~2,5 roku = supporter-first
+                           #   (prize pro oddané supportery; casual sub stejně strop nedojede, brzdí jen no-life grind)
 SUB_FARM_MULT = 1.5        # sub farmí XP rychleji
 GARDEN_XP_FACTOR = 0.2     # zahrádka „Sklizeň…": UNCAPPED (mimo denní strop) → nízký faktor, ať to není loophole
                            #   (4 plots × klas/den = max ~1120 XP/den non-sub; pasivní bonus, ne náhrada chatu)
