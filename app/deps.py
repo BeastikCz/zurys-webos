@@ -429,18 +429,20 @@ XP_PER_SUB = 5000          # XP za 1 sub (vlastní/resub/darovaný)
 FARM_XP_CAP = 2000         # denní strop XP z farmení (non-sub)
 FARM_XP_CAP_SUB = 3000     # denní strop XP z farmení pro suby (×1.5)
 SUB_FARM_MULT = 1.5        # sub farmí XP rychleji
+GARDEN_XP_FACTOR = 0.1     # zahrádka „Sklizeň…": UNCAPPED (mimo denní strop) → nízký faktor, ať to není loophole
+                           #   (4 plots × klas/den = max ~560 XP/den; pasivní bonus, ne náhrada chatu)
 
 _XP_ZERO_KW = ("battle pass", "mines", "blackjack", "coinflip", "duel", "predikce", "piškvor",
                "kostky", "stůl – win", "sázka", "výhra v", "zrušen", "zrušená", "vrácen", "vráceno",
                "vypršel", "vypršelá", "remíza", "storno", "refund", "výzv", "hra #", "dar od",
                "dar pro", "dar →", "úprava adminem", "chat cíl", "sub cíl", "komunitní", "botrix")
-_XP_HALF_KW = ("kolo", "drop", "partner", "flash", "skliz")   # náhoda/promo/minihra → půlka XP (vč. zahrádky „Sklizeň…")
+_XP_HALF_KW = ("kolo", "drop", "partner", "flash")     # náhoda/promo → půlka XP
 
 
 def classify_xp(reason: str):
     """(kind, val) klasifikace reason pro XP. Sdílí _xp_award (forward), battlepass season baseline
     i zpětný přepočet → klasifikace je VŠUDE stejná. kind: 'sup' (val=počet subů) / 'imp' / 'zero' /
-    'farm' (val=faktor 0.5/1.0)."""
+    'garden' (val=faktor, UNCAPPED – mimo denní strop) / 'farm' (val=faktor 0.5/1.0, denní strop)."""
     r = (reason or "").lower()
     if "kick gift sub" in r and "příjemce" not in r:
         m = re.search(r"\d+", r)
@@ -451,6 +453,8 @@ def classify_xp(reason: str):
         return ("imp", None)
     if any(k in r for k in _XP_ZERO_KW):
         return ("zero", None)
+    if "skliz" in r:                                    # zahrádka „Sklizeň…" → uncapped (mimo strop), nízký faktor
+        return ("garden", GARDEN_XP_FACTOR)
     return ("farm", 0.5 if any(k in r for k in _XP_HALF_KW) else 1.0)
 
 
@@ -467,6 +471,10 @@ def _xp_award(conn: sqlite3.Connection, user_id: int, change: int, reason: str) 
         return change
     if kind == "zero":
         return 0
+    if kind == "garden":                              # zahrádka: UNCAPPED (mimo denní strop), nízký faktor × sub mult
+        gs = conn.execute("SELECT is_sub FROM users WHERE id = ?", (user_id,)).fetchone()
+        g_sub = bool(gs["is_sub"]) if gs and "is_sub" in gs.keys() else False
+        return int(round(change * val * (SUB_FARM_MULT if g_sub else 1.0)))
     # poctivé farmení – body × faktor, sub ×1.5, denní strop XP
     row = conn.execute("SELECT is_sub, earned_today, earned_day FROM users WHERE id = ?", (user_id,)).fetchone()
     if row is None:

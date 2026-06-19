@@ -66,6 +66,8 @@ def _season_earned(conn, uid: int) -> int:
             total += XP_PER_SUB * vfac
         elif kind == "imp":
             total += ch
+        elif kind == "garden":                        # zahrádka uncapped (mimo denní strop)
+            total += int(round(ch * vfac * (SUB_FARM_MULT if is_sub else 1.0)))
         elif kind == "farm":
             farm_by_day[r["d"]] = farm_by_day.get(r["d"], 0) + int(round(ch * vfac * (SUB_FARM_MULT if is_sub else 1.0)))
     total += sum(min(x, cap) for x in farm_by_day.values())

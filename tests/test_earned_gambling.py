@@ -1,7 +1,8 @@
 """Nový XP model (supporter-first) → earned_total (lifetime XP → level / Battle Pass):
  • supporter (vlastní sub / resub / gift sub giver) = PEVNÝCH 5000 XP za KAŽDÝ sub (z počtu v reason,
    ne z bodů → HH 2× bonus XP nezdvojí), BEZ stropu = náskok podporovatelů
- • poctivé farmení = body × faktor (kolo/drop/partner/zahrádka 0.5, zbytek 1.0), DENNÍ strop XP (sub ×1.5 + vyšší strop)
+ • poctivé farmení = body × faktor (kolo/drop/partner 0.5, zbytek 1.0), DENNÍ strop XP (sub ×1.5 + vyšší strop)
+• zahrádka (Sklizeň) = uncapped (MIMO denní strop), nízký faktor 0.1
  • gambling / dary / admin / komunitní cíle / botrix = 0
  • import staré platformy = plně, bez stropu
 Zůstatek (points) se mění vždy plně.
@@ -41,8 +42,8 @@ def test_classify_xp():
     # farmení (faktor)
     assert classify_xp("Sledování streamu") == ("farm", 1.0)
     assert classify_xp("Aktivita v chatu") == ("farm", 1.0)
-    assert classify_xp("Sklizeň: Mrkev 🌾") == ("farm", 0.5)            # zahrádka = bonus/RNG → půlka
-    assert classify_xp("Sklizeň (chrobáci ji načali) 🐛") == ("farm", 0.5)
+    assert classify_xp("Sklizeň: Mrkev 🌾") == ("garden", 0.1)          # zahrádka = uncapped, nízký faktor
+    assert classify_xp("Sklizeň (chrobáci ji načali) 🐛") == ("garden", 0.1)
     assert classify_xp("Kolo štěstí 🎡") == ("farm", 0.5)
     assert classify_xp("Drop #5 – 1. místo") == ("farm", 0.5)
     assert classify_xp("Flash partner: XY") == ("farm", 0.5)
@@ -102,6 +103,23 @@ def test_kolo_half_factor(client):
         add_points(conn, uid, 800, "Kolo štěstí 🎡")       # 0.5 faktor → 400
         conn.commit()
         assert _et(conn, uid) == 400
+    finally:
+        conn.close()
+
+
+def test_garden_xp_uncapped(client):
+    """Zahrádka (Sklizeň) jde MIMO denní strop – přidá XP i po jeho vyčerpání, faktor 0.1."""
+    from app.db import get_conn
+    from app.deps import add_points, FARM_XP_CAP, GARDEN_XP_FACTOR
+    conn = get_conn()
+    try:
+        uid = _mk(conn)                                          # non-sub → strop 2000
+        add_points(conn, uid, 9000, "Sledování streamu")         # nacapuje na FARM_XP_CAP
+        conn.commit()
+        assert _et(conn, uid) == FARM_XP_CAP, "běžné farmení capnuté"
+        add_points(conn, uid, 1400, "Sklizeň: Zlatý klas 🌾")    # 1400 × 0.1 = 140, UNCAPPED i přes strop
+        conn.commit()
+        assert _et(conn, uid) == FARM_XP_CAP + round(1400 * GARDEN_XP_FACTOR), "zahrádka přidá XP nad strop"
     finally:
         conn.close()
 
