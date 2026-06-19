@@ -329,6 +329,7 @@ function renderHeader() {
   if (!window._streamDotTimer) window._streamDotTimer = setInterval(refreshStreamDot, 60000);
   if (u) animateBalance(Number(u.points));   // gamifikace: napočítej zůstatek při změně
   if (u) checkLevelUp(Number(u.level || 0));  // gamifikace: oslava level-upu
+  placeEgg();                                 // tajný klas dne – schová se každý den jinam v hlavičce
 }
 
 /* ---------------- Živá tečka: stav streamu (online/offline) ---------------- */
@@ -5543,16 +5544,42 @@ document.addEventListener("click", (e) => {
 
 // (skrytá drobnost) – rohová tečka / sekvence kláves
 let _eggBusy = false;
+/* Tajný klas dne: skrytý klikací 🌾 se KAŽDÝ DEN schová na jiné místo v hlavičce (deterministicky
+   dle data → fér, všichni hledají stejně). Najdeš → +denní odměna (1×/den). Konami kód stálá záloha. */
+const _eggSpots = [".brand", ".pts-pill .lbl", "#streamDot .sd-txt", ".user-chip .uc-name",
+                   ".lvl-pill .lvl-num", ".nav .nav-link:last-of-type"];
+function _eggSpotSel() {
+  const d = new Date();
+  const seed = d.getFullYear() * 372 + (d.getMonth() + 1) * 31 + d.getDate();
+  return _eggSpots[seed % _eggSpots.length];
+}
+function placeEgg() {
+  if (!state.user || window._eggGoneToday) return;     // jen přihlášený, dnes ještě nevyřízený
+  if (document.querySelector(".egg-klas")) return;     // už umístěný
+  const host = document.querySelector(_eggSpotSel());
+  if (!host) return;
+  const egg = document.createElement("span");
+  egg.className = "egg-klas";
+  egg.dataset.action = "ft-spk";
+  egg.textContent = "🌾";
+  egg.title = "?";
+  egg.style.cssText = "cursor:pointer;opacity:.16;font-size:11px;margin-left:2px;user-select:none;transition:opacity .2s;vertical-align:super";
+  egg.addEventListener("mouseenter", () => { egg.style.opacity = ".55"; });
+  egg.addEventListener("mouseleave", () => { egg.style.opacity = ".16"; });
+  host.appendChild(egg);
+}
 async function claimEgg() {
   if (_eggBusy) return;
-  if (!state.user) { toast("🌾 Tajný klas! Přihlas se přes Kick a vyzvedni si ho.", "info"); return; }
+  if (!state.user) { toast("🌾 Tajný klas dne! Přihlas se přes Kick a vyzvedni si ho.", "info"); return; }
   _eggBusy = true;
   try {
     const r = await api("/egg/claim", { method: "POST" });
-    if (r.already) { toast("🌾 Tajný klas už jsi našel dřív. 😉", "info"); }
+    window._eggGoneToday = true;                        // dnes vyřízeno → schovej klas
+    document.querySelectorAll(".egg-klas").forEach((e) => e.remove());
+    if (r.already) { toast("🌾 Dnešní klas už máš. Vrať se zítra – schová se zas jinam! 😉", "info"); }
     else {
       if (state.user) state.user.points = r.balance;
-      toast(`🥚 NAŠEL JSI TAJNÝ KLAS! +${fmtPts(r.reward)} 🌾🎉`, "success");
+      toast(`🥚 NAŠEL JSI DNEŠNÍ KLAS! +${fmtPts(r.reward)} 🌾🎉`, "success");
       try { confettiBurst(); } catch (e) {}
       renderHeader();
     }
