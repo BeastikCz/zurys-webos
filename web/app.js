@@ -229,7 +229,7 @@ function render() {
   const pages = {
     shop: pageShop, leaderboard: pageLeaderboard, exchange: pageExchange, redeem: pageRedeem,
     faq: pageFaq, pravidla: pageRules, cart: pageCart, profile: pageProfile, admin: pageAdmin,
-    predikce: pagePredikce, games: pageGames, novinky: pageNews, bonusy: pageBonusy,
+    predikce: pagePredikce, games: pageGames, novinky: pageNews, bonusy: pageBonusy, ukoly: pageUkoly,
     kosmetika: pageCosmetics, bj: pageBjRoom, zpravy: pageMessages, fair: pageFair, mines: pageMines,
     connect: pageConnect, login: pageConnect, register: pageConnect, u: pageUserProfile,
     "mod-nabor": pageModApply, staty: pageGameStats, "sin-slavy": pageHallOfFame, zahrada: pageGarden,
@@ -292,8 +292,8 @@ function renderHeader() {
   const route = currentRoute();
   const u = state.user;
   document.body.classList.toggle("logged-in", !!u);   /* na mobilu uvolní místo v topbaru (skryje wordmark) */
-  const items = [["shop", "Shop"], ["bonusy", "Bonusy"], ["zahrada", "Zahrádka"], ["leaderboard", "Žebříček"], ["exchange", "Směnárna"], ["games", "Hry"], ["predikce", "Predikce"]];
-  const navDot = (k) => (k === "bonusy" && u && bonusReady) ? `<span class="nav-dot" title="Máš nevyzvednutou odměnu!"></span>` : "";
+  const items = [["shop", "Shop"], ["bonusy", "Bonusy"], ["ukoly", "Úkoly"], ["zahrada", "Zahrádka"], ["leaderboard", "Žebříček"], ["exchange", "Směnárna"], ["games", "Hry"], ["predikce", "Predikce"]];
+  const navDot = (k) => ((k === "bonusy" && u && bonusReady) || (k === "ukoly" && u && questReady)) ? `<span class="nav-dot" title="Máš nevyzvednutou odměnu!"></span>` : "";
   const navLinks = items.map(([k, l]) => `<a href="#/${k}" class="nav-link ${route === k ? "active" : ""}">${l}${navDot(k)}</a>`).join("")
     + (isStaff(u) ? `<a href="#/admin" class="nav-link ${route === "admin" ? "active" : ""}">${u.role === "admin" ? "Admin" : "Panel"}</a>` : "");
 
@@ -2263,7 +2263,7 @@ async function claimBpDaily() {     // denní bonus folded do Battle Passu (reus
 }
 
 /* ---------- Kolo štěstí (denní spin) ---------- */
-let wheelState = null, wheelBusy = false, bonusReady = false;
+let wheelState = null, wheelBusy = false, bonusReady = false, questReady = false;
 async function loadWheel() {
   const box = document.getElementById("wheelCard"); if (!box) return;
   wheelBusy = false;
@@ -2341,6 +2341,67 @@ async function doSpinWheel() {
   }
 }
 
+/* ---------- Denní / týdenní úkoly (questy) – plní i Battle Pass ---------- */
+function pageUkoly() {
+  const view = $("#view");
+  if (!state.user) {
+    view.innerHTML = `
+      <div class="page-head with-mascot"><img class="page-mascot" src="/sedlak-cut.png" alt=""><div class="ph-text"><h1>📋 Úkoly</h1><p class="muted">Denní a týdenní úkoly – plň a ber sedláky navíc.</p></div></div>
+      <div class="panel" style="text-align:center;padding:36px 20px">
+        <div style="font-size:42px;margin-bottom:8px">📋</div>
+        <div class="section-title" style="margin:0 0 6px">Připoj se a plň úkoly</div>
+        <p class="muted" style="font-size:13.5px;max-width:430px;margin:0 auto 18px">Denní a týdenní úkoly ti dají sedláky navíc — a posouvají tě v <b>Battle Passu</b> 🎟️.</p>
+        <button class="btn btn-kick" data-action="connect">🟢 Připojit přes Kick</button>
+      </div>`;
+    return;
+  }
+  view.innerHTML = `
+    <div class="page-head with-mascot"><img class="page-mascot" src="/sedlak-cut.png" alt=""><div class="ph-text"><h1>📋 Úkoly</h1><p class="muted">Plň denní a týdenní úkoly, ber sedláky navíc – a posouvej se v Battle Passu 🎟️.</p></div></div>
+    <div id="questsCard"></div>`;
+  loadQuests();
+}
+async function loadQuests() {
+  const box = document.getElementById("questsCard"); if (!box) return;
+  try {
+    const qs = await api("/quests");
+    if (!Array.isArray(qs) || !qs.length) { box.innerHTML = ""; return; }   // úkoly mimo provoz → kartu schovej
+    const sec = (period, title, icon) => {
+      const list = qs.filter((q) => q.period === period);
+      if (!list.length) return "";
+      return `<div class="section-title" style="margin-top:16px">${icon} ${title}</div><div class="quest-list">${list.map(questRowHTML).join("")}</div>`;
+    };
+    box.innerHTML = `<div class="panel">
+      <div class="section-title" style="margin-top:0">📋 Úkoly <span class="faint" style="font-weight:400;font-size:13px">– plň a ber sedláky navíc</span> <span style="font-size:12px;font-weight:700;color:var(--accent)">→ 🎟️ plní Pass</span></div>
+      ${sec("daily", "Denní úkoly", "☀️")}${sec("weekly", "Týdenní úkoly", "📅")}
+    </div>`;
+  } catch (e) { box.innerHTML = ""; }
+}
+function questRowHTML(q) {
+  const pct = Math.min(100, Math.round(q.progress / q.target * 100));
+  const btn = q.claimed
+    ? `<button class="btn btn-sm" disabled>✓ Hotovo</button>`
+    : (q.completed
+      ? `<button class="btn btn-accent btn-sm" data-action="claim-quest" data-key="${q.key}">Vyzvednout +${fmtPts(q.reward)}</button>`
+      : `<span class="quest-prog-txt faint">${q.progress}/${q.target}</span>`);
+  return `<div class="quest${q.claimed ? " done" : q.completed ? " ready" : ""}">
+    <div class="quest-main">
+      <div class="quest-name">${esc(q.name)} <span class="faint" style="font-weight:400">+${fmtPts(q.reward)} 🌾</span></div>
+      <div class="quest-desc faint">${esc(q.desc)}</div>
+      <div class="quest-bar"><span style="width:${pct}%"></span></div>
+    </div>
+    <div class="quest-cta">${btn}</div>
+  </div>`;
+}
+async function claimQuest(key) {
+  try {
+    const r = await api("/quests/claim", { method: "POST", body: { key } });
+    if (state.user) state.user.points = r.balance;
+    toast(r.message || "Odměna vyzvednuta! 🌾", "success");
+    try { confettiBurst(); } catch (e) {}
+    renderHeader(); loadQuests(); refreshBonusDot();
+  } catch (e) { toast(e.message, "error"); }
+}
+
 /* ---------- Partnerské/sponzorské odkazy (1× navždy / ⚡ flash okna) ---------- */
 let _partnerTimer = null;
 async function loadPartnerLinks() {
@@ -2404,11 +2465,12 @@ async function claimPartnerLink(id, url) {
 
 /* ---------- Tečka „máš co vyzvednout" na záložce Bonusy (daily / spin / quest) ---------- */
 async function refreshBonusDot() {
-  if (!state.user) { bonusReady = false; return; }
+  if (!state.user) { bonusReady = false; questReady = false; return; }
   try {
-    const [d, w, pl] = await Promise.all([api("/daily/status"), api("/wheel/status"), api("/partner-links").catch(() => ({ links: [] }))]);
+    const [d, w, pl, qs] = await Promise.all([api("/daily/status"), api("/wheel/status"), api("/partner-links").catch(() => ({ links: [] })), api("/quests").catch(() => [])]);
     const partnerReady = pl && Array.isArray(pl.links) && pl.links.some((l) => l.claimable);
-    bonusReady = !!(d.can_claim || w.can_spin || partnerReady);
+    bonusReady = !!(d.can_claim || w.can_spin || partnerReady);          // tečka na Bonusy
+    questReady = Array.isArray(qs) && qs.some((q) => q.completed && !q.claimed);   // tečka na Úkoly
   } catch (e) { return; }
   renderHeader();
 }
@@ -5271,6 +5333,7 @@ function handleAction(action, el) {
     case "grd-rescue": grdRescue(el.dataset.plot); break;
     case "decor-buy": buyDecor(el.dataset.key); break;
     case "claim-partner": claimPartnerLink(el.dataset.id, el.dataset.url); break;
+    case "claim-quest": claimQuest(el.dataset.key); break;
     case "cos-buy": buyCosmetic(el.dataset.key); break;
     case "cos-equip": equipCosmetic(el.dataset.key); break;
     case "dm-send": dmSend(el.dataset.mode, el.dataset.id); break;
