@@ -65,6 +65,10 @@ def _pest_chance(conn, user_id: int) -> float:
 
 
 def _crops_public(is_sub: bool, pest_chance: float) -> list:
+    # XP ze sklizně = výnos × farm faktor 1.0 × (sub ×1.5). Sklizeň classify_xp → 'farm' 1.0.
+    # Plná sklizeň (bez chrobáků) – pest úrodu/XP půlí, ale karta ukazuje plný potenciál.
+    from .deps import SUB_FARM_MULT
+    xp_mult = SUB_FARM_MULT if is_sub else 1.0
     out = []
     for c in CROPS:
         seed = _seed_cost(c, is_sub)
@@ -72,6 +76,7 @@ def _crops_public(is_sub: bool, pest_chance: float) -> list:
         expected_rescue = round(c["reward"] - seed - (_rescue_cost(c) * pest_chance))
         out.append({"key": c["key"], "icon": c["icon"], "name": c["name"], "hours": c["hours"],
                     "reward": c["reward"], "cost": seed, "net": c["reward"] - seed,
+                    "xp": round(c["reward"] * xp_mult),
                     "expected_no_rescue": expected_no_rescue,
                     "expected_rescue": expected_rescue})
     return out
