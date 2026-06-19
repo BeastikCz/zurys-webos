@@ -27,9 +27,9 @@ QUESTS = [
     {"key": "d_chat", "period": "daily",  "name": "Ukecaný",       "desc": "Napiš 20× do chatu během streamu 💬", "stat": "chat",    "target": 20,   "reward": 120},
     {"key": "d_garden", "period": "daily", "name": "Zahradnik",     "desc": "Sklid 2 plodiny v zahradce",          "stat": "garden_harvest", "target": 2, "reward": 80},
     {"key": "d_shop", "period": "daily",   "name": "Mecenas dne",   "desc": "Utrat 1000 sedlaku v shopu",          "stat": "shop_spent", "target": 1000, "reward": 120},
-    {"key": "w_drop", "period": "weekly", "name": "Týdenní lovec", "desc": "Chytni 60 dropů za týden",            "stat": "drops",   "target": 60,   "reward": 700},
+    {"key": "w_drop", "period": "weekly", "name": "Týdenní lovec", "desc": "Chytni 15 dropů za týden",            "stat": "drops",   "target": 15,   "reward": 700},
     {"key": "w_duel", "period": "weekly", "name": "Gladiátor",     "desc": "Vyhraj 40 PvP duelů za týden",        "stat": "pvp_won", "target": 40,   "reward": 700},
-    {"key": "w_earn", "period": "weekly", "name": "Magnát",        "desc": "Vydělej 12 000 sedláků na streamu za týden 📺", "stat": "earned",  "target": 12000, "reward": 900},
+    {"key": "w_earn", "period": "weekly", "name": "Magnát",        "desc": "Vydělej 6 000 sedláků na streamu za týden 📺", "stat": "earned",  "target": 6000, "reward": 900},
     {"key": "w_chat", "period": "weekly", "name": "Tlachal týdne", "desc": "Buď ukecaný celý týден — 350 zpráv 💬", "stat": "chat",    "target": 350,  "reward": 800},
 ]
 _BY_KEY = {q["key"]: q for q in QUESTS}
