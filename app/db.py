@@ -268,7 +268,8 @@ CREATE TABLE IF NOT EXISTS subgoal_gifters (
     user_id  INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     subs     INTEGER NOT NULL DEFAULT 0,   -- kolik subů dnes giftnul celkem
     hh_subs  INTEGER NOT NULL DEFAULT 0,   -- z toho během happy hour
-    paid     INTEGER NOT NULL DEFAULT 0,   -- 1 = odměnu za splněný cíl už dostal (idempotence per-gifter)
+    paid     INTEGER NOT NULL DEFAULT 0,   -- (legacy) starý 1×-per-gifter model
+    paid_tier INTEGER NOT NULL DEFAULT 0,  -- nejvyšší tier, za který gifter už dostal odměnu (KUMULATIVNÍ model)
     PRIMARY KEY (day, user_id)
 );
 
@@ -690,7 +691,8 @@ _MIGRATIONS = [
     ("users", "cos_banner", "TEXT"),     # nasazený profil banner
     ("users", "gamble_block_until", "TEXT"),  # sebevyloučení ze sázek: ISO konec / "permanent" / NULL
     ("users", "timeout_until", "TEXT"),       # timeout (dočasný blok webu): ISO konec / NULL. Zrcadlí Kick timeout.
-    ("subgoal_gifters", "paid", "INTEGER NOT NULL DEFAULT 0"),  # SUB cíl: gifter už dostal odměnu (per-gifter idempotence)
+    ("subgoal_gifters", "paid", "INTEGER NOT NULL DEFAULT 0"),  # SUB cíl: (legacy) gifter už dostal odměnu (1× model)
+    ("subgoal_gifters", "paid_tier", "INTEGER NOT NULL DEFAULT 0"),  # SUB cíl: nejvyšší vyplacený tier (kumulativní model)
     ("users", "earned_today", "INTEGER NOT NULL DEFAULT 0"),  # XP z FARMENÍ nasbírané dnes (denní strop XP)
     ("users", "earned_day", "TEXT"),          # den (local) pro reset earned_today
     ("users", "fair_server_seed", "TEXT"),    # provably fair: tajný server seed (aktuální)

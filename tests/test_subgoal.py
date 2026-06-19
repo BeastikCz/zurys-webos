@@ -34,28 +34,27 @@ def _points(conn, uid):
     return conn.execute("SELECT points FROM users WHERE id=?", (uid,)).fetchone()["points"]
 
 
-def test_subgoal_escalating_tiers(client):
-    """Eskalace: tier 1 (step subů) → reward_step, tier 2 (2×step) → 2×reward_step. Pozdější gifter
-    bere vyšší tier; nikdo se nezdvojí; gifter pod 1. milníkem zatím nebere."""
+def test_subgoal_cumulative_tiers(client):
+    """KUMULATIVNÍ model (Markův příklad): při každém tieru berou VŠICHNI current gifteři ten tier;
+    early kumulativně i předchozí, pozdní jen od svého příchodu (nedostanou tiery zpětně).
+    Marek+Martech naplní tier 1 (→1k). Lojza+Pepík naplní tier 2 (→2k). Výsledek: Marek/Martech 3k
+    (1k+2k), Lojza/Pepík 2k (jen tier 2, ne tier 1)."""
     from app.db import get_conn
     from app import subgoal
     conn = get_conn()
     try:
-        _reset(conn, target=3, reward=1000)          # krok 3 subů, 1000/tier
-        g1 = _mk_user(conn)
-        subgoal.record_gifter(conn, g1, 2, in_hh=False)
-        conn.commit()
-        subgoal.tick(conn, 2)                         # progress 2 < 3 → nic
-        assert _points(conn, g1) == 0, "pod 1. milníkem se nevyplácí"
-        subgoal.tick(conn, 1)                         # progress 3 → TIER 1 → g1 bere 1000
-        assert _points(conn, g1) == 1000
-        assert subgoal.status(conn)["tier"] == 1
-        g2 = _mk_user(conn)                           # nový gifter, naplní tier 2
-        subgoal.record_gifter(conn, g2, 1, in_hh=False)
-        conn.commit()
-        subgoal.tick(conn, 3)                         # progress 6 → TIER 2 → g2 bere 2000
-        assert _points(conn, g2) == 2000, "pozdější gifter bere vyšší tier"
-        assert _points(conn, g1) == 1000, "g1 se nezdvojí (paid)"
+        _reset(conn, target=10, reward=1000)                 # krok 10, 1000/tier
+        marek = _mk_user(conn); martech = _mk_user(conn)
+        subgoal.record_gifter(conn, marek, 5, in_hh=False); conn.commit(); subgoal.tick(conn, 5)
+        subgoal.record_gifter(conn, martech, 5, in_hh=False); conn.commit(); subgoal.tick(conn, 5)   # → tier 1
+        assert _points(conn, marek) == 1000 and _points(conn, martech) == 1000, "tier 1 = 1k každému"
+        lojza = _mk_user(conn); pepik = _mk_user(conn)        # přijdou až v tieru 2
+        subgoal.record_gifter(conn, lojza, 5, in_hh=False); conn.commit(); subgoal.tick(conn, 5)
+        subgoal.record_gifter(conn, pepik, 5, in_hh=False); conn.commit(); subgoal.tick(conn, 5)      # → tier 2
+        assert _points(conn, marek) == 3000, "early gifter kumulativně 1k+2k"
+        assert _points(conn, martech) == 3000
+        assert _points(conn, lojza) == 2000, "pozdní gifter jen tier 2 (ne tier 1)"
+        assert _points(conn, pepik) == 2000
         assert subgoal.status(conn)["tier"] == 2
     finally:
         conn.close()
@@ -89,8 +88,8 @@ def test_subgoal_tier_cap(client):
         g = _mk_user(conn)
         subgoal.record_gifter(conn, g, 10, in_hh=False)
         conn.commit()
-        subgoal.tick(conn, 10)                        # progress 10 → tier = min(5, 2) = 2 → 2×1000
-        assert _points(conn, g) == 2000, "strop drží tier na tier_max"
+        subgoal.tick(conn, 10)                        # progress 10 → tier = min(5, 2) = 2 (strop)
+        assert _points(conn, g) == 3000, "strop tier 2 → kumulativně tiery 1+2 = 1000+2000"
         st = subgoal.status(conn)
         assert st["tier"] == 2 and st["maxed"] is True
     finally:

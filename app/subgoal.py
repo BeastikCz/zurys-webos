@@ -110,17 +110,18 @@ def tick(conn, count: int = 1) -> None:
 
 
 def record_gifter(conn, user_id: int, n: int, in_hh: bool) -> None:
-    """Zaznamenej dnešního giftera subů (kolik subů celkem, z toho v happy hour).
-    Volá kickevents při gift sub eventu PŘED tickem (ať je gifter v outpayu, i kdyby
-    cíl naplnil právě jeho gift). Necommituje – commit dělá caller / _fire."""
+    """Zaznamenej dnešního giftera. NOVÝ gifter dostane jako baseline AKTUÁLNÍ dosažený tier
+    (paid_tier = už hotové tiery) → ty zpětně NEdostane, bere až tiery od svého příchodu výš.
+    Volá kickevents při gift sub eventu PŘED tickem. Necommituje – commit dělá caller / _settle."""
     if not user_id or n <= 0:
         return
     _ensure_day(conn)
+    cur_tier = _reached_tier(_int(conn, "subgoal_progress", 0), _cfg(conn))   # tiery už hotové = nedostane zpětně
     hh = n if in_hh else 0
     conn.execute(
-        "INSERT INTO subgoal_gifters (day, user_id, subs, hh_subs) VALUES (?, ?, ?, ?) "
+        "INSERT INTO subgoal_gifters (day, user_id, subs, hh_subs, paid_tier) VALUES (?, ?, ?, ?, ?) "
         "ON CONFLICT(day, user_id) DO UPDATE SET subs = subs + ?, hh_subs = hh_subs + ?",
-        (_today(), user_id, n, hh, n, hh))
+        (_today(), user_id, n, hh, cur_tier, n, hh))
 
 
 def _announce_async(text: str) -> None:
@@ -144,33 +145,34 @@ def _announce_async(text: str) -> None:
 
 
 def _settle(conn, cfg) -> None:
-    """Eskalující výplata. Při dosaženém tieru (progress // step, stropnuto tier_max) vyplať KAŽDÉMU
-    dosud nevyplacenému gifterovi (paid=0) odměnu ve výši AKTUÁLNÍHO tieru (tier × reward_step) a označ
-    paid=1. Každý gifter tak bere právě jednou – ve výši tieru, ve kterém se vyplácí (kdo giftne výš,
-    bere víc). Volá se z ticku po každém gift eventu. Oznámení do chatu při dosažení NOVÉHO tieru."""
+    """KUMULATIVNÍ výplata. Při dosaženém tieru T vyplať každému gifterovi VŠECHNY tiery, které ještě
+    nemá (od paid_tier+1 do T) – odměna za tier k = k × reward_step. EARLY gifteři tak berou každý další
+    tier znova (1k + 2k + 3k…), POZDNÍ jen od svého příchodu (record_gifter jim dá baseline paid_tier =
+    tehdy hotové tiery). Atomický claim paid_tier → anti-double-pay. Oznámení při NOVÉM tieru."""
     today = _today()
     progress = _int(conn, "subgoal_progress", 0)
     tier = _reached_tier(progress, cfg)
     if tier < 1:
         return                                       # ještě ani první milník
-    reward = tier * cfg["reward_step"]
-    eligible = [r["user_id"] for r in conn.execute(
-        "SELECT user_id FROM subgoal_gifters WHERE day = ? AND paid = 0", (today,)).fetchall()]
-    newly = []
-    for uid in eligible:                             # atomicky zaber každého → anti-double-pay i při souběhu
-        if conn.execute("UPDATE subgoal_gifters SET paid = 1 WHERE day = ? AND user_id = ? AND paid = 0",
-                        (today, uid)).rowcount == 1:
-            newly.append(uid)
-    if newly and reward > 0:
-        qm = ",".join("?" * len(newly))
-        conn.execute(f"UPDATE users SET points = points + ? WHERE id IN ({qm})", [reward, *newly])
-        conn.executemany(
-            "INSERT INTO points_log (user_id, change, reason, created_at) VALUES (?, ?, ?, ?)",
-            [(uid, reward, f"Sub cíl tier {tier} 🟣🎁", now_iso()) for uid in newly])
+    rs = cfg["reward_step"]
+    rows = conn.execute(
+        "SELECT user_id, paid_tier FROM subgoal_gifters WHERE day = ? AND paid_tier < ?", (today, tier)).fetchall()
+    newly = []                                       # (uid, amount)
+    for r in rows:
+        uid, p = r["user_id"], r["paid_tier"] or 0
+        amount = rs * sum(range(p + 1, tier + 1))    # součet tierů p+1..T (kumulativně)
+        if amount > 0 and conn.execute(              # atomicky zaber (paid_tier p → T) – anti-double-pay
+                "UPDATE subgoal_gifters SET paid_tier = ? WHERE day = ? AND user_id = ? AND paid_tier = ?",
+                (tier, today, uid, p)).rowcount == 1:
+            conn.execute("UPDATE users SET points = points + ? WHERE id = ?", (amount, uid))
+            conn.execute("INSERT INTO points_log (user_id, change, reason, created_at) VALUES (?, ?, ?, ?)",
+                         (uid, amount, f"Sub cíl tier {tier} 🟣🎁", now_iso()))
+            newly.append((uid, amount))
+    if newly:
         from .deps import notify
-        for uid in newly:
+        for uid, amt in newly:
             notify(conn, uid, "🟣", f"Sub cíl – tier {tier}!",
-                   f"Komunita dosáhla tier {tier} – bereš +{reward} sedláků za gift sub! 🎁", "#/profile")
+                   f"Komunita dosáhla tier {tier} – bereš +{amt} sedláků! 🎁", "#/profile")
     # oznámení do chatu při dosažení NOVÉHO tieru (1× na tier)
     stored = _int(conn, "subgoal_tier", 0)
     leveled = tier > stored
@@ -180,10 +182,10 @@ def _settle(conn, cfg) -> None:
     conn.commit()
     if leveled:
         nxt = "MAX 🏆" if tier >= cfg["tier_max"] else f"{(tier + 1) * cfg['step']} subů"
+        tier_rw = tier * rs
         if newly:
             who = "gifter" if len(newly) == 1 else "gifterů"
-            _announce_async(f"🟣 SUB CÍL — TIER {tier}! {len(newly)} {who} bere +{reward} sedláků za gift suby! "
+            _announce_async(f"🟣 SUB CÍL — TIER {tier}! {len(newly)} {who} odměněno (+{tier_rw} za tier, věrní berou i předchozí kumulativně)! "
                             f"Další tier = {nxt}. 🎁🌾")
         else:
-            _announce_async(f"🟣 SUB CÍL — TIER {tier} odemčen! Kdo teď giftne sub, bere +{reward} sedláků. "
-                            f"Další tier = {nxt}. 🎁")
+            _announce_async(f"🟣 SUB CÍL — TIER {tier} odemčen! Kdo teď giftne, bere +{tier_rw}. Další tier = {nxt}. 🎁")
