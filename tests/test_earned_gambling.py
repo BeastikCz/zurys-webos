@@ -47,6 +47,10 @@ def test_classify_xp():
     assert classify_xp("Kolo štěstí 🎡") == ("farm", 0.5)
     assert classify_xp("Drop #5 – 1. místo") == ("farm", 0.5)
     assert classify_xp("Flash partner: XY") == ("farm", 0.5)
+    # úkoly (denní/týdenní) = vždy 0.5, nezávisle na názvu (quirk fix: před keyword checky)
+    assert classify_xp("Úkol: Gladiátor 📋") == ("farm", 0.5)
+    assert classify_xp("Úkol: Sázkař 📋") == ("farm", 0.5)              # dřív 0 (název měl „sázka")
+    assert classify_xp("Úkol: Lovec dropů 📋") == ("farm", 0.5)         # dřív 0.5 náhodou („drop"), teď záměrně
 
 
 def test_supporter_xp_flat_per_sub(client):

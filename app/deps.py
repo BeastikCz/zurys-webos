@@ -433,6 +433,8 @@ FARM_XP_CAP_SUB = 8000     # denní strop XP z farmení pro suby (×1.5). Zvýš
 SUB_FARM_MULT = 1.5        # sub farmí XP rychleji
 GARDEN_XP_FACTOR = 0.2     # zahrádka „Sklizeň…": UNCAPPED (mimo denní strop) → nízký faktor, ať to není loophole
                            #   (4 plots × klas/den = max ~1120 XP/den non-sub; pasivní bonus, ne náhrada chatu)
+QUEST_XP_FACTOR = 0.5      # denní/týdenní úkoly („Úkol: …"): bonus za aktivitu (za niž už XP máš) → půlka, denní strop.
+                           #   Konzistentně pro VŠECHNY úkoly (fixuje quirk: Sázkař byl 0, Lovec dropů 0.5 dle názvu)
 
 _XP_ZERO_KW = ("battle pass", "mines", "blackjack", "coinflip", "duel", "predikce", "piškvor",
                "kostky", "stůl – win", "sázka", "výhra v", "zrušen", "zrušená", "vrácen", "vráceno",
@@ -453,6 +455,8 @@ def classify_xp(reason: str):
         return ("sup", 1)
     if "import" in r:
         return ("imp", None)
+    if "úkol" in r:                                     # denní/týdenní úkoly → vždy QUEST_XP_FACTOR (před zero/half
+        return ("farm", QUEST_XP_FACTOR)                #   → quirk pryč: Sázkař/Lovec dropů teď konzistentně 0.5)
     if any(k in r for k in _XP_ZERO_KW):
         return ("zero", None)
     if "skliz" in r:                                    # zahrádka „Sklizeň…" → uncapped (mimo strop), nízký faktor
