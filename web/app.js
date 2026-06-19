@@ -5134,13 +5134,15 @@ function subGoalCardHTML(g) {
   const on = !!g.enabled;
   const step = g.step != null ? g.step : g.target;
   const rewardStep = g.reward_step != null ? g.reward_step : g.reward;
-  const tierMax = g.tier_max != null ? g.tier_max : 10;
+  const tierMax = g.tier_max != null ? g.tier_max : 0;
+  const unlimited = !tierMax || tierMax <= 0;          // 0 = nekonečný žebříček
+  const tierMaxTxt = unlimited ? "∞" : tierMax;
   const tier = g.tier != null ? g.tier : 0;
   const badge = g.maxed ? "🏆 MAX TIER" : (on ? "🟢 ZAPNUTO" : "⚫ vypnuto");
   return `<div class="panel" style="margin-bottom:18px;border-color:${on ? "var(--accent-2)" : "var(--border)"}">
     <div class="row-between"><div class="section-title" style="margin:0">🟣 Komunitní SUB cíl <span class="faint" style="font-weight:600;font-size:12px">(eskalující)</span></div>
       <span class="badge ${on ? "badge-sub" : ""}">${badge}</span></div>
-    <p class="form-hint" style="margin:8px 0 12px">Kick suby (sub/resub +1, gift sub +počet) plní lištu. <b>Eskaluje:</b> každý dosažený tier (po <b>${step}</b> subech) dostane <b>každý gifter</b> odměnu ve výši tieru — tier 1 = <b>+${fmtPts(rewardStep)}</b>, tier 2 = <b>+${fmtPts(rewardStep * 2)}</b>, … až do max <b>${tierMax}</b>. Pak se cíl zvedne na další tier. Gifter bere odměnu za <b>každý tier od svého příchodu</b> — early <b>kumulativně</b> (tier 1 + 2 + …), kdo přijde pozdějc, bere jen od svého tieru výš. Bot to oznámí v chatu. <b>Reset na konci streamu.</b> 🟣🎁🌾<br>Teď: <b>tier ${tier}/${tierMax}</b> · <b>${g.progress} / ${g.target}</b> subů do dalšího${g.gifters != null ? ` · <b>${g.gifters}</b> ${g.gifters === 1 ? "gifter" : "gifterů"} dnes` : ""}.</p>
+    <p class="form-hint" style="margin:8px 0 12px">Kick suby (sub/resub +1, gift sub +počet) plní lištu. <b>Eskaluje:</b> každý dosažený tier (po <b>${step}</b> subech) dostane <b>každý gifter</b> odměnu ve výši tieru — tier 1 = <b>+${fmtPts(rewardStep)}</b>, tier 2 = <b>+${fmtPts(rewardStep * 2)}</b>, … ${unlimited ? "<b>donekonečna</b> (cíl roste po " + step + " bez stropu)" : "až do max <b>" + tierMax + "</b>"}. Pak se cíl zvedne na další tier. Gifter bere odměnu za <b>každý tier od svého příchodu</b> — early <b>kumulativně</b> (tier 1 + 2 + …), kdo přijde pozdějc, bere jen od svého tieru výš. Bot to oznámí v chatu. <b>Reset na konci streamu.</b> 🟣🎁🌾<br>Teď: <b>tier ${tier}${unlimited ? "" : "/" + tierMax}</b> · <b>${g.progress} / ${g.target}</b> subů do dalšího${g.gifters != null ? ` · <b>${g.gifters}</b> ${g.gifters === 1 ? "gifter" : "gifterů"} dnes` : ""}.</p>
     <div style="margin:0 0 12px;padding:9px 11px;background:rgba(145,71,255,.1);border:1px solid rgba(145,71,255,.35);border-radius:9px;font-size:12.5px">
       🖥️ <b>OBS overlay</b> (živě synced s webem): <code style="user-select:all">${location.origin}/overlay/subgoal.html</code>
       <button class="btn btn-ghost btn-sm" data-action="copy-url" data-url="${location.origin}/overlay/subgoal.html" style="margin-left:6px">📋 Kopírovat</button>
@@ -5149,7 +5151,7 @@ function subGoalCardHTML(g) {
     <div class="field-row">
       <div class="field"><label>Krok (subů / tier)</label><input class="input" id="sg_target" type="number" min="1" value="${step}"></div>
       <div class="field"><label>Odměna za tier (sedláků)</label><input class="input" id="sg_reward" type="number" min="0" value="${rewardStep}"></div>
-      <div class="field"><label>Max tier (strop)</label><input class="input" id="sg_tier_max" type="number" min="1" value="${tierMax}"></div>
+      <div class="field"><label>Max tier (0 = ∞)</label><input class="input" id="sg_tier_max" type="number" min="0" value="${tierMax}"></div>
     </div>
     <div class="toolbar" style="margin-top:12px">
       <button class="btn ${on ? "btn-danger" : "btn-primary"}" data-action="subgoal-toggle" data-on="${on ? 1 : 0}">${on ? "⏸️ Vypnout SUB cíl" : "▶️ Zapnout SUB cíl"}</button>
@@ -5161,7 +5163,7 @@ async function saveSubGoal(enable) {
   const body = {
     target: parseInt($("#sg_target").value || "10", 10),
     reward: parseInt($("#sg_reward").value || "1000", 10),
-    tier_max: parseInt($("#sg_tier_max").value || "10", 10),
+    tier_max: parseInt($("#sg_tier_max").value || "0", 10),    // 0 = nekonečno
   };
   if (enable !== undefined) body.enabled = enable;
   try {

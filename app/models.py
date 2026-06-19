@@ -232,11 +232,11 @@ class CommunityGoalIn(BaseModel):
 
 class SubGoalIn(BaseModel):
     """Nastavení komunitního SUB cíle (posílají se jen měněná pole).
-    target = KROK subů na tier, reward = odměna za tier, tier_max = strop tierů."""
+    target = KROK subů na tier, reward = odměna za tier, tier_max = strop tierů (0 = NEKONEČNO)."""
     enabled: Optional[int] = Field(default=None, ge=0, le=1)
     target: Optional[int] = Field(default=None, ge=1, le=1_000_000)
     reward: Optional[int] = Field(default=None, ge=0, le=1_000_000)
-    tier_max: Optional[int] = Field(default=None, ge=1, le=1000)
+    tier_max: Optional[int] = Field(default=None, ge=0, le=1000)    # 0 = nekonečný žebříček
 
 
 class ModApplyIn(BaseModel):

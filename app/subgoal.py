@@ -1,7 +1,8 @@
 """Komunitní SUB cíl: ESKALUJÍCÍ žebříček. Společná lišta se plní z Kick subů (sub/resub = +1,
 gift sub = +n). Po každém TIERU (milníku po `step` subech) dostane každý dosud nevyplacený GIFTER
 odměnu ve výši aktuálního tieru (tier × reward_step) – a cíl se zvedne na další tier. Tier 1 = step
-subů → reward_step, tier 2 = 2×step → 2×reward_step, … až do `tier_max` (strop, dál cíl neroste).
+subů → reward_step, tier 2 = 2×step → 2×reward_step, … `tier_max` = strop tierů, NEBO 0 = NEKONEČNO
+(cíl roste donekonečna po `step`, nikdy „max tier", odměna za tier eskaluje dál).
 
 Každý gifter dostane odměnu PRÁVĚ JEDNOU (paid flag) – ve výši tieru, ve kterém se vyplácí → kdo
 giftne v pozdějším (vyšším) tieru, bere víc. NENÍ vázané na happy hour (odměnu bere každý gifter
@@ -15,7 +16,7 @@ from .db import now_iso, get_setting, set_setting, local_date
 
 DEFAULT_STEP = 10        # KROK: o kolik subů se posune cíl každý tier (setting subgoal_target)
 DEFAULT_REWARD = 1000    # odměna za 1 tier; gifter ji dostane 1× ve výši svého tieru (setting subgoal_reward)
-DEFAULT_TIER_MAX = 10    # strop: po tomhle tieru už cíl neroste (chrání ekonomiku) (setting subgoal_tier_max)
+DEFAULT_TIER_MAX = 0     # strop tierů; 0 = NEKONEČNO (cíl roste donekonečna po `step`) (setting subgoal_tier_max)
 
 
 def _today() -> str:
@@ -35,13 +36,22 @@ def _cfg(conn) -> dict:
         "enabled": _int(conn, "subgoal_enabled", 1),
         "step": max(1, _int(conn, "subgoal_target", DEFAULT_STEP)),            # subů na 1 tier
         "reward_step": max(0, _int(conn, "subgoal_reward", DEFAULT_REWARD)),   # sedláků za 1 tier
-        "tier_max": max(1, _int(conn, "subgoal_tier_max", DEFAULT_TIER_MAX)),  # strop tierů
+        "tier_max": _int(conn, "subgoal_tier_max", DEFAULT_TIER_MAX),          # strop tierů; ≤0 = nekonečno
     }
 
 
+def _unlimited(cfg: dict) -> bool:
+    return cfg["tier_max"] <= 0          # 0/≤0 = nekonečný žebříček (cíl roste donekonečna po `step`)
+
+
+def _maxed(tier: int, cfg: dict) -> bool:
+    return not _unlimited(cfg) and tier >= cfg["tier_max"]
+
+
 def _reached_tier(progress: int, cfg: dict) -> int:
-    """Kolik tierů (milníků) je hotových při daném progressu, stropnuto na tier_max."""
-    return min(progress // cfg["step"], cfg["tier_max"])
+    """Kolik tierů (milníků) hotových při daném progressu; stropnuto na tier_max (0 = bez stropu)."""
+    t = progress // cfg["step"]
+    return t if _unlimited(cfg) else min(t, cfg["tier_max"])
 
 
 def _ensure_day(conn) -> None:
@@ -69,7 +79,7 @@ def status(conn) -> dict:
     cfg = _cfg(conn)
     progress = _int(conn, "subgoal_progress", 0)
     tier = _reached_tier(progress, cfg)
-    maxed = tier >= cfg["tier_max"]
+    maxed = _maxed(tier, cfg)
     next_tier = tier if maxed else tier + 1
     target = next_tier * cfg["step"]                       # absolutní cíl dalšího milníku
     reward = next_tier * cfg["reward_step"]                # odměna za příští tier
@@ -178,10 +188,10 @@ def _settle(conn, cfg) -> None:
     leveled = tier > stored
     if leveled:
         set_setting(conn, "subgoal_tier", str(tier))
-        set_setting(conn, "subgoal_done", "1" if tier >= cfg["tier_max"] else "0")
+        set_setting(conn, "subgoal_done", "1" if _maxed(tier, cfg) else "0")
     conn.commit()
     if leveled:
-        nxt = "MAX 🏆" if tier >= cfg["tier_max"] else f"{(tier + 1) * cfg['step']} subů"
+        nxt = "MAX 🏆" if _maxed(tier, cfg) else f"{(tier + 1) * cfg['step']} subů"
         tier_rw = tier * rs
         if newly:
             who = "gifter" if len(newly) == 1 else "gifterů"

@@ -96,6 +96,25 @@ def test_subgoal_tier_cap(client):
         conn.close()
 
 
+def test_subgoal_unlimited_no_cap(client):
+    """tier_max=0 → NEKONEČNO: tier roste bez stropu, nikdy maxed, cíl míří na další tier."""
+    from app.db import get_conn
+    from app import subgoal
+    conn = get_conn()
+    try:
+        _reset(conn, target=2, reward=1000, tier_max=0)   # 0 = bez stropu
+        g = _mk_user(conn)
+        subgoal.record_gifter(conn, g, 14, in_hh=False)
+        conn.commit()
+        subgoal.tick(conn, 14)                            # progress 14 → tier = 14//2 = 7 (BEZ stropu)
+        assert _points(conn, g) == 1000 * sum(range(1, 8)), "kumulativně tiery 1..7 = 28000"
+        st = subgoal.status(conn)
+        assert st["tier"] == 7 and st["maxed"] is False, "nekonečno → nikdy maxed"
+        assert st["target"] == 16 and st["reward"] == 8000, "cíl míří na tier 8 (16 subů, +8000)"
+    finally:
+        conn.close()
+
+
 def test_record_gifter_upsert_counts(client):
     from app.db import get_conn, local_date
     from app import subgoal
