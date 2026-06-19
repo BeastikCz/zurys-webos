@@ -1,7 +1,7 @@
 """Komunitní chat cíl: společná lišta se plní z aktivity chatu (anti-spam: +1 za
 GENUINE zprávu po cooldownu, ne za spam – tick volá award_chat až po projití
 cooldownu). Když se naplní, VŠICHNI dnešní chat-přispěvatelé dostanou odměnu +
-bot to oznámí v chatu. Reset každý den (UTC). Stav/konfig v app_settings.
+bot to oznámí v chatu. Reset na KONCI streamu (live_events), ne o půlnoci. Stav/konfig v app_settings.
 
 Flywheel: víc lidí kecá → cíl se naplní → všichni berou → Zurys vydělá na aktivitě.
 """
@@ -33,17 +33,32 @@ def _cfg(conn) -> dict:
     }
 
 
-def _ensure_day(conn) -> None:
-    """Nový den → vynuluj počítadlo i příznak výplaty."""
-    if get_setting(conn, "cgoal_day") != _today():
-        set_setting(conn, "cgoal_day", _today())
-        set_setting(conn, "cgoal_progress", "0")
-        set_setting(conn, "cgoal_done", "0")
+def _session(conn) -> str:
+    """Klíč RELACE chat cíle – mění se JEN na reset() (konec streamu), NE o půlnoci. Cíl se tak nuluje
+    výhradně koncem streamu, ne přechodem kalendářního dne (jako sub cíl)."""
+    s = get_setting(conn, "cgoal_session")
+    if not s:
+        s = now_iso()
+        set_setting(conn, "cgoal_session", s)
+    return s
+
+
+def _ensure_session(conn) -> None:
+    """Jen zajistí relaci. ŽÁDNÝ midnight reset – cíl nuluje výhradně reset() (konec streamu)."""
+    _session(conn)
+
+
+def reset(conn) -> None:
+    """Konec streamu (live_events) → nová relace, vynuluj počítadlo i příznak výplaty. Každý stream
+    začíná čistou lištou. JEDINÝ reset – přechod dne (půlnoc) cíl NEnuluje. Necommituje – commit caller."""
+    set_setting(conn, "cgoal_session", now_iso())
+    set_setting(conn, "cgoal_progress", "0")
+    set_setting(conn, "cgoal_done", "0")
 
 
 def status(conn) -> dict:
     """Stav cíle pro UI lištu (veřejné)."""
-    _ensure_day(conn)
+    _ensure_session(conn)
     cfg = _cfg(conn)
     progress = _int(conn, "cgoal_progress", 0)
     done = get_setting(conn, "cgoal_done") == "1"
@@ -63,7 +78,7 @@ def tick(conn) -> None:
     cfg = _cfg(conn)
     if not cfg["enabled"]:
         return
-    _ensure_day(conn)
+    _ensure_session(conn)
     conn.execute(
         "UPDATE app_settings SET value = CAST(COALESCE(value,'0') AS INTEGER) + 1, updated_at = ? "
         "WHERE key = 'cgoal_progress'", (now_iso(),))

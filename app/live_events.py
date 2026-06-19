@@ -128,6 +128,18 @@ def _reset_subgoal_on_stream_end(conn) -> None:
         traceback.print_exc()
 
 
+def _reset_cgoal_on_stream_end(conn) -> None:
+    """Konec streamu → vynuluj komunitní CHAT cíl (stejně jako sub cíl – lišta drží přes půlnoc,
+    nuluje se až koncem streamu). Přepínatelné cgoal_reset_on_stream_end (default ON)."""
+    if (get_setting(conn, "cgoal_reset_on_stream_end", "1") or "1") != "1":
+        return
+    try:
+        from . import community_goal
+        community_goal.reset(conn)
+    except Exception:
+        traceback.print_exc()
+
+
 def _check(conn) -> None:
     # Přechody live↔offline trackujeme VŽDY (nezávisle na livehappy toggle) – aby reset SUB cíle
     # na konci streamu jel i s vyplým auto-Happy-Hour. Gated je jen samotná HH akce.
@@ -153,6 +165,7 @@ def _check(conn) -> None:
         # přechod LIVE → offline (konec streamu)
         set_setting(conn, "live_was_live", "0")
         _reset_subgoal_on_stream_end(conn)
+        _reset_cgoal_on_stream_end(conn)
         conn.commit()
 
 

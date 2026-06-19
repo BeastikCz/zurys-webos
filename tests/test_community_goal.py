@@ -9,15 +9,35 @@ from app import community_goal, kickbot
 from app.db import get_conn, now_iso, set_setting
 
 
-def test_status_resets_on_new_day(client):
+def test_status_does_not_reset_on_new_day(client):
+    """Přechod kalendářního dne (půlnoc) NESMÍ vynulovat chat cíl – reset jen na konci streamu (reset())."""
     conn = get_conn()
     try:
-        set_setting(conn, "cgoal_day", "2000-01-01")
+        set_setting(conn, "cgoal_day", "2000-01-01")   # dřív by „starý den" triggernul midnight reset
         set_setting(conn, "cgoal_progress", "55")
-        set_setting(conn, "cgoal_done", "1")
+        set_setting(conn, "cgoal_done", "0")
         conn.commit()
-        st = community_goal.status(conn)        # _ensure_day → reset na dnešek
-        assert st["progress"] == 0 and st["done"] is False
+        st = community_goal.status(conn)               # _ensure_session – NESMÍ nulovat
+        assert st["progress"] == 55, "půlnoc/přechod dne NESMÍ vynulovat chat cíl"
+        community_goal.reset(conn); conn.commit()       # konec streamu → teď vynuluje
+        assert community_goal.status(conn)["progress"] == 0
+    finally:
+        conn.close()
+
+
+def test_stream_end_resets_cgoal(client, monkeypatch):
+    """Přechod LIVE → offline (konec streamu) vynuluje chat cíl (live_events._check)."""
+    from app import live_events
+    conn = get_conn()
+    try:
+        set_setting(conn, "cgoal_progress", "300")
+        set_setting(conn, "cgoal_done", "0")
+        set_setting(conn, "live_was_live", "1")
+        set_setting(conn, "cgoal_reset_on_stream_end", "1")
+        conn.commit()
+        monkeypatch.setattr("app.live.is_live", lambda c: False)   # stream skončil
+        live_events._check(conn)
+        assert community_goal.status(conn)["progress"] == 0, "konec streamu měl vynulovat chat cíl"
     finally:
         conn.close()
 
