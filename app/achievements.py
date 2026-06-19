@@ -180,7 +180,7 @@ def scan_rankups(conn) -> int:
 
 
 def snapshot_ranks(conn) -> int:
-    """1× DENNĚ uloží aktuální pozice (top 200) → podklad pro ▲▼ pohyby a „stoupá týдne".
+    """1× DENNĚ uloží aktuální pozice (top 200) → podklad pro ▲▼ pohyby a „stoupá týdne".
     Idempotentní na den (flag v app_settings). Drží ~10 dní, starší maže."""
     today = date.today().isoformat()
     if get_setting(conn, "rank_snapshot_day", "") == today:

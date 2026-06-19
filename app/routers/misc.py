@@ -70,7 +70,7 @@ def leaderboard(limit: int = Query(50, ge=1, le=200),
         "ORDER BY points DESC, username ASC LIMIT ?",
         (limit,),
     ).fetchall()
-    # ▲▼ pohyby z denních snapshotů (den/týден zpět). Chybí-li snapshot, delta = None (žádná šipka).
+    # ▲▼ pohyby z denních snapshotů (den/týden zpět). Chybí-li snapshot, delta = None (žádná šipka).
     ysnap, wsnap = {}, {}
     try:
         from datetime import date, timedelta
@@ -103,7 +103,7 @@ def leaderboard(limit: int = Query(50, ge=1, le=200),
             "prestige": (r["prestige"] if "prestige" in r.keys() else 0) or 0,
             "level": level_info(r["earned_total"] if "earned_total" in r.keys() else 0)["level"],
         })
-    if best_id is not None and best_gain >= 3:            # „stoupá týдne" jen při reálném skoku (≥3 pozice)
+    if best_id is not None and best_gain >= 3:            # „stoupá týdne" jen při reálném skoku (≥3 pozice)
         for row, r in zip(out, rows):
             if r["id"] == best_id:
                 row["climber"] = True
@@ -116,7 +116,7 @@ _WEEKLY_TTL = 60   # s – board se nemusí počítat při každém pollu (jen s
 
 @router.get("/leaderboard/weekly")
 def leaderboard_weekly(conn: sqlite3.Connection = Depends(db_dep)):
-    """Žebříček: kdo NASBÍRAL nejvíc sedláků tento týден. ČISTĚ READ-ONLY z points_log –
+    """Žebříček: kdo NASBÍRAL nejvíc sedláků tento týden. ČISTĚ READ-ONLY z points_log –
     NEsahá na users.points, NIC neresetuje. „Týden" = jen filtr created_at >= pondělí 00:00.
     Cache 60 s (čtení nelockuje zápis, ale ať se velký points_log neskenuje pořád)."""
     import time

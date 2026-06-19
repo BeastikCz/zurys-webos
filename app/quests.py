@@ -14,7 +14,7 @@ from .deps import add_points
 # claim se zamítne a karta se na webu schová. Zpátky zapneš změnou na True + deploy.
 QUESTS_ENABLED = True
 
-# Odměny vyvážené proti inflaci (max ~550/den + ~3100/týд = ~6950/týд na tryharda).
+# Odměny vyvážené proti inflaci (max ~550/den + ~3100/týd = ~6950/týd na tryharda).
 # Watch 📺 drženo nejvýš (odměňuje reálné sledování = cíl streamera), duel nejníž
 # (PvP je už placené stakem + nemotivovat collusion farmu, kterou hlídá funnel detektor).
 # CÍLE (targets) zvednuté: týdenní mají zabrat celý týden (ne den), denní mají dávat
@@ -30,7 +30,7 @@ QUESTS = [
     {"key": "w_drop", "period": "weekly", "name": "Týdenní lovec", "desc": "Chytni 15 dropů za týden",            "stat": "drops",   "target": 15,   "reward": 700},
     {"key": "w_duel", "period": "weekly", "name": "Gladiátor",     "desc": "Vyhraj 40 PvP duelů za týden",        "stat": "pvp_won", "target": 40,   "reward": 700},
     {"key": "w_earn", "period": "weekly", "name": "Magnát",        "desc": "Vydělej 6 000 sedláků na streamu za týden 📺", "stat": "earned",  "target": 6000, "reward": 900},
-    {"key": "w_chat", "period": "weekly", "name": "Tlachal týdne", "desc": "Buď ukecaný celý týден — 350 zpráv 💬", "stat": "chat",    "target": 350,  "reward": 800},
+    {"key": "w_chat", "period": "weekly", "name": "Tlachal týdne", "desc": "Buď ukecaný celý týden — 350 zpráv 💬", "stat": "chat",    "target": 350,  "reward": 800},
 ]
 _BY_KEY = {q["key"]: q for q in QUESTS}
 
