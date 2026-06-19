@@ -1,7 +1,7 @@
 """Nový XP model (supporter-first) → earned_total (lifetime XP → level / Battle Pass):
  • supporter (vlastní sub / resub / gift sub giver) = PEVNÝCH 5000 XP za KAŽDÝ sub (z počtu v reason,
    ne z bodů → HH 2× bonus XP nezdvojí), BEZ stropu = náskok podporovatelů
- • poctivé farmení = body × faktor (kolo/drop/partner 0.5, zbytek 1.0), DENNÍ strop XP (sub ×1.5 + vyšší strop)
+ • poctivé farmení = body × faktor (kolo/drop/partner/zahrádka 0.5, zbytek 1.0), DENNÍ strop XP (sub ×1.5 + vyšší strop)
  • gambling / dary / admin / komunitní cíle / botrix = 0
  • import staré platformy = plně, bez stropu
 Zůstatek (points) se mění vždy plně.
@@ -41,7 +41,8 @@ def test_classify_xp():
     # farmení (faktor)
     assert classify_xp("Sledování streamu") == ("farm", 1.0)
     assert classify_xp("Aktivita v chatu") == ("farm", 1.0)
-    assert classify_xp("Sklizeň: Mrkev 🌾") == ("farm", 1.0)
+    assert classify_xp("Sklizeň: Mrkev 🌾") == ("farm", 0.5)            # zahrádka = bonus/RNG → půlka
+    assert classify_xp("Sklizeň (chrobáci ji načali) 🐛") == ("farm", 0.5)
     assert classify_xp("Kolo štěstí 🎡") == ("farm", 0.5)
     assert classify_xp("Drop #5 – 1. místo") == ("farm", 0.5)
     assert classify_xp("Flash partner: XY") == ("farm", 0.5)

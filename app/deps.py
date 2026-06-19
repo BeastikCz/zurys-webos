@@ -434,7 +434,7 @@ _XP_ZERO_KW = ("battle pass", "mines", "blackjack", "coinflip", "duel", "predikc
                "kostky", "stůl – win", "sázka", "výhra v", "zrušen", "zrušená", "vrácen", "vráceno",
                "vypršel", "vypršelá", "remíza", "storno", "refund", "výzv", "hra #", "dar od",
                "dar pro", "dar →", "úprava adminem", "chat cíl", "sub cíl", "komunitní", "botrix")
-_XP_HALF_KW = ("kolo", "drop", "partner", "flash")     # náhoda/promo → půlka XP
+_XP_HALF_KW = ("kolo", "drop", "partner", "flash", "skliz")   # náhoda/promo/minihra → půlka XP (vč. zahrádky „Sklizeň…")
 
 
 def classify_xp(reason: str):

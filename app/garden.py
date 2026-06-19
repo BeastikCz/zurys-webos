@@ -65,10 +65,11 @@ def _pest_chance(conn, user_id: int) -> float:
 
 
 def _crops_public(is_sub: bool, pest_chance: float) -> list:
-    # XP ze sklizně = výnos × farm faktor 1.0 × (sub ×1.5). Sklizeň classify_xp → 'farm' 1.0.
-    # Plná sklizeň (bez chrobáků) – pest úrodu/XP půlí, ale karta ukazuje plný potenciál.
+    # XP ze sklizně = výnos × 0.5 (bonus/RNG minihra → půlková přihrádka jako drop/kolo/flash) × (sub ×1.5).
+    # MUSÍ sedět s deps.classify_xp („skliz" v _XP_HALF_KW → 0.5). Plný výnos – pest úrodu/XP půlí, karta
+    # ukazuje plný potenciál (bez chrobáků).
     from .deps import SUB_FARM_MULT
-    xp_mult = SUB_FARM_MULT if is_sub else 1.0
+    xp_mult = 0.5 * (SUB_FARM_MULT if is_sub else 1.0)
     out = []
     for c in CROPS:
         seed = _seed_cost(c, is_sub)
