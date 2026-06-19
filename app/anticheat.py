@@ -170,7 +170,7 @@ def evaluate_risk(conn: sqlite3.Connection, user, request: Request,
             now_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
             delta = now_ms - int(t0_ms)
             if 0 < delta < MIN_FORM_MS:
-                score += 70
+                score += 40    # sníženo ze 70: paste/autofill legit userů → samo neblokuje (40<60), nutný 2. signál
                 reasons.append(f"form za {delta} ms (bot)")
             elif delta < -60_000 or delta > MAX_FORM_MS_DRIFT:
                 score += 30
@@ -216,14 +216,19 @@ def evaluate_risk(conn: sqlite3.Connection, user, request: Request,
         elif rapid >= 5:
             score += 20; reasons.append(f"{rapid} nákupů/5 min")
 
-    # Hodně různých IP u jednoho účtu
+    # Hodně různých IP u jednoho účtu V KRÁTKÉM OKNĚ (24 h). Dřív se počítaly IP za CELOU historii
+    # → dynamická/mobilní IP (O2 rotuje po dnech) se nasčítala a dělala false positive na legit
+    # userech. 5 různých IP za 24 h = VPN-hopping / přepínání altů; poctivý user má 1–2 IP/den.
+    ip_cut = (datetime.now(timezone.utc) - timedelta(hours=24)).isoformat()
     ip_count = conn.execute(
         "SELECT COUNT(DISTINCT ip) AS c FROM login_events "
-        "WHERE user_id = ? AND ip IS NOT NULL AND ip <> ''",
-        (user["id"],),
+        "WHERE user_id = ? AND ip IS NOT NULL AND ip <> '' AND created_at >= ?",
+        (user["id"], ip_cut),
     ).fetchone()["c"]
     if ip_count >= 5:
-        score += 25; reasons.append(f"účet z {ip_count} IP")
+        score += 25; reasons.append(f"účet z {ip_count} IP/24h")
+    elif ip_count >= 3:
+        score += 10; reasons.append(f"účet z {ip_count} IP/24h")
 
     score = min(score, 100)
     block_t, soft_t = THRESHOLDS.get(context, (60, 35))
