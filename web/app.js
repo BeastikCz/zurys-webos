@@ -503,7 +503,7 @@ function heroHTML(p) {
   if (p.subs_only) flags.push(`<span class="badge badge-sub">👑 Jen sub</span>`);
   if (p.vip_only) flags.push(`<span class="badge badge-vip">💎 Jen VIP</span>`);
   const bg = p.image_url
-    ? `background-image:url('${esc(p.image_url)}');background-size:contain;background-repeat:no-repeat;background-position:center`
+    ? `background-image:url('${esc(p.image_url)}');background-size:cover;background-repeat:no-repeat;background-position:center`
     : `background:${gradFor(p)}`;
   return `
     <div class="hero">
@@ -642,7 +642,7 @@ function productCardHTML(p) {
   if (cd && !ended) badges.push(`<span class="da-b b-end">KONČÍ</span>`);
   if (!isRaffle && !p.unlimited && p.stock > 0 && p.stock <= 5) badges.push(`<span class="da-b b-scar">zbývá ${p.stock}</span>`);
   const bg = p.image_url
-    ? `background-image:url('${esc(p.image_url)}');background-size:contain;background-repeat:no-repeat;background-position:center`
+    ? `background-image:url('${esc(p.image_url)}');background-size:cover;background-repeat:no-repeat;background-position:center`
     : `background: radial-gradient(circle at 50% 38%, ${rhex}33, transparent 68%), linear-gradient(180deg, var(--surface-2), var(--bg-2))`;
   const periodTxt = PERIOD_LABEL[p.period] || "";
   const typeLine = `${isRaffle ? ("TOMBOLA" + (periodTxt ? " · " + periodTxt : "")) : "OKAMŽITÁ ODMĚNA"}${rlabel ? " · " + rlabel : ""}`;
@@ -1016,7 +1016,7 @@ async function openProduct(id) {
   }
 
   const hero = p.image_url
-    ? `<div class="modal-hero" style="background-image:url('${esc(p.image_url)}');background-size:contain;background-repeat:no-repeat;background-position:center"></div>`
+    ? `<div class="modal-hero" style="background-image:url('${esc(p.image_url)}');background-size:cover;background-repeat:no-repeat;background-position:center"></div>`
     : `<div class="modal-hero" style="background:${gradFor(p)}">${emojiFor(p)}</div>`;
 
   openModal(`
@@ -1432,7 +1432,7 @@ function showcaseSectionHTML(items) {
   const cards = items.map((it) => {
     const [rlabel, rhex] = rarityInfo(it.rarity);
     const bg = it.image_url
-      ? `background-image:url('${esc(it.image_url)}');background-size:contain;background-repeat:no-repeat;background-position:center`
+      ? `background-image:url('${esc(it.image_url)}');background-size:cover;background-repeat:no-repeat;background-position:center`
       : `background:radial-gradient(circle at 50% 38%, ${rhex}33, transparent 68%)`;
     return `<div style="background:var(--surface-2,#171922);border:1px solid ${rhex}55;border-radius:12px;padding:8px;text-align:center">
       <div style="position:relative;height:84px;border-radius:8px;${bg}">${it.won ? `<span style="position:absolute;top:4px;right:4px;font-size:15px" title="Vyhráno v tombole">🎟️</span>` : ""}</div>
@@ -4100,7 +4100,7 @@ async function adminRaffles() {
     const sorted = [...list].sort((a, b) => (ord[a.period] || 9) - (ord[b.period] || 9));
     box.innerHTML = list.length ? `<div class="grid" style="grid-template-columns:repeat(auto-fill,minmax(280px,1fr))">${sorted.map((p) => {
       const thumb = p.image_url
-        ? `<div class="ex-emoji" style="background-image:url('${esc(p.image_url)}');background-size:contain;background-repeat:no-repeat;background-position:center"></div>`
+        ? `<div class="ex-emoji" style="background-image:url('${esc(p.image_url)}');background-size:cover;background-repeat:no-repeat;background-position:center"></div>`
         : `<div class="ex-emoji">🎟️</div>`;
       const pb = PERIOD_LABEL[p.period] ? `<span class="badge badge-cat" style="margin-left:6px;font-size:10px">${PERIOD_LABEL[p.period]}</span>` : "";
       return `
