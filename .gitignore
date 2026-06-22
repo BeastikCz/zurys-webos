@@ -1,5 +1,6 @@
 # Tajné klíče Kick OAuth – NIKDY necommitovat
 kick.json
+kick.json.*
 
 # Databáze a data
 data/

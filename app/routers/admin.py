@@ -18,7 +18,7 @@ from ..config import (ALL_ROLES, PRODUCT_TYPES, PRODUCT_PERIODS, ORDER_PENDING, 
                       ANTICHEAT_RULES, DATACENTER_CIDRS)
 from ..db import now_iso, set_setting, get_setting
 from ..deps import db_dep, require_admin, require_user, require_broadcaster, admin_guard, to_public, add_points, record_audit, client_ip, notify
-from .. import kickbot, economy, ipban, ddos, iprep, live, steam, cs_skins, autodrop, maintenance, alerts, digest, partners_flash, live_events, econ_health
+from .. import kickbot, economy, ipban, ddos, iprep, live, steam, cs_skins, autodrop, maintenance, alerts, digest, partners_flash, live_events, econ_health, mines_anticheat
 from .games import list_games_admin, cancel_game_admin, games_history, refund_game_admin, refund_duel_admin
 from ..models import (ProductIn, SkinLookupIn, SkinSearchIn, ImageUploadIn, UserRoleIn, UserFlagsIn, UserPointsIn, UserAdminMetaIn, OrderStatusIn, CodeGenIn,
                       BanIn, DropCreateIn, AutoDropIn, RuleIn, EconomyIn, IpBanIn, IpUnbanIn, BotToggleIn,
@@ -1540,23 +1540,17 @@ def admin_mines_history(q: str = Query("", max_length=64), limit: int = Query(50
     return {"stats": stats, "feed": feed, "winners": winners, "losers": losers}
 
 
-def _mines_ban_ids(conn) -> set:
-    raw = get_setting(conn, "mines_ban_uids", "")
-    try:
-        return set(json.loads(raw)) if raw else set()
-    except (ValueError, TypeError):
-        return set()
-
-
 @router.get("/mines-bans")
 def admin_mines_bans(conn: sqlite3.Connection = Depends(db_dep)):
     """Kdo má zákaz hraní Mines (cílený ban – zbytek webu jim funguje)."""
-    ids = _mines_ban_ids(conn)
+    ids = mines_anticheat.active_mines_ban_ids(conn)
     if not ids:
         return {"banned": []}
+    expiries = mines_anticheat.mines_ban_expiries(conn)
     qm = ",".join("?" * len(ids))
     rows = conn.execute(f"SELECT id, username FROM users WHERE id IN ({qm})", list(ids)).fetchall()
-    return {"banned": [{"id": r["id"], "username": r["username"]} for r in rows]}
+    return {"banned": [{"id": r["id"], "username": r["username"],
+                         "expires_at": expiries.get(str(r["id"]))} for r in rows]}
 
 
 @router.post("/mines-ban")
@@ -1570,15 +1564,14 @@ def admin_mines_ban(data: MinesBanIn, request: Request,
                      (key, key.lower())).fetchone()
     if not u:
         raise HTTPException(status_code=404, detail=f"Uživatel '{data.username}' nenalezen.")
-    ids = _mines_ban_ids(conn)
     if data.banned:
-        ids.add(u["id"])
+        mines_anticheat.ban_mines_user(conn, u["id"], "Ruční permanentní Mines ban od admina.")
     else:
-        ids.discard(u["id"])
-    set_setting(conn, "mines_ban_uids", json.dumps(sorted(ids)))
+        mines_anticheat.unban_mines_user(conn, u["id"])
     record_audit(conn, admin, request, "mines.ban" if data.banned else "mines.unban", u["username"])
     conn.commit()
-    return {"ok": True, "username": u["username"], "banned": bool(data.banned), "total_banned": len(ids)}
+    total = len(mines_anticheat.active_mines_ban_ids(conn))
+    return {"ok": True, "username": u["username"], "banned": bool(data.banned), "total_banned": total}
 
 
 @router.post("/chat-reset")

@@ -213,6 +213,11 @@ class GardenPlantIn(BaseModel):
     crop: str = Field(..., min_length=1, max_length=24)
 
 
+class GardenPlantAllIn(BaseModel):
+    """Zasadí plodinu na všechny prázdné záhony."""
+    crop: str = Field(..., min_length=1, max_length=24)
+
+
 class GardenHarvestIn(BaseModel):
     """Sklizeň záhonu v zahrádce."""
     plot: int = Field(..., ge=0, le=20)

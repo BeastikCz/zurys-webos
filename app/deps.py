@@ -277,7 +277,7 @@ def get_current_user(request: Request,
     ).fetchone()
     if not sess:
         return None
-    if sess["expires_at"] < now_iso():
+    if sess["expires_at"] <= now_iso():
         conn.execute("DELETE FROM sessions WHERE token = ?", (token,))
         conn.commit()
         return None
@@ -431,8 +431,8 @@ FARM_XP_CAP_SUB = 8000     # denní strop XP z farmení pro suby (×1.5). Zvýš
                            #   (8000 farm + 1680 zahrádka ≈ 9,7k/den) trefí lvl 100 za ~2,5 roku = supporter-first
                            #   (prize pro oddané supportery; casual sub stejně strop nedojede, brzdí jen no-life grind)
 SUB_FARM_MULT = 1.5        # sub farmí XP rychleji
-GARDEN_XP_FACTOR = 0.2     # zahrádka „Sklizeň…": UNCAPPED (mimo denní strop) → nízký faktor, ať to není loophole
-                           #   (4 plots × klas/den = max ~1120 XP/den non-sub; pasivní bonus, ne náhrada chatu)
+GARDEN_XP_FACTOR = 0.2      # zahrádka „Sklizeň…": UNCAPPED (mimo denní strop). NON-SUB faktor (klas non-sub = 280, beze změny)
+GARDEN_XP_SUB_MULT = 3.214  # SUB garden bonus (ODDĚLENÝ od SUB_FARM_MULT 1.5!): klas sub = 1400×0.2×3.214 ≈ 900 XP. Non-sub bez bonusu.
 QUEST_XP_FACTOR = 0.5      # denní/týdenní úkoly („Úkol: …"): bonus za aktivitu (za niž už XP máš) → půlka, denní strop.
                            #   Konzistentně pro VŠECHNY úkoly (fixuje quirk: Sázkař byl 0, Lovec dropů 0.5 dle názvu)
 
@@ -477,10 +477,10 @@ def _xp_award(conn: sqlite3.Connection, user_id: int, change: int, reason: str) 
         return change
     if kind == "zero":
         return 0
-    if kind == "garden":                              # zahrádka: UNCAPPED (mimo denní strop), nízký faktor × sub mult
+    if kind == "garden":                              # zahrádka: UNCAPPED. NON-SUB = faktor 0.2; SUB má vlastní bonus GARDEN_XP_SUB_MULT
         gs = conn.execute("SELECT is_sub FROM users WHERE id = ?", (user_id,)).fetchone()
         g_sub = bool(gs["is_sub"]) if gs and "is_sub" in gs.keys() else False
-        return int(round(change * val * (SUB_FARM_MULT if g_sub else 1.0)))
+        return int(round(change * val * (GARDEN_XP_SUB_MULT if g_sub else 1.0)))
     # poctivé farmení – body × faktor, sub ×1.5, denní strop XP
     row = conn.execute("SELECT is_sub, earned_today, earned_day FROM users WHERE id = ?", (user_id,)).fetchone()
     if row is None:

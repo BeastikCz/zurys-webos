@@ -179,16 +179,23 @@ def place_bet(pid: int, data: PredictionBetIn,
     if not try_debit(conn, user["id"], data.amount, f"Predikce #{pid} – sázka"):
         raise HTTPException(status_code=400,
                             detail=f"Nemáš dostatek bodů. Sázka je {data.amount}, ty máš {user['points']}.")
-    if existing:
-        conn.execute("UPDATE prediction_bets SET amount = amount + ? WHERE id = ?",
-                     (data.amount, existing["id"]))
-    else:
-        conn.execute(
-            "INSERT INTO prediction_bets (prediction_id, option_id, user_id, amount, created_at) "
-            "VALUES (?, ?, ?, ?, ?)",
-            (pid, data.option_id, user["id"], data.amount, now_iso()),
-        )
-    conn.commit()
+    try:
+        if existing:
+            conn.execute("UPDATE prediction_bets SET amount = amount + ? WHERE id = ?",
+                         (data.amount, existing["id"]))
+        else:
+            conn.execute(
+                "INSERT INTO prediction_bets (prediction_id, option_id, user_id, amount, created_at) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (pid, data.option_id, user["id"], data.amount, now_iso()),
+            )
+        conn.commit()
+    except sqlite3.IntegrityError:
+        # Concurrent bet from same user hit UNIQUE(prediction_id, user_id) — refund and reject.
+        conn.rollback()
+        add_points(conn, user["id"], data.amount, "Vrácení sázky (souběh)", xp=False)
+        conn.commit()
+        raise HTTPException(status_code=400, detail="Sázka nebyla uložena (souběh) – zkus znovu.")
     fresh = conn.execute("SELECT points FROM users WHERE id = ?", (user["id"],)).fetchone()
     return {"ok": True, "balance": fresh["points"],
             "prediction": _pred_public(conn, _get_pred(conn, pid), user["id"])}

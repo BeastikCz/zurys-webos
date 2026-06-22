@@ -49,6 +49,7 @@ def _public_key():
         return _pub
     except Exception as e:  # pragma: no cover
         print("[kickevents] public key fetch failed:", e)
+        _pub_at = now  # cache failure for 1 h to avoid spamming Kick API
         return None
 
 

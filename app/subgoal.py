@@ -112,6 +112,91 @@ def status(conn) -> dict:
     }
 
 
+def top_gifters(conn, limit: int = 5) -> list:
+    """Top gifteři DNES (dle ČESKÉHO dne, z points_log gift sub eventů). Přesné (webhook real-time),
+    resetuje se každou půlnoc → čerstvá soutěž. (Lifetime nejde – Kick blokuje fetch + app má gap z
+    gift subů před spuštěním; nedávné okno ale app zachycuje přesně.)"""
+    import re
+    from datetime import datetime, timezone
+    from .db import local_now, LOCAL_TZ
+    n = local_now()
+    start = datetime(n.year, n.month, n.day, tzinfo=LOCAL_TZ).astimezone(timezone.utc).isoformat()
+    tot = {}
+    for r in conn.execute(
+            "SELECT user_id, reason FROM points_log WHERE created_at >= ? "
+            "AND LOWER(reason) LIKE '%kick gift sub%' AND LOWER(reason) NOT LIKE '%příjemce%'", (start,)):
+        m = re.search(r"×(\d+)", r["reason"])
+        tot[r["user_id"]] = tot.get(r["user_id"], 0) + (int(m.group(1)) if m else 1)
+    out = []
+    for uid, subs in sorted(tot.items(), key=lambda x: -x[1])[:limit]:
+        u = conn.execute("SELECT username, avatar_url FROM users WHERE id = ?", (uid,)).fetchone()
+        if u:
+            out.append({"username": u["username"], "avatar_url": u["avatar_url"], "subs": subs})
+    return out
+
+
+def latest_gift(conn):
+    """Nejnovější gift sub event (pro stream alert overlay – sleduje změnu id = 'právě někdo giftnul')."""
+    import re
+    r = conn.execute(
+        "SELECT pl.id, pl.reason, u.username, u.avatar_url FROM points_log pl JOIN users u ON u.id = pl.user_id "
+        "WHERE LOWER(pl.reason) LIKE '%kick gift sub%' AND LOWER(pl.reason) NOT LIKE '%příjemce%' "
+        "ORDER BY pl.id DESC LIMIT 1").fetchone()
+    if not r:
+        return None
+    m = re.search(r"×(\d+)", r["reason"])
+    return {"id": r["id"], "username": r["username"], "avatar_url": r["avatar_url"], "count": int(m.group(1)) if m else 1}
+
+
+def recent_gifts(conn, since=None, limit: int = 20) -> dict:
+    """Gift sub eventy s points_log.id > since (pro jednorázový alert overlay). since=None → jen vrátí
+    aktuální latest_id (baseline, NEhlásí staré gifty). Filtr na id (PK, indexované) → rychlé i při pollingu.
+    Vrací {latest_id, gifts:[{id,username,avatar_url,subs}]}."""
+    import re
+    overall = conn.execute("SELECT MAX(id) m FROM points_log").fetchone()
+    latest = (overall["m"] if overall else 0) or 0
+    if since is None:
+        return {"latest_id": latest, "gifts": []}
+    rows = conn.execute(
+        "SELECT pl.id, pl.reason, u.username, u.avatar_url FROM points_log pl JOIN users u ON u.id = pl.user_id "
+        "WHERE pl.id > ? AND LOWER(pl.reason) LIKE '%kick gift sub%' AND LOWER(pl.reason) NOT LIKE '%příjemce%' "
+        "ORDER BY pl.id ASC LIMIT ?", (since, limit)).fetchall()
+    gifts = []
+    for r in rows:
+        m = re.search(r"×(\d+)", r["reason"])
+        gifts.append({"id": r["id"], "username": r["username"], "avatar_url": r["avatar_url"],
+                      "subs": int(m.group(1)) if m else 1})
+    return {"latest_id": latest, "gifts": gifts}
+
+
+def recent_events(conn, since=None, limit: int = 20) -> dict:
+    """Nové sub-typ eventy (new/resub/gift) s points_log.id > since pro sjednocený alert overlay.
+    since=None → baseline (jen latest_id, staré nehlásí). Vrací {latest_id, events:[{id,kind,count,username,avatar_url}]}.
+    kind: 'gift' (×N), 'resub', 'new'. Filtr na id (PK) → rychlé při pollingu."""
+    import re
+    overall = conn.execute("SELECT MAX(id) m FROM points_log").fetchone()
+    latest = (overall["m"] if overall else 0) or 0
+    if since is None:
+        return {"latest_id": latest, "events": []}
+    rows = conn.execute(
+        "SELECT pl.id, pl.reason, u.username, u.avatar_url FROM points_log pl JOIN users u ON u.id = pl.user_id "
+        "WHERE pl.id > ? AND LOWER(pl.reason) NOT LIKE '%příjemce%' AND ("
+        "LOWER(pl.reason) LIKE '%kick gift sub%' OR LOWER(pl.reason) LIKE '%kick resub%' "
+        "OR LOWER(pl.reason) LIKE '%kick sub%') ORDER BY pl.id ASC LIMIT ?", (since, limit)).fetchall()
+    out = []
+    for r in rows:
+        rl = (r["reason"] or "").lower()
+        base = {"id": r["id"], "username": r["username"], "avatar_url": r["avatar_url"]}
+        if "kick gift sub" in rl:
+            m = re.search(r"×(\d+)", r["reason"])
+            out.append(dict(base, kind="gift", count=int(m.group(1)) if m else 1))
+        elif "kick resub" in rl:
+            out.append(dict(base, kind="resub", count=1))
+        elif "kick sub" in rl:
+            out.append(dict(base, kind="new", count=1))
+    return {"latest_id": latest, "events": out}
+
+
 def tick(conn, count: int = 1) -> None:
     """+count subů do lišty. Po každém ticku zkusí vyplatit dosažené tiery (eskalující žebříček).
     Necommituje increment (commituje caller); _settle si commit dělá sám."""

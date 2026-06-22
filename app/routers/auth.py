@@ -1,6 +1,7 @@
 """Autentizace přes KICK účet (demo režim + volitelné reálné OAuth) + me/logout."""
 import base64
 import hashlib
+import hmac
 import json
 import os
 import secrets as _secrets
@@ -214,7 +215,7 @@ def kick_callback(request: Request, code: str = "", state: str = "",
     """Zpracuje návrat z Kicku: vymění kód za token, načte profil, přihlásí."""
     if not OAUTH_ENABLED:
         raise HTTPException(status_code=400, detail="Kick OAuth není nakonfigurováno.")
-    if not code or state != request.cookies.get("kick_state"):
+    if not code or not hmac.compare_digest(state, request.cookies.get("kick_state", "")):
         raise HTTPException(status_code=400, detail="Neplatný OAuth stav.")
     verifier = request.cookies.get("kick_pkce") or ""
 
@@ -300,10 +301,10 @@ def me(user: Optional[sqlite3.Row] = Depends(get_current_user),
     data["pending_rankup"] = (user["pending_rankup"] if "pending_rankup" in user.keys() else "") or ""
     data["pending_overtake"] = (user["pending_overtake"] if "pending_overtake" in user.keys() else "") or ""
     try:                                                       # počet nepřečtených PM (badge)
-        if user["role"] in ("admin", "broadcaster", "mod"):    # staff: nepřečtené odpovědi userů
+        if user["role"] in ("admin", "broadcaster"):           # PM jen broadcaster+admin (mod NE)
             data["dm_unread"] = conn.execute(
                 "SELECT COUNT(*) c FROM dm_messages WHERE from_id = user_id AND seen = 0").fetchone()["c"]
-        else:                                                  # user: nepřečtené zprávy od staffa
+        else:                                                  # user (vč. moda): nepřečtené zprávy od staffa
             data["dm_unread"] = conn.execute(
                 "SELECT COUNT(*) c FROM dm_messages WHERE user_id = ? AND from_id != user_id AND seen = 0",
                 (user["id"],)).fetchone()["c"]

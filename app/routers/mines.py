@@ -10,10 +10,10 @@ import sqlite3
 from fastapi import APIRouter, Depends, HTTPException
 
 from ..deps import db_dep, require_user, require_can_gamble, add_points, try_debit, check_wager_limit
-from ..db import now_iso, get_setting
+from ..db import now_iso
 from ..models import MinesStartIn, MinesRevealIn
 from ..ratelimit import rate_limit
-from .. import fairness
+from .. import fairness, mines_anticheat
 
 router = APIRouter(prefix="/mines", tags=["mines"])
 
@@ -27,13 +27,7 @@ HOUSE_EDGE = 0.12    # nerf: 12 % house edge – house vyhrává ještě víc (b
 def _mines_banned(conn, uid: int) -> bool:
     """True když má uživatel od adminů zákaz hraní Mines (seznam uid v app_settings).
     Cílený ban jen na Mines – zbytek webu (ostatní hry, shop, …) mu zůstává otevřený."""
-    raw = get_setting(conn, "mines_ban_uids", "")
-    if not raw:
-        return False
-    try:
-        return uid in set(json.loads(raw))
-    except (ValueError, TypeError):
-        return False
+    return mines_anticheat.is_mines_banned(conn, uid)
 
 
 def _mult(revealed_count: int, mines: int) -> float:
@@ -106,10 +100,12 @@ def state(user: sqlite3.Row = Depends(require_user), conn: sqlite3.Connection = 
 @router.post("/start")
 def start(data: MinesStartIn, user: sqlite3.Row = Depends(require_user),
           conn: sqlite3.Connection = Depends(db_dep)):
-    rate_limit(f"mines:start:{user['id']}", 120, 60)   # strop jen proti botům (~2 hry/s); pro hráče neviditelné
     require_can_gamble(user)                 # sebevyloučení ze sázek
     if _mines_banned(conn, user["id"]):      # cílený admin ban jen na Mines
-        raise HTTPException(status_code=403, detail="Hraní Mines máš od adminů zakázané. Zbytek webu ti funguje normálně.")
+        reason = user["ban_reason"] if user["ban_reason"] else "Hraní Mines máš od adminů zakázané."
+        raise HTTPException(status_code=403, detail=f"{reason} Zbytek webu ti funguje normálně.")
+    mines_anticheat.check_start_allowed(conn, user["id"])
+    rate_limit(f"mines:start:{user['id']}", 30, 60)    # in-memory burst shield; persistent limity jsou výše
     if _active(conn, user["id"]):
         raise HTTPException(status_code=400, detail="Máš rozehranou hru – nejdřív ji dohraj nebo si vyber výhru (cashout).")
     bet, mines = data.bet, data.mines

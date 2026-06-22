@@ -37,7 +37,10 @@ def _draw(conn, room_id, deck):
     """Atomicky vytáhne další kartu ze shoe (bezpečné i při souběhu více hráčů)."""
     row = conn.execute("UPDATE bj_rooms SET deck_pos = deck_pos + 1 WHERE id=? RETURNING deck_pos",
                        (room_id,)).fetchone()
-    return deck[row["deck_pos"] - 1]
+    pos = row["deck_pos"] - 1
+    if pos >= len(deck):
+        raise ValueError("Deck exhausted")
+    return deck[pos]
 
 
 def _room(conn, room_id):

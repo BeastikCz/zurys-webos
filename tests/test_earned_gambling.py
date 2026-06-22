@@ -25,7 +25,7 @@ def _et(conn, uid):
 
 
 def test_classify_xp():
-    from app.deps import classify_xp
+    from app.deps import classify_xp, GARDEN_XP_FACTOR
     # supporter (počet subů z reason)
     assert classify_xp("Kick gift sub 🎁 ×5") == ("sup", 5)
     assert classify_xp("Kick gift sub 🎁 ×2 (happy 2×)") == ("sup", 2)   # HH nezdvojí počet
@@ -42,8 +42,8 @@ def test_classify_xp():
     # farmení (faktor)
     assert classify_xp("Sledování streamu") == ("farm", 1.0)
     assert classify_xp("Aktivita v chatu") == ("farm", 1.0)
-    assert classify_xp("Sklizeň: Mrkev 🌾") == ("garden", 0.2)          # zahrádka = uncapped, nízký faktor
-    assert classify_xp("Sklizeň (chrobáci ji načali) 🐛") == ("garden", 0.2)
+    assert classify_xp("Sklizeň: Mrkev 🌾") == ("garden", GARDEN_XP_FACTOR)   # zahrádka = uncapped, faktor z konstanty
+    assert classify_xp("Sklizeň (chrobáci ji načali) 🐛") == ("garden", GARDEN_XP_FACTOR)
     assert classify_xp("Kolo štěstí 🎡") == ("farm", 0.5)
     assert classify_xp("Drop #5 – 1. místo") == ("farm", 0.5)
     assert classify_xp("Flash partner: XY") == ("farm", 0.5)

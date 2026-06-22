@@ -17,6 +17,8 @@ from .digest import start_digest_daemon
 from .achievements import start_achievements_daemon
 from .order_cleanup import start_order_cleanup_daemon
 from .anniversary import start_anniversary_daemon
+from .garden_notify import start_garden_notify_daemon
+from .mines_anticheat import start_mines_anticheat_daemon
 from .config import WEB_DIR, UPLOAD_DIR, SESSION_COOKIE, STAFF_ROLES, TRUSTED_IPS
 from .db import init_db, get_conn, now_iso, get_setting, set_setting
 from .deps import client_ip
@@ -63,6 +65,10 @@ start_live_events_daemon()
 start_order_cleanup_daemon()
 # Výročí v komunitě: bonus + notifikace při překročení milníku (1m/3m/půlrok/1r/2r)
 start_anniversary_daemon()
+# Zahrádka: in-app notifikace „úroda dozrála" + „chrobáci v zahrádce" (1× na záhon)
+start_garden_notify_daemon()
+# Mines anticheat: auto-ban při detekci bota (>25 her za 5 min)
+start_mines_anticheat_daemon()
 
 # Jednorázově: přechod na desku 9×9 → vrať vklady u zbylých rozehraných (staré velikosti) her.
 # Flag v app_settings, ať to neběží při každém restartu (jinak by rušilo i nové 9×9 hry).

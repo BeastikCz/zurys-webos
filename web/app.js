@@ -141,6 +141,7 @@ const ADMIN_SECTIONS = {
   modnabor: ["broadcaster"], gifts: ["broadcaster"],
 };
 function isStaff(u) { return !!u && ["admin", "broadcaster", "mod"].includes(u.role); }
+function canDM(u) { return !!u && ["admin", "broadcaster"].includes(u.role); }   // PM jen broadcaster+admin (mod NE)
 function canSection(u, sec) { return !!u && (u.role === "admin" || (ADMIN_SECTIONS[sec] || []).includes(u.role)); }
 
 function thumbStyle(p) {
@@ -1283,7 +1284,7 @@ async function pollDmBadge() {
 }
 function pageMessages(param) {
   if (!state.user) { navigate("connect"); return; }
-  if (isStaff(state.user)) return param ? dmStaffThread(parseInt(param, 10)) : dmStaffInbox();
+  if (canDM(state.user)) return param ? dmStaffThread(parseInt(param, 10)) : dmStaffInbox();
   return dmUserThread();
 }
 async function dmUserThread() {
@@ -1345,7 +1346,7 @@ async function pageUserProfile(nick) {
         </div>
       </div>
       ${profileBioHTML(p, false)}
-      ${isStaff(state.user) && state.user.id !== p.id ? `<a href="#/zpravy/${p.id}" class="btn btn-primary" style="margin:16px 0 2px;display:inline-block">✉️ Napsat zprávu</a>` : ""}
+      ${canDM(state.user) && state.user.id !== p.id ? `<a href="#/zpravy/${p.id}" class="btn btn-primary" style="margin:16px 0 2px;display:inline-block">✉️ Napsat zprávu</a>` : ""}
       <div class="stat-grid" style="margin-top:18px">
         ${statBox(fmtPts(p.points), "Sedláků teď", "accent")}
         ${statBox(fmtPts(p.earned_total), "Celkem vyděláno")}
@@ -1364,6 +1365,7 @@ async function pageUserProfile(nick) {
         ${statBox(p.raffle_wins, "Výher v tombolách 🏆")}
         ${statBox(p.daily_streak || 0, "Denní streak 🔥")}
       </div>
+      ${(p.garden_decor && p.garden_decor.length) ? `<div class="section-title" style="margin:20px 0 8px">🏡 Zahrádka <span class="faint" style="font-weight:400;font-size:13px">· ${p.garden_plots} záhonů</span></div><div style="display:flex;gap:8px;flex-wrap:wrap;font-size:26px;line-height:1">${p.garden_decor.map((i) => `<span>${i}</span>`).join("")}</div>` : ""}
       ${showcaseSectionHTML(p.showcase)}${badgesSectionHTML(p.badges)}`;
   } catch (e) { $("#up").innerHTML = `<div class="empty">${esc(e.message)}</div>`; }
 }
@@ -2067,9 +2069,11 @@ function pageGarden() {
   if (!state.user) { view.innerHTML = `<div class="empty"><div class="big">🌱</div>Přihlas se přes Kick a začni pěstovat sedláky!</div>`; return; }
   view.innerHTML = `<div class="page-head with-mascot"><img class="page-mascot" src="/sedlak-cut.png" alt=""><div class="ph-text"><h1>🌱 Zahrádka</h1><p class="muted">Vyber semínko → zasaď na záhon → počkej až doroste → sklidíš sedláky! 🌾</p></div></div>
     <div id="gardenBox">${skeletonCards(1)}</div>
-    <div id="gardenDecor" style="margin-top:8px"></div>`;
+    <div id="gardenDecor" style="margin-top:8px"></div>
+    <div id="gardenLb" style="margin-top:8px"></div>`;
   loadGarden();
   loadGardenDecor();
+  loadGardenLeaderboard();
 }
 async function loadGardenDecor() {
   const box = document.getElementById("gardenDecor"); if (!box) return;
@@ -2082,12 +2086,26 @@ async function loadGardenDecor() {
     const shop = d.items.map((it) => {
       const btn = it.owned ? `<span class="decor-owned">✓ máš</span>`
         : `<button class="bp-claim" data-action="decor-buy" data-key="${it.key}">${fmtPts(it.cost)}</button>`;
-      return `<div class="decor-card${it.owned ? " owned" : ""}"><div class="decor-ico">${it.icon}</div><b>${esc(it.name)}</b><span class="faint" style="font-size:12px">-${it.pest_reduction || 0}% chrobáci</span>${btn}</div>`;
+      const perks = `${it.pest_reduction ? `<span class="faint" style="font-size:12px">-${it.pest_reduction}% chrobáci</span>` : ""}${it.plots ? `<span class="faint" style="font-size:12px;color:#7ed957">🌱 +${it.plots} záhon</span>` : ""}`;
+      return `<div class="decor-card${it.owned ? " owned" : ""}"><div class="decor-ico">${it.icon}</div><b>${esc(it.name)}</b>${perks}${btn}</div>`;
     }).join("");
     box.innerHTML = `<div class="section-title" style="margin:26px 0 8px">🎨 Dekorace zahrádky</div>
       ${pestInfo}
       ${shelf}
       <div class="decor-shop">${shop}</div>`;
+  } catch (e) { box.innerHTML = ""; }
+}
+async function loadGardenLeaderboard() {
+  const box = document.getElementById("gardenLb"); if (!box) return;
+  try {
+    const rows = await api("/garden/leaderboard");
+    if (!rows.length) { box.innerHTML = ""; return; }
+    const list = rows.map((r) => {
+      const medal = r.rank === 1 ? "🥇" : r.rank === 2 ? "🥈" : r.rank === 3 ? "🥉" : `#${r.rank}`;
+      const av = r.avatar_url ? `<img src="${r.avatar_url}" alt="" style="width:100%;height:100%;object-fit:cover">` : esc((r.username || "?").charAt(0).toUpperCase());
+      return `<div style="display:flex;align-items:center;gap:10px;padding:7px 12px;border-bottom:1px solid rgba(255,255,255,.05)"><span style="width:30px;font-weight:900;text-align:center">${medal}</span><span style="width:28px;height:28px;border-radius:50%;overflow:hidden;display:grid;place-items:center;background:rgba(255,255,255,.08);font-size:12px;font-weight:800;flex:none">${av}</span><span style="flex:1;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(r.username)}</span><span style="font-weight:800;color:#46d369">${fmtPts(r.total)} 🌾</span></div>`;
+    }).join("");
+    box.innerHTML = `<div class="section-title" style="margin:26px 0 8px">🏆 Top zahradníci</div><div style="background:rgba(255,255,255,.02);border-radius:12px;overflow:hidden">${list}</div>`;
   } catch (e) { box.innerHTML = ""; }
 }
 async function buyDecor(key) {
@@ -2105,19 +2123,32 @@ async function loadGarden() {
     const g = await api("/garden");
     const plots = g.plots.map((p) => {
       if (p.empty) return `<div class="grd-plot grd-empty" data-action="grd-plant" data-plot="${p.plot}"><div class="grd-crop">➕</div><div class="grd-lbl">Zasadit</div></div>`;
-      if (p.pest) {
+      if (p.eaten) {   // chrobáci sežrali úrodu – pozdě, jen půlka, nezachráníš
         const half = Math.round(p.reward * 0.5);
         const tail = p.ready
-          ? `<button class="grd-harv-half" data-action="grd-harvest" data-plot="${p.plot}" title="Sklidit poškozené – jen půlka">Sklidit +${fmtPts(half)}</button>`
+          ? `<button class="grd-harv-half" data-action="grd-harvest" data-plot="${p.plot}" title="Načaté chrobáky – jen půlka">Sklidit +${fmtPts(half)}</button>`
           : `<div class="grd-time" data-left="${p.seconds_left}">${grdDur(p.seconds_left)}</div>`;
-        return `<div class="grd-plot grd-pestd"><div class="grd-crop">🐛</div><div class="grd-lbl">${esc(p.name)}</div><button class="grd-rescue-btn" data-action="grd-rescue" data-plot="${p.plot}" title="Zaplať a zachráníš plnou úrodu. Bez postřiku jen půlka (+${fmtPts(half)}).">🐛 Zachraň ${fmtPts(p.rescue_cost)}</button>${tail}</div>`;
+        return `<div class="grd-plot grd-pestd"><div class="grd-crop">🐛💀</div><div class="grd-lbl">${esc(p.name)}</div><div class="faint" style="font-size:11px;color:#ef6b6b">sežráno → půlka</div>${tail}</div>`;
+      }
+      if (p.pest) {    // AKTIVNÍ chrobáci – zachraň než vyprší okno!
+        const half = Math.round(p.reward * 0.5);
+        const tail = p.ready
+          ? `<button class="grd-harv-half" data-action="grd-harvest" data-plot="${p.plot}" title="Sklidit teď bez postřiku = jen půlka">Sklidit +${fmtPts(half)}</button>`
+          : `<div class="grd-time" data-left="${p.rescue_left}" style="color:#ff7aa8">⏳ ${grdDur(p.rescue_left)}</div>`;
+        return `<div class="grd-plot grd-pestd grd-pest-active"><div class="grd-crop">🐛</div><div class="grd-lbl">${esc(p.name)}</div><button class="grd-rescue-btn" data-action="grd-rescue" data-plot="${p.plot}" title="Zaplať a zachráníš plnou úrodu. Po vypršení času je sežerou (jen půlka, +${fmtPts(half)}).">🐛 Zachraň ${fmtPts(p.rescue_cost)}</button>${tail}</div>`;
       }
       if (p.ready) return `<div class="grd-plot grd-ready"><div class="grd-crop">${p.icon}</div><div class="grd-lbl">${esc(p.name)}</div><button class="bp-claim" data-action="grd-harvest" data-plot="${p.plot}">Sklidit +${fmtPts(p.reward)}</button></div>`;
-      return `<div class="grd-plot grd-grow"><div class="grd-crop grd-sprout">🌱</div><div class="grd-lbl">${esc(p.name)}</div><div class="grd-time" data-left="${p.seconds_left}">${grdDur(p.seconds_left)}</div></div>`;
+      const pestRefresh = p.pest_in > 0 ? ` data-refresh-left="${p.pest_in}"` : "";
+      return `<div class="grd-plot grd-grow"${pestRefresh}><div class="grd-crop grd-sprout">🌱</div><div class="grd-lbl">${esc(p.name)}</div><div class="grd-time" data-left="${p.seconds_left}">${grdDur(p.seconds_left)}</div></div>`;
     }).join("");
     const shop = g.crops.map((c) => `<button class="grd-seed${_gardenSel === c.key ? " sel" : ""}" data-action="grd-pick" data-crop="${c.key}"><span class="grd-si">${c.icon}</span><b>${esc(c.name)}</b><span class="faint">${c.hours} h · semínko ${fmtPts(c.cost)} · oček. <b>${c.expected_no_rescue >= 0 ? "+" : ""}${fmtPts(c.expected_no_rescue || 0)}</b> / aktivně <b>${c.expected_rescue >= 0 ? "+" : ""}${fmtPts(c.expected_rescue || 0)}</b> · 🎟️ <b style="color:var(--farm-green,#46d369)">+${fmtPts(c.xp || 0)} XP</b></span></button>`).join("");
     const seedNote = `<p class="muted" style="font-size:12px;margin:-4px 0 10px">Semínko stojí <b>${g.seed_pct}%</b> z výnosu${g.sub ? ` — máš <b style="color:var(--accent)">sub slevu (jen ${g.seed_pct_sub}%)</b> 💜` : ` · 💜 sub jen ${g.seed_pct_sub}%`}. Chrobáci: <b>${g.pest_chance || 0}%</b>, záchrana <b>${g.rescue_pct || 0}%</b> výnosu.<br>🎟️ <b>Sklizeň dává XP do levelu i Battle Passu</b> — <b>mimo denní strop</b>, počítá se vždy (i když máš chat vyfarmený)${g.sub ? ", sub ×1.5" : ""}. Chrobáci úrodu i XP půlí.</p>`;
+    const readyPlots = g.plots.filter((p) => !p.empty && p.ready);
+    const emptyCount = g.plots.filter((p) => p.empty).length;
+    const readySum = readyPlots.reduce((s, p) => s + ((p.pest || p.eaten) ? Math.round(p.reward * 0.5) : p.reward), 0);
+    const bulk = (readyPlots.length || emptyCount) ? `<div class="grd-bulk" style="display:flex;gap:8px;flex-wrap:wrap;margin:14px 0 0">${readyPlots.length ? `<button class="bp-claim" data-action="grd-harvest-all">⚡ Sklidit vše (${readyPlots.length}× · +${fmtPts(readySum)})</button>` : ""}${emptyCount ? `<button class="grd-seed${_gardenSel ? " sel" : ""}" data-action="grd-plant-all" style="width:auto">🌱 Zasadit vše${_gardenSel ? "" : " (vyber semínko)"}</button>` : ""}</div>` : "";
     box.innerHTML = `<div class="grd-grid">${plots}</div>
+      ${bulk}
       <div class="section-title" style="margin:24px 0 8px">🌰 Semínka ${_gardenSel ? `<span class="feeds-pass">vybráno → klikni prázdný záhon</span>` : ""}</div>
       ${seedNote}
       <div class="grd-shop">${shop}</div>`;
@@ -2128,7 +2159,15 @@ async function loadGarden() {
         const s = parseInt(el.dataset.left, 10) - 1;
         if (s <= 0) reload = true; else { el.dataset.left = s; el.textContent = grdDur(s); }
       });
-      if (reload) loadGarden();
+      document.querySelectorAll("[data-refresh-left]").forEach((el) => {
+        const s = parseInt(el.dataset.refreshLeft, 10) - 1;
+        if (s <= 0) reload = true; else el.dataset.refreshLeft = s;
+      });
+      if (reload) {
+        clearInterval(_gardenTimer);
+        _gardenTimer = null;
+        loadGarden();
+      }
     }, 1000);
   } catch (e) { box.innerHTML = `<div class="empty">${esc(e.message)}</div>`; }
 }
@@ -2147,6 +2186,7 @@ async function grdHarvest(plot) {
     const r = await api("/garden/harvest", { method: "POST", body: { plot: parseInt(plot, 10) } });
     if (state.user) state.user.points = r.balance;
     if (r.pest) { toast(`🐛 Chrobáci ti načali úrodu! Sklizeno jen +${fmtPts(r.reward)} (půlka) — příště je včas zachraň. 🌾`, "info"); }
+    else if (r.golden) { toast(`🌟 ZLATÁ SKLIZEŇ! ${r.name} ×3 → +${fmtPts(r.reward)} ✨🌾`, "success"); try { confettiBurst(); } catch (e) {} }
     else { toast(`Sklizeno: ${r.name}! +${fmtPts(r.reward)} 🌾`, "success"); try { confettiBurst(); } catch (e) {} }
     renderHeader(); loadGarden();
   } catch (e) { toast(e.message, "error"); }
@@ -2156,6 +2196,25 @@ async function grdRescue(plot) {
     const r = await api("/garden/rescue", { method: "POST", body: { plot: parseInt(plot, 10) } });
     if (state.user) state.user.points = r.balance;
     toast(`🐛➡️🌱 Postřik! ${r.name} zachráněna (−${fmtPts(r.cost)}) — bude plná sklizeň.`, "success");
+    renderHeader(); loadGarden();
+  } catch (e) { toast(e.message, "error"); }
+}
+async function grdHarvestAll() {
+  try {
+    const r = await api("/garden/harvest-all", { method: "POST", body: {} });
+    if (state.user) state.user.points = r.balance;
+    const g = r.golden ? ` · 🌟 ${r.golden}× ZLATÁ!` : "";
+    toast(`Sklizeno ${r.count}× · +${fmtPts(r.total)} 🌾${g}`, "success");
+    try { confettiBurst(); } catch (e) {}
+    renderHeader(); loadGarden();
+  } catch (e) { toast(e.message, "error"); }
+}
+async function grdPlantAll() {
+  if (!_gardenSel) { toast("Vyber nejdřív semínko dole. 🌰", "error"); return; }
+  try {
+    const r = await api("/garden/plant-all", { method: "POST", body: { crop: _gardenSel } });
+    if (state.user) state.user.points = r.balance;
+    toast(`Zasazeno ${r.planted}× ${r.name} −${fmtPts(r.spent)} · doroste za ${r.hours} h.`, "success");
     renderHeader(); loadGarden();
   } catch (e) { toast(e.message, "error"); }
 }
@@ -3999,7 +4058,7 @@ async function loadMinesBans() {
     const d = await api("/admin/mines-bans");
     const rows = (d.banned || []).length
       ? d.banned.map((b) => `<div class="lb-row" style="padding:7px 0">
-          <span class="hof-name">${uLink(b.username)}</span>
+          <span class="hof-name">${uLink(b.username)}</span><span class="faint" style="font-size:12px">${b.expires_at ? `do ${new Date(b.expires_at).toLocaleString("cs-CZ")}` : "trvalý"}</span>
           <button class="btn btn-ghost btn-sm" data-action="mines-unban" data-username="${esc(b.username)}" style="margin-left:auto">✅ Odbanit</button>
         </div>`).join("")
       : `<div class="faint" style="font-size:13px">Nikdo nemá zákaz Mines.</div>`;
@@ -5333,7 +5392,9 @@ function handleAction(action, el) {
     case "bp-daily": claimBpDaily(); break;
     case "grd-pick": grdPick(el.dataset.crop); break;
     case "grd-plant": grdPlant(el.dataset.plot); break;
+    case "grd-plant-all": grdPlantAll(); break;
     case "grd-harvest": grdHarvest(el.dataset.plot); break;
+    case "grd-harvest-all": grdHarvestAll(); break;
     case "grd-rescue": grdRescue(el.dataset.plot); break;
     case "decor-buy": buyDecor(el.dataset.key); break;
     case "claim-partner": claimPartnerLink(el.dataset.id, el.dataset.url); break;

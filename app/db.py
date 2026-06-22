@@ -1,4 +1,5 @@
 """Připojení k SQLite a inicializace schématu databáze."""
+import json
 import sqlite3
 from datetime import datetime, timezone, timedelta
 
@@ -673,7 +674,9 @@ _MIGRATIONS = [
     ("users", "fav_game", "TEXT"),     # vypíchnutá oblíbená hra (showcase)
     ("users", "prestige", "INTEGER NOT NULL DEFAULT 0"),   # prestige level (spálené sedláky = status, anti-inflace sink)
     ("users", "earned_total", "INTEGER NOT NULL DEFAULT 0"),   # celkem za život NAFARMENO (jen kladné přírůstky) → základ pro XP/level
-    ("garden", "pest", "INTEGER NOT NULL DEFAULT 0"),          # chrobáci na záhonu: 0=nic, 1=aktivní (zaplať záchranu), 2=zachráněno
+    ("garden", "pest", "INTEGER NOT NULL DEFAULT 0"),          # chrobáci: 0=nezachráněno, 2=zachráněno (aktivita derivovaná z pest_at + okna)
+    ("garden", "pest_at", "TEXT"),                             # KDY se chrobáci objeví (ISO) / NULL = bez chrobáků. Aktivní = pest_at .. pest_at+okno
+    ("garden", "notified", "INTEGER NOT NULL DEFAULT 0"),      # bitmask in-app notifikací: 1=úroda dozrála, 2=chrobáci (1× na záhon, brání spamu)
     ("battlepass", "claimed_premium", "TEXT NOT NULL DEFAULT '[]'"),   # prémiová (sub-only) řada Battle Passu – JSON list vyzvednutých tierů
     # Responsible gaming – denní limit sázek (Tipsport-style). 0/NULL = bez limitu.
     ("users", "wager_limit", "INTEGER"),                   # aktuální denní strop sázek
@@ -754,6 +757,12 @@ def init_db() -> None:
             cols = [r[1] for r in conn.execute(f"PRAGMA table_info({table})").fetchall()]
             if col not in cols:
                 conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} {ddl}")
+        # Garden v1 ukládala aktivní útok jako pest=1 bez času. Převeď ho na v2
+        # časovaný útok od zasazení; pest=0 pak znamená nezachráněný a funguje rescue.
+        conn.execute(
+            "UPDATE garden SET pest_at = planted_at, pest = 0 "
+            "WHERE pest = 1 AND pest_at IS NULL"
+        )
         # výchozí anticheat pravidla (idempotentně)
         for r in ANTICHEAT_RULES:
             conn.execute("INSERT OR IGNORE INTO anticheat_rules (key, enabled, threshold) VALUES (?, ?, ?)",
@@ -765,6 +774,25 @@ def init_db() -> None:
         if get_setting(conn, "_mig_earned_streamonly", "") != "1":
             conn.execute("DELETE FROM quest_progress WHERE quest_key IN ('d_earn','w_earn')")
             set_setting(conn, "_mig_earned_streamonly", "1")
+        # Staré auto-bany byly v seznamu bez expirace, i když text sliboval 24 h.
+        # Jednorázově jim dej 24 h od nasazení; ruční bany bez důvodu zůstanou trvalé.
+        if get_setting(conn, "_mig_mines_ban_expiry", "") != "1":
+            raw_ids = get_setting(conn, "mines_ban_uids", "")
+            try:
+                ids = {int(v) for v in json.loads(raw_ids)} if raw_ids else set()
+            except (ValueError, TypeError):
+                ids = set()
+            expiries = {}
+            if ids:
+                qm = ",".join("?" * len(ids))
+                rows = conn.execute(f"SELECT id,ban_reason FROM users WHERE id IN ({qm})", list(ids)).fetchall()
+                expires = (datetime.now(timezone.utc) + timedelta(hours=24)).isoformat()
+                for row in rows:
+                    reason = row["ban_reason"] or ""
+                    if reason.startswith("Automaticky zablokovano") or reason.startswith("Automaticky zablokováno") or reason.startswith("Ban 24 h"):
+                        expiries[str(row["id"])] = expires
+            set_setting(conn, "mines_ban_expires", json.dumps(expiries, sort_keys=True))
+            set_setting(conn, "_mig_mines_ban_expiry", "1")
         conn.commit()
     finally:
         conn.close()

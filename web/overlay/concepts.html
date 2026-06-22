@@ -1,0 +1,363 @@
+<!doctype html>
+<html lang="cs">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gifted Subs Overlay — návrhy</title>
+<style>
+  * { box-sizing: border-box; }
+  :root {
+    --bg: #17120a;
+    --panel: #241b10;
+    --panel-2: #302313;
+    --text: #f8efd8;
+    --dim: #c4b189;
+    --gold: #ffb423;
+    --gold-2: #ffd23f;
+    --orange: #ff8a14;
+    --green: #7ed957;
+    --purple: #9147ff;
+    --line: rgba(255,180,35,.34);
+  }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    color: var(--text);
+    background:
+      radial-gradient(circle at 15% 10%, rgba(126,217,87,.12), transparent 27%),
+      radial-gradient(circle at 84% 18%, rgba(255,180,35,.16), transparent 30%),
+      #100c07;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  .page { width: min(1180px, calc(100vw - 36px)); margin: auto; padding: 32px 0 52px; }
+  h1 { margin: 0; font-size: 30px; }
+  .lead { margin: 6px 0 26px; color: var(--dim); }
+  .concepts { display: grid; gap: 26px; }
+  .concept { padding: 15px; border: 1px solid rgba(255,180,35,.22); border-radius: 18px; background: rgba(36,27,16,.56); }
+  .concept-head { display: flex; align-items: baseline; gap: 10px; margin: 0 2px 13px; }
+  .concept-head b { color: var(--gold-2); font-size: 15px; text-transform: uppercase; letter-spacing: .09em; }
+  .concept-head span { color: var(--dim); font-size: 13px; }
+  .stage {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    overflow: hidden;
+    border-radius: 13px;
+    background:
+      linear-gradient(rgba(255,255,255,.035) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,.035) 1px, transparent 1px),
+      radial-gradient(circle at 50% 42%, rgba(79,105,50,.42), transparent 34%),
+      linear-gradient(135deg, #171b1f, #0b0d0f 52%, #1b140c);
+    background-size: 42px 42px, 42px 42px, auto, auto;
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,.07);
+  }
+  .tag { position: absolute; right: 14px; bottom: 12px; color: rgba(255,255,255,.34); font-size: 11px; font-weight: 750; letter-spacing: .08em; }
+  .cut {
+    clip-path: polygon(0 14px, 20px 0, calc(100% - 48px) 0, 100% 28px, 100% 100%, 42px 100%, 0 calc(100% - 18px));
+  }
+
+  /* A — jednorázový alert */
+  .gift-alert {
+    position: absolute; left: 50%; bottom: 42px; transform: translateX(-50%);
+    width: min(820px, calc(100% - 48px)); min-height: 126px;
+    display: grid; grid-template-columns: 92px 1fr 142px; align-items: center; gap: 18px;
+    padding: 20px 24px;
+    background: linear-gradient(150deg, rgba(48,35,19,.98), rgba(16,12,8,.97));
+    border: 1px solid var(--line);
+    box-shadow: inset 0 0 55px rgba(0,0,0,.42), 0 18px 50px rgba(0,0,0,.5), 0 0 38px rgba(255,180,35,.18);
+  }
+  .gift-alert::before { content:""; position:absolute; left:0; top:0; bottom:0; width:5px; background: linear-gradient(var(--gold-2), var(--orange)); box-shadow: 0 0 18px var(--gold); }
+  .gift-icon {
+    width: 78px; height: 78px; display: grid; place-items: center; border-radius: 20px;
+    font-size: 39px; background: linear-gradient(135deg, var(--gold-2), var(--orange));
+    box-shadow: inset 0 2px rgba(255,255,255,.36), 0 0 26px rgba(255,180,35,.36);
+  }
+  .eyebrow { color: var(--green); font-size: 12px; font-weight: 900; letter-spacing: .19em; text-transform: uppercase; }
+  .gift-alert h2 { margin: 5px 0 2px; font-size: clamp(24px, 3vw, 36px); line-height: 1; }
+  .gift-alert h2 strong { color: var(--gold-2); }
+  .gift-alert p { margin: 7px 0 0; color: var(--dim); font-size: 14px; font-weight: 650; }
+  .gift-alert p b { color: var(--green); }
+  .gift-count { text-align: center; }
+  .gift-count b { display: block; color: var(--gold-2); font-size: 62px; line-height: .82; text-shadow: 0 0 24px rgba(255,180,35,.42); }
+  .gift-count span { color: var(--dim); font-size: 12px; font-weight: 900; letter-spacing: .16em; }
+
+  /* B — gift train */
+  .train {
+    position: absolute; left: 50%; top: 35px; transform: translateX(-50%);
+    width: min(710px, calc(100% - 50px)); padding: 17px 22px 18px;
+    border: 1px solid rgba(126,217,87,.45); border-radius: 16px;
+    background: linear-gradient(145deg, rgba(25,34,17,.97), rgba(13,11,8,.96));
+    box-shadow: 0 0 38px rgba(126,217,87,.17), inset 0 0 35px rgba(0,0,0,.38);
+  }
+  .train-top { display: flex; justify-content: space-between; align-items: center; gap: 14px; }
+  .train-title { font-size: 14px; font-weight: 950; letter-spacing: .17em; color: var(--green); }
+  .train-main { margin-top: 5px; font-size: 28px; font-weight: 900; }
+  .train-main b { color: var(--gold-2); }
+  .train-time { padding: 7px 12px; border-radius: 999px; color: var(--gold-2); background: rgba(255,180,35,.11); border: 1px solid rgba(255,180,35,.34); font-weight: 850; }
+  .train-track { display: grid; grid-template-columns: repeat(10, 1fr); gap: 7px; margin-top: 15px; }
+  .train-track i { height: 16px; border-radius: 5px; background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.06); }
+  .train-track i.on { background: linear-gradient(135deg, var(--green), #4cae2d); box-shadow: 0 0 12px rgba(126,217,87,.46); }
+  .train-foot { display: flex; justify-content: space-between; margin-top: 9px; color: var(--dim); font-size: 12px; font-weight: 750; }
+  .train-foot b { color: var(--text); }
+
+  /* C — persistent leaderboard */
+  .leaderboard {
+    position: absolute; right: 34px; top: 34px; width: 340px; padding: 18px;
+    background: linear-gradient(160deg, rgba(45,32,17,.98), rgba(14,11,8,.97));
+    border: 1px solid var(--line);
+    box-shadow: inset 0 0 45px rgba(0,0,0,.45), 0 18px 52px rgba(0,0,0,.48);
+  }
+  .lb-head { display: flex; align-items: center; gap: 9px; padding-bottom: 13px; border-bottom: 1px solid rgba(255,180,35,.16); }
+  .lb-head b { font-size: 14px; letter-spacing: .13em; }
+  .lb-head b span { color: var(--gold-2); }
+  .lb-head small { margin-left: auto; color: var(--green); font-weight: 850; }
+  .lb-row { display: grid; grid-template-columns: 28px 42px 1fr auto; align-items: center; gap: 9px; padding: 10px 4px; }
+  .lb-row + .lb-row { border-top: 1px solid rgba(255,255,255,.055); }
+  .rank { color: var(--dim); font-size: 13px; font-weight: 900; text-align: center; }
+  .avatar { width: 38px; height: 38px; display: grid; place-items: center; border-radius: 11px; color: #281600; background: linear-gradient(135deg, var(--gold-2), var(--orange)); font-weight: 950; }
+  .lb-row:nth-child(n+3) .avatar { color: #102207; background: linear-gradient(135deg, #a7eb7d, #65ba3e); }
+  .name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 800; }
+  .amount { color: var(--gold-2); font-weight: 950; }
+  .lb-note { margin: 8px 3px 0; color: var(--dim); font-size: 11px; text-align: center; }
+
+  /* Interactive alert system */
+  .lab {
+    margin-bottom: 28px; padding: 18px;
+    border: 1px solid rgba(126,217,87,.28); border-radius: 20px;
+    background: linear-gradient(145deg, rgba(25,31,17,.72), rgba(36,27,16,.72));
+    box-shadow: 0 20px 55px rgba(0,0,0,.24);
+  }
+  .lab-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 18px; margin-bottom: 15px; }
+  .lab-head h2 { margin: 0; font-size: 21px; }
+  .lab-head p { margin: 4px 0 0; color: var(--dim); font-size: 13px; }
+  .live-pill { flex: none; padding: 7px 11px; border: 1px solid rgba(126,217,87,.4); border-radius: 999px; color: var(--green); font-size: 11px; font-weight: 900; letter-spacing: .12em; }
+  .control-block + .control-block { margin-top: 10px; }
+  .control-label { display: inline-block; width: 78px; color: var(--dim); font-size: 11px; font-weight: 900; letter-spacing: .1em; text-transform: uppercase; }
+  .controls { display: inline-flex; flex-wrap: wrap; gap: 6px; width: calc(100% - 84px); vertical-align: top; }
+  .ctrl {
+    appearance: none; border: 1px solid rgba(255,255,255,.11); border-radius: 9px;
+    padding: 7px 10px; color: var(--dim); background: rgba(255,255,255,.035);
+    font: inherit; font-size: 12px; font-weight: 850; cursor: pointer; transition: .15s ease;
+  }
+  .ctrl:hover { color: var(--text); border-color: rgba(255,180,35,.42); transform: translateY(-1px); }
+  .ctrl.active { color: #281600; border-color: var(--gold-2); background: linear-gradient(135deg, var(--gold-2), var(--orange)); box-shadow: 0 0 18px rgba(255,180,35,.26); }
+  .lab-stage { margin-top: 17px; aspect-ratio: 16 / 7.2; min-height: 360px; }
+  .alert-preview {
+    --tier: var(--gold); --tier2: var(--orange); --tier-rgb: 255,180,35;
+    position: absolute; left: 50%; top: 50%; transform: translate(-50%,-44%);
+    width: min(850px, calc(100% - 44px)); min-height: 166px;
+  }
+  .alert-shell {
+    position: relative; min-height: 166px; margin-left: 118px; padding: 25px 165px 22px 136px;
+    display: flex; flex-direction: column; justify-content: center;
+    background: linear-gradient(145deg, rgba(45,32,17,.98), rgba(13,11,8,.97));
+    border: 1px solid rgba(var(--tier-rgb),.44);
+    clip-path: polygon(0 18px, 25px 0, calc(100% - 62px) 0, 100% 34px, 100% 100%, 52px 100%, 0 calc(100% - 23px));
+    box-shadow: inset 0 0 65px rgba(0,0,0,.42), 0 20px 54px rgba(0,0,0,.55), 0 0 42px rgba(var(--tier-rgb),.19);
+  }
+  .alert-shell::before { content:""; position:absolute; inset:0 auto 0 0; width:6px; background: linear-gradient(var(--tier),var(--tier2)); box-shadow: 0 0 22px var(--tier); }
+  .alert-shell::after { content:"ZURYS.LIVE"; position:absolute; right:24px; top:17px; color:rgba(var(--tier-rgb),.72); font-size:10px; font-weight:900; letter-spacing:.16em; }
+  .farmer-wrap {
+    position: absolute; z-index: 4; left: 0; bottom: -10px; width: 270px; height: 270px;
+    pointer-events: none; filter: drop-shadow(0 15px 14px rgba(0,0,0,.55)) drop-shadow(0 0 17px rgba(var(--tier-rgb),.28));
+    transform-origin: 50% 100%; animation: farmerBob 2.6s ease-in-out infinite;
+  }
+  .farmer { width: 100%; height: 100%; object-fit: contain; }
+  .alert-kicker { color: var(--tier); font-size: 12px; font-weight: 950; letter-spacing: .19em; text-transform: uppercase; }
+  .alert-title { margin: 6px 0 3px; font-size: clamp(25px,3.3vw,40px); line-height: .98; font-weight: 950; }
+  .alert-title strong { color: var(--tier); }
+  .alert-sub { color: var(--dim); font-size: 14px; font-weight: 700; }
+  .alert-sub b { color: var(--tier); }
+  .alert-value { position:absolute; z-index:2; right:23px; bottom:23px; width:130px; text-align:center; }
+  .alert-value b { display:block; color:var(--tier); font-size:54px; line-height:.82; text-shadow:0 0 25px rgba(var(--tier-rgb),.4); }
+  .alert-value span { color:var(--dim); font-size:10px; font-weight:950; letter-spacing:.15em; }
+  .sound { position:absolute; right:25px; top:48px; color:rgba(255,255,255,.42); font-size:10px; font-weight:750; }
+  .particles { position:absolute; inset:-45px -10px -25px 80px; z-index:5; overflow:hidden; pointer-events:none; }
+  .particle { position:absolute; opacity:0; font-size:22px; animation: particleFly 2.8s ease-in-out infinite; filter:drop-shadow(0 3px 5px rgba(0,0,0,.45)); }
+  .particle:nth-child(1){left:11%;top:55%;animation-delay:.1s}.particle:nth-child(2){left:35%;top:42%;animation-delay:.7s}.particle:nth-child(3){left:62%;top:50%;animation-delay:1.3s}.particle:nth-child(4){left:82%;top:39%;animation-delay:1.9s}.particle:nth-child(5){left:49%;top:62%;animation-delay:2.3s}
+  .tier-green { --tier:#7ed957;--tier2:#4eae30;--tier-rgb:126,217,87; }
+  .tier-purple { --tier:#c79cff;--tier2:#9147ff;--tier-rgb:145,71,255; }
+  .tier-gold { --tier:#ffd23f;--tier2:#ff8a14;--tier-rgb:255,180,35; }
+  .tier-meme { --tier:#ff77c8;--tier2:#9147ff;--tier-rgb:255,119,200; }
+  .tier-legend { --tier:#fff0a8;--tier2:#ff6a18;--tier-rgb:255,210,63; }
+  .tier-legend .alert-shell { border-width:2px; box-shadow:inset 0 0 72px rgba(255,106,24,.12),0 20px 58px rgba(0,0,0,.58),0 0 60px rgba(var(--tier-rgb),.38); }
+  .tier-legend .farmer-wrap { width:300px;height:300px;left:-16px;filter:drop-shadow(0 16px 15px rgba(0,0,0,.58)) drop-shadow(0 0 30px rgba(var(--tier-rgb),.6));animation:farmerLegend 1.5s ease-in-out infinite; }
+  .tier-legend .alert-title { text-shadow:0 0 18px rgba(var(--tier-rgb),.26); }
+  @keyframes farmerBob { 0%,100%{transform:translateY(0) rotate(-1deg)} 50%{transform:translateY(-8px) rotate(1deg)} }
+  @keyframes farmerLegend { 0%,100%{transform:translateY(0) rotate(-2deg) scale(1)} 50%{transform:translateY(-13px) rotate(2deg) scale(1.035)} }
+  @keyframes particleFly { 0%{opacity:0;transform:translateY(20px) rotate(0) scale(.7)} 22%{opacity:1} 78%{opacity:.85} 100%{opacity:0;transform:translateY(-105px) rotate(150deg) scale(1.1)} }
+  .tier-map { display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin-top:14px; }
+  .tier-card { padding:10px 11px; border-radius:11px; background:rgba(0,0,0,.18); border:1px solid rgba(255,255,255,.07); }
+  .tier-card b { display:block; color:var(--gold-2); font-size:12px; }
+  .tier-card span { color:var(--dim); font-size:10.5px; }
+
+  @media (max-width: 700px) {
+    .gift-alert { grid-template-columns: 68px 1fr 80px; gap: 10px; padding: 15px; }
+    .gift-icon { width: 58px; height: 58px; font-size: 28px; }
+    .gift-count b { font-size: 44px; }
+    .leaderboard { right: 20px; width: min(340px, calc(100% - 40px)); }
+    .lab-stage { min-height:460px; }
+    .alert-preview { transform:translate(-50%,-47%); }
+    .alert-shell { margin-left:0; min-height:390px; padding:178px 20px 24px; text-align:center; }
+    .farmer-wrap, .tier-legend .farmer-wrap { left:50%; top:-34px; bottom:auto; width:205px; height:205px; transform:translateX(-50%); animation:none; }
+    .alert-value { position:static;width:auto;margin-top:15px; }
+    .sound { display:none; }
+    .tier-map { grid-template-columns:repeat(2,1fr); }
+  }
+</style>
+</head>
+<body>
+<main class="page">
+  <h1>Gifted Subs overlay — návrhy</h1>
+  <p class="lead">Barvy a materiály přímo ze zurys.live. Ukázková data: Martech1 daroval 5 subů.</p>
+
+  <section class="lab">
+    <div class="lab-head">
+      <div><h2>Sedlák Alert Universe</h2><p>Interaktivní návrh celé alert rodiny. Klikni na tier.</p></div>
+      <span class="live-pill">● LIVE PREVIEW</span>
+    </div>
+    <div class="control-block">
+      <span class="control-label">SUBS</span>
+      <div class="controls" id="subControls">
+        <button class="ctrl" data-kind="sub" data-value="1">SUB</button>
+        <button class="ctrl" data-kind="resub" data-value="12">RESUB</button>
+        <button class="ctrl" data-kind="gift" data-value="1">1×</button>
+        <button class="ctrl active" data-kind="gift" data-value="5">5×</button>
+        <button class="ctrl" data-kind="gift" data-value="10">10×</button>
+        <button class="ctrl" data-kind="gift" data-value="15">15×</button>
+        <button class="ctrl" data-kind="gift" data-value="20">20×</button>
+        <button class="ctrl" data-kind="gift" data-value="25">25×</button>
+        <button class="ctrl" data-kind="gift" data-value="50">50×</button>
+        <button class="ctrl" data-kind="gift" data-value="100">100×</button>
+      </div>
+    </div>
+    <div class="control-block">
+      <span class="control-label">DONATE</span>
+      <div class="controls" id="donateControls">
+        <button class="ctrl" data-kind="donate" data-value="30">30 Kč</button><button class="ctrl" data-kind="donate" data-value="50">50 Kč</button>
+        <button class="ctrl" data-kind="donate" data-value="69">69 Kč</button><button class="ctrl" data-kind="donate" data-value="100">100 Kč</button>
+        <button class="ctrl" data-kind="donate" data-value="120">120 Kč</button><button class="ctrl" data-kind="donate" data-value="200">200 Kč</button>
+        <button class="ctrl" data-kind="donate" data-value="500">500 Kč</button><button class="ctrl" data-kind="donate" data-value="600">600 Kč</button>
+        <button class="ctrl" data-kind="donate" data-value="700">700 Kč</button><button class="ctrl" data-kind="donate" data-value="900">900 Kč</button>
+        <button class="ctrl" data-kind="donate" data-value="1000">1 000 Kč</button><button class="ctrl" data-kind="donate" data-value="2000">2 000 Kč</button>
+      </div>
+    </div>
+    <div class="stage lab-stage">
+      <div class="alert-preview tier-green" id="alertPreview">
+        <div class="particles" id="particles"><span class="particle">🌾</span><span class="particle">🎁</span><span class="particle">🌾</span><span class="particle">✨</span><span class="particle">🌱</span></div>
+        <div class="farmer-wrap"><img class="farmer" src="../sedlak-cut.png" alt="Sedlák"></div>
+        <div class="alert-shell">
+          <div class="alert-kicker" id="alertKicker">Malá sklizeň</div>
+          <div class="alert-title" id="alertTitle"><strong>Martech1</strong> zasel radost!</div>
+          <div class="alert-sub" id="alertSub">Daroval komunitě <b>5 subů</b> · +5 do SUB cíle</div>
+          <div class="sound" id="alertSound">🔊 zvuk: mince + krátké juchnutí</div>
+          <div class="alert-value"><b id="alertValue">5×</b><span id="alertUnit">GIFT SUB</span></div>
+        </div>
+      </div>
+      <span class="tag">ALERT SYSTEM · OBS BROWSER SOURCE</span>
+    </div>
+    <div class="tier-map">
+      <div class="tier-card"><b>Basic</b><span>SUB, RESUB, 1×, 30–50 Kč</span></div>
+      <div class="tier-card"><b>Harvest</b><span>5–25×, 100–200 Kč</span></div>
+      <div class="tier-card"><b>Golden</b><span>50×, 500–900 Kč</span></div>
+      <div class="tier-card"><b>Legendary</b><span>100×, 1 000–2 000 Kč</span></div>
+    </div>
+  </section>
+  <div class="concepts">
+    <section class="concept">
+      <div class="concept-head"><b>A · Gift Harvest</b><span>jednorázový alert — doporučení</span></div>
+      <div class="stage">
+        <div class="gift-alert cut">
+          <div class="gift-icon">🎁</div>
+          <div>
+            <div class="eyebrow">Nová sklizeň subů</div>
+            <h2><strong>Martech1</strong> zasel radost!</h2>
+            <p>Daroval komunitě <b>5 subů</b> · +5 do SUB cíle</p>
+          </div>
+          <div class="gift-count"><b>5×</b><span>GIFT SUB</span></div>
+        </div>
+        <span class="tag">ALERT · 8 SEKUND</span>
+      </div>
+    </section>
+
+    <section class="concept">
+      <div class="concept-head"><b>B · Gift Train</b><span>průběžná série během eventu / Happy Hour</span></div>
+      <div class="stage">
+        <div class="train">
+          <div class="train-top">
+            <div><div class="train-title">🌾 GIFT TRAIN · LEVEL 3</div><div class="train-main"><b>28 subů</b> od komunity</div></div>
+            <div class="train-time">02:14</div>
+          </div>
+          <div class="train-track"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i><i></i></div>
+          <div class="train-foot"><span>Poslední: <b>Martech1 +5</b></span><span>Další level za <b>3 suby</b></span></div>
+        </div>
+        <span class="tag">LIVE COUNTER</span>
+      </div>
+    </section>
+
+    <section class="concept">
+      <div class="concept-head"><b>C · Top Gifters</b><span>stálý panel v rohu obrazu</span></div>
+      <div class="stage">
+        <div class="leaderboard cut">
+          <div class="lb-head"><span>🎁</span><b>TOP GIFTEŘI <span>DNES</span></b><small>zurys.live</small></div>
+          <div class="lb-row"><span class="rank">1</span><span class="avatar">M</span><span class="name">Martech1</span><span class="amount">92×</span></div>
+          <div class="lb-row"><span class="rank">2</span><span class="avatar">K</span><span class="name">Kapepepe</span><span class="amount">24×</span></div>
+          <div class="lb-row"><span class="rank">3</span><span class="avatar">S</span><span class="name">skytlix</span><span class="amount">18×</span></div>
+          <div class="lb-note">Reset každý den o půlnoci</div>
+        </div>
+        <span class="tag">PERSISTENT · 340 × 270 PX</span>
+      </div>
+    </section>
+  </div>
+</main>
+<script>
+  const copy = {
+    sub: { kicker:"Nový sedlák", title:"<strong>NovákCZ</strong> dorazil na statek!", sub:"Vítej v komunitě · první sklizeň začíná", value:"SUB", unit:"NOVÝ ČLEN", tier:"tier-green", sound:"🔊 zvuk: zvonek + slepice", particles:["🌱","🌾","🐔","✨","🌱"] },
+    resub: { kicker:"Věrný farmář", title:"<strong>NovákCZ</strong> se vrací na sklizeň!", sub:"Podporuje statek už <b>12 měsíců</b>", value:"12", unit:"MĚSÍCŮ", tier:"tier-purple", sound:"🔊 zvuk: harmonika + potlesk", particles:["💜","🌾","⭐","💜","🌱"] }
+  };
+  const giftCopy = {
+    1:["První semínko","daroval první semínko!","tier-green","🔊 zvuk: plop + mince"],
+    5:["Malá sklizeň","zasel radost!","tier-green","🔊 zvuk: mince + krátké juchnutí"],
+    10:["Plný pytel subů","přivezl pytel subů!","tier-gold","🔊 zvuk: pytel + zvon"],
+    15:["Statek roste","rozšířil celý statek!","tier-gold","🔊 zvuk: trakař + potlesk"],
+    20:["Velká sklizeň","spustil velké žně!","tier-gold","🔊 zvuk: kosa + fanfára"],
+    25:["Čtvrt stovky","zaplnil sýpku!","tier-purple","🔊 zvuk: sýpka + dav"],
+    50:["Královské žně","ovládl celé pole!","tier-purple","🔊 zvuk: roh + bouřlivý dav"],
+    100:["Sto subů","CELÝ STATEK ŠÍLÍ!","tier-legend","🔊 zvuk: velký roh + choir + thunder"]
+  };
+  const donateCopy = {
+    30:["Na osivo","přihodil na novou úrodu","tier-green","🔊 zvuk: jedna mince"],
+    50:["Svačina pro sedláka","koupil sedlákovi limču","tier-green","🔊 zvuk: cink + lok"],
+    69:["NICE sklizeň","zasel přesně 69. Nice.","tier-meme","🔊 zvuk: NICE + bruh"],
+    100:["Pytel zrní","doručil zásoby na statek","tier-gold","🔊 zvuk: pytel + mince"],
+    120:["Farm boost","nakopl dnešní sklizeň","tier-gold","🔊 zvuk: motor traktoru"],
+    200:["Plný trakař","přivezl trakař podpory","tier-gold","🔊 zvuk: trakař + juchnutí"],
+    500:["Zlatá sklizeň","rozsvítil celé pole","tier-purple","🔊 zvuk: zlaté mince + fanfára"],
+    600:["Šest stovek","naplnil půl sýpky","tier-purple","🔊 zvuk: sypání zrní + dav"],
+    700:["Sedlák tančí","rozjel farmářskou party","tier-purple","🔊 zvuk: krátká polka"],
+    900:["Těsně pod litrem","zasypal statek zlatem","tier-purple","🔊 zvuk: jackpot tease"],
+    1000:["Tisícovka","ODPALUJE VELKÉ ŽNĚ!","tier-legend","🔊 zvuk: roh + jackpot + thunder"],
+    2000:["Mega úroda","CELÝ STATEK SLAVÍ!","tier-legend","🔊 zvuk: orchestr + dav + exploze zrní"]
+  };
+  const preview = document.getElementById("alertPreview");
+  const set = (id,val) => document.getElementById(id).innerHTML = val;
+  function renderAlert(kind,value) {
+    let d;
+    if (copy[kind]) d = copy[kind];
+    else if (kind === "gift") {
+      const x = giftCopy[value];
+      d = { kicker:x[0], title:"<strong>Martech1</strong> "+x[1], sub:"Daroval komunitě <b>"+value+" subů</b> · +"+value+" do SUB cíle", value:value+"×", unit:"GIFT SUB", tier:x[2], sound:x[3], particles:value>=50?["👑","🌾","✨","🎁","🔥"]:["🌾","🎁","🌾","✨","🌱"] };
+    } else {
+      const x = donateCopy[value];
+      d = { kicker:x[0], title:"<strong>DonátorCZ</strong> "+x[1]+"!", sub:"Podpora farmy · zpráva: <b>Jen tak dál!</b>", value:Number(value).toLocaleString("cs-CZ"), unit:"KČ DONATE", tier:x[2], sound:x[3], particles:value>=1000?["👑","💰","🌾","🔥","✨"]:(value==69?["😏","🌾","✨","😎","🌱"]:["🪙","🌾","✨","🌱","🪙"]) };
+    }
+    preview.className = "alert-preview "+d.tier;
+    set("alertKicker",d.kicker); set("alertTitle",d.title); set("alertSub",d.sub); set("alertValue",d.value); set("alertUnit",d.unit); set("alertSound",d.sound);
+    document.getElementById("particles").innerHTML = d.particles.map(x=>'<span class="particle">'+x+'</span>').join("");
+  }
+  document.querySelectorAll(".ctrl").forEach(btn => btn.addEventListener("click", () => {
+    document.querySelectorAll(".ctrl").forEach(x=>x.classList.remove("active")); btn.classList.add("active"); renderAlert(btn.dataset.kind, Number(btn.dataset.value));
+  }));
+</script>
+</body>
+</html>

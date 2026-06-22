@@ -1,0 +1,339 @@
+<!doctype html>
+<html lang="cs">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ZURYS — Alert Universe</title>
+<style>
+  * { box-sizing: border-box; }
+  :root {
+    --gold: #ffb423; --gold2: #ffd23f; --orange: #ff8a14;
+    --green: #7ed957; --purple: #9147ff; --text: #f8efd8; --dim: #c4b189;
+  }
+  html, body { width:100%; height:100%; margin:0; overflow:hidden; background:transparent; font-family:system-ui,-apple-system,"Segoe UI",sans-serif; }
+  body.studio {
+    background:
+      linear-gradient(rgba(255,255,255,.035) 1px,transparent 1px),
+      linear-gradient(90deg,rgba(255,255,255,.035) 1px,transparent 1px),
+      radial-gradient(circle at 50% 43%,rgba(69,103,48,.42),transparent 31%),
+      linear-gradient(135deg,#15191d,#090b0d 58%,#1b1309);
+    background-size:48px 48px,48px 48px,auto,auto;
+  }
+  body.studio::after { content:"OBS PREVIEW · 1920 × 1080 SAFE AREA"; position:fixed; right:18px; bottom:14px; color:rgba(255,255,255,.26); font-size:10px; font-weight:900; letter-spacing:.14em; }
+  #overlay { position:fixed; inset:0; pointer-events:none; }
+
+  /* persistent companion UI */
+  .train {
+    position:absolute; left:50%; top:28px; width:min(650px,calc(100vw - 52px)); padding:12px 18px 13px;
+    transform:translate(-50%,-160%); opacity:0; color:var(--text);
+    border:1px solid rgba(126,217,87,.42); border-radius:15px;
+    background:linear-gradient(145deg,rgba(25,34,17,.96),rgba(13,11,8,.95));
+    box-shadow:0 0 36px rgba(126,217,87,.18),inset 0 0 34px rgba(0,0,0,.35);
+    transition:transform .45s cubic-bezier(.2,.9,.25,1),opacity .35s;
+  }
+  .train.visible { transform:translate(-50%,0); opacity:1; }
+  .train-row { display:flex; align-items:center; gap:12px; }
+  .train-title { color:var(--green); font-size:11px; font-weight:950; letter-spacing:.16em; }
+  .train-main { margin-top:2px; font-size:20px; font-weight:900; }
+  .train-main b { color:var(--gold2); }
+  .train-last { margin-left:auto; color:var(--dim); font-size:11px; text-align:right; }
+  .train-last b { display:block; color:var(--text); font-size:12px; }
+  .train-track { display:grid; grid-template-columns:repeat(10,1fr); gap:5px; margin-top:9px; }
+  .train-track i { height:7px; border-radius:4px; background:rgba(255,255,255,.08); }
+  .train-track i.on { background:linear-gradient(90deg,var(--green),#4cad2f); box-shadow:0 0 10px rgba(126,217,87,.5); }
+
+  .goal {
+    position:absolute; right:24px; top:26px; width:230px; padding:11px 13px; color:var(--text);
+    border:1px solid rgba(255,180,35,.28); border-radius:13px; background:rgba(19,15,9,.88);
+    box-shadow:0 12px 32px rgba(0,0,0,.34); transition:transform .24s;
+  }
+  .goal.bump { transform:scale(1.08); }
+  .goal-head { display:flex; justify-content:space-between; gap:8px; color:var(--dim); font-size:10px; font-weight:900; letter-spacing:.1em; }
+  .goal-head b { color:var(--gold2); }
+  .goal-bar { height:7px; margin-top:8px; border-radius:6px; overflow:hidden; background:rgba(255,255,255,.09); }
+  .goal-fill { display:block; height:100%; width:56%; border-radius:6px; background:linear-gradient(90deg,var(--gold2),var(--green)); box-shadow:0 0 12px rgba(126,217,87,.4); transition:width .8s cubic-bezier(.2,.8,.2,1); }
+
+  /* alert card */
+  .alert-wrap {
+    --tier:#7ed957; --tier2:#4cad2f; --rgb:126,217,87;
+    position:absolute; left:50%; bottom:86px; width:min(900px,calc(100vw - 54px)); min-height:220px;
+    transform:translate(-50%,50px) scale(.88); opacity:0;
+  }
+  .alert-wrap.enter { animation:alertIn .68s cubic-bezier(.18,1.22,.28,1) forwards; }
+  .alert-wrap.exit { animation:alertOut .46s ease forwards; }
+  .alert-wrap.gold { --tier:#ffd23f;--tier2:#ff8a14;--rgb:255,180,35; }
+  .alert-wrap.purple { --tier:#c79cff;--tier2:#9147ff;--rgb:145,71,255; }
+  .alert-wrap.meme { --tier:#ff77c8;--tier2:#9147ff;--rgb:255,119,200; }
+  .alert-wrap.legend { --tier:#fff0a8;--tier2:#ff6518;--rgb:255,210,63; }
+  @keyframes alertIn { 0%{opacity:0;transform:translate(-50%,55px) scale(.86)} 70%{opacity:1;transform:translate(-50%,-7px) scale(1.025)} 100%{opacity:1;transform:translate(-50%,0) scale(1)} }
+  @keyframes alertOut { to{opacity:0;transform:translate(-50%,-32px) scale(.94);filter:blur(3px)} }
+
+  .shell {
+    position:relative; min-height:172px; margin:48px 0 0 128px; padding:27px 176px 24px 148px;
+    display:flex; flex-direction:column; justify-content:center; color:var(--text);
+    border:1px solid rgba(var(--rgb),.47);
+    background:linear-gradient(145deg,rgba(45,32,17,.985),rgba(13,11,8,.98));
+    clip-path:polygon(0 18px,25px 0,calc(100% - 62px) 0,100% 35px,100% 100%,52px 100%,0 calc(100% - 23px));
+    box-shadow:inset 0 0 65px rgba(0,0,0,.46),0 20px 56px rgba(0,0,0,.54),0 0 46px rgba(var(--rgb),.2);
+  }
+  .shell::before { content:""; position:absolute; inset:0 auto 0 0; width:7px; background:linear-gradient(var(--tier),var(--tier2)); box-shadow:0 0 24px var(--tier); }
+  .shell::after { content:"ZURYS.LIVE"; position:absolute; right:25px; top:17px; color:rgba(var(--rgb),.76); font-size:10px; font-weight:950; letter-spacing:.16em; }
+  .legend .shell { border-width:2px; box-shadow:inset 0 0 78px rgba(255,101,24,.14),0 20px 62px rgba(0,0,0,.58),0 0 70px rgba(var(--rgb),.42); }
+  .legend .shell::before { width:10px; }
+  .farmer-wrap { position:absolute; z-index:5; left:0; bottom:-6px; width:292px; height:292px; transform-origin:50% 100%; filter:drop-shadow(0 17px 15px rgba(0,0,0,.58)) drop-shadow(0 0 22px rgba(var(--rgb),.34)); animation:farmerBob 2.5s ease-in-out infinite; }
+  .farmer-wrap img { width:100%; height:100%; object-fit:contain; }
+  .legend .farmer-wrap { width:325px; height:325px; left:-22px; filter:drop-shadow(0 18px 16px rgba(0,0,0,.6)) drop-shadow(0 0 36px rgba(var(--rgb),.66)); animation:farmerLegend 1.35s ease-in-out infinite; }
+  @keyframes farmerBob { 0%,100%{transform:translateY(0) rotate(-1deg)} 50%{transform:translateY(-9px) rotate(1deg)} }
+  @keyframes farmerLegend { 0%,100%{transform:translateY(0) rotate(-2deg) scale(1)} 50%{transform:translateY(-15px) rotate(2deg) scale(1.04)} }
+  .kicker { color:var(--tier); font-size:12px; font-weight:950; letter-spacing:.2em; text-transform:uppercase; }
+  .title { margin-top:6px; font-size:clamp(26px,3.1vw,42px); line-height:.98; font-weight:950; text-shadow:0 3px 16px rgba(0,0,0,.4); }
+  .title .who { color:var(--tier); }
+  .subtitle { margin-top:8px; color:var(--dim); font-size:14px; font-weight:720; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .subtitle b { color:var(--tier); }
+  .value { position:absolute; z-index:2; right:24px; bottom:26px; width:138px; text-align:center; }
+  .value b { display:block; color:var(--tier); font-size:58px; line-height:.82; text-shadow:0 0 28px rgba(var(--rgb),.46); }
+  .value span { color:var(--dim); font-size:10px; font-weight:950; letter-spacing:.16em; }
+
+  .particles { position:absolute; z-index:8; inset:-55px -20px -30px 86px; overflow:hidden; }
+  .particle { position:absolute; top:70%; opacity:0; font-size:24px; filter:drop-shadow(0 4px 6px rgba(0,0,0,.5)); animation:particleUp var(--dur) ease-out var(--delay) forwards; }
+  @keyframes particleUp { 0%{opacity:0;transform:translate(0,30px) rotate(0) scale(.6)} 18%{opacity:1} 75%{opacity:.95} 100%{opacity:0;transform:translate(var(--dx),-180px) rotate(var(--rot)) scale(1.15)} }
+  .flash { position:fixed; inset:0; opacity:0; pointer-events:none; background:radial-gradient(circle at 50% 68%,rgba(var(--rgb),.32),transparent 40%); }
+  .legend.enter .flash { animation:flash .9s ease-out; }
+  @keyframes flash { 0%{opacity:.9} 100%{opacity:0} }
+
+  /* velký moment: fullscreen burst + screen shake (jen velké tiery) */
+  #overlay.shake { animation:bigShake .5s ease-in-out 2; }
+  @keyframes bigShake { 0%,100%{transform:translate(0,0)} 20%{transform:translate(-7px,4px)} 40%{transform:translate(6px,-5px)} 60%{transform:translate(-5px,-3px)} 80%{transform:translate(4px,3px)} }
+  .burst { position:absolute; inset:0; z-index:-1; pointer-events:none; overflow:hidden; }
+  .bp { position:absolute; top:-34px; opacity:0; animation:bpFall var(--d,1.8s) linear var(--dl,0s) forwards; }
+  @keyframes bpFall { 0%{opacity:1;transform:translateY(0) rotate(0)} 100%{opacity:.12;transform:translateY(112vh) rotate(var(--r,360deg))} }
+
+  /* studio controls, never present in OBS mode */
+  .studio-panel { display:none; position:fixed; z-index:50; left:18px; top:18px; width:300px; padding:14px; color:var(--text); pointer-events:auto; border:1px solid rgba(255,180,35,.3); border-radius:15px; background:rgba(20,15,9,.92); box-shadow:0 16px 42px rgba(0,0,0,.46); }
+  .studio .studio-panel { display:block; }
+  .studio-title { color:var(--gold2); font-size:13px; font-weight:950; letter-spacing:.12em; }
+  .studio-sub { margin:4px 0 10px; color:var(--dim); font-size:11px; }
+  .studio-panel select,.studio-panel button { width:100%; border:1px solid rgba(255,255,255,.12); border-radius:9px; color:var(--text); background:#241b10; font:inherit; font-size:12px; font-weight:800; }
+  .studio-panel select { padding:8px 9px; }
+  .studio-actions { display:grid; grid-template-columns:1fr 1fr; gap:7px; margin-top:8px; }
+  .studio-panel button { padding:8px; cursor:pointer; }
+  .studio-panel button.primary { color:#261500; border-color:var(--gold2); background:linear-gradient(135deg,var(--gold2),var(--orange)); }
+  .studio-panel button.on { color:#102207; border-color:var(--green); background:var(--green); }
+  .sound-row { display:grid; grid-template-columns:118px 1fr; gap:8px; align-items:center; margin-top:8px; }
+  .sound-row button { padding:7px 8px; }
+  .sound-row input { width:100%; accent-color:var(--gold); cursor:pointer; }
+  .sound-now { margin-top:7px; color:var(--green); font-size:10.5px; font-weight:800; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+
+  @media (max-width:760px) {
+    body.studio { overflow:auto; }
+    .studio-panel { width:calc(100vw - 28px); left:14px; top:14px; }
+    .train { top:175px; }
+    .goal { top:285px; right:14px; width:190px; }
+    .alert-wrap { bottom:24px; min-height:430px; }
+    .shell { min-height:390px; margin:0; padding:185px 18px 24px; text-align:center; }
+    .farmer-wrap,.legend .farmer-wrap { left:50%; top:-35px; bottom:auto; width:220px; height:220px; transform:translateX(-50%); animation:none; }
+    .title { font-size:29px; }
+    .subtitle { white-space:normal; }
+    .value { position:static; width:auto; margin-top:20px; }
+  }
+</style>
+</head>
+<body>
+<div id="overlay">
+  <div class="train" id="train">
+    <div class="train-row"><div><div class="train-title">🌾 GIFT TRAIN · <span id="trainLevel">LEVEL 1</span></div><div class="train-main"><b id="trainTotal">0 subů</b> od komunity</div></div><div class="train-last">POSLEDNÍ<b id="trainLast">—</b></div></div>
+    <div class="train-track" id="trainTrack"></div>
+  </div>
+  <div class="goal" id="goal"><div class="goal-head"><span>SUB CÍL · SKLIZEŇ</span><b><span id="goalNow">28</span> / <span id="goalTarget">50</span></b></div><div class="goal-bar"><i class="goal-fill" id="goalFill"></i></div></div>
+  <div id="alertHost"></div>
+</div>
+
+<aside class="studio-panel">
+  <div class="studio-title">ZURYS ALERT LAB</div>
+  <div class="studio-sub">Praktický OBS náhled. Klikni Spustit — tím browser odemkne zvuk.</div>
+  <select id="eventPicker" aria-label="Vyber alert">
+    <option value="sub:1">Nový SUB</option><option value="resub:12">RESUB · 12 měsíců</option>
+    <optgroup label="Gift subs"><option value="gift:1">1× gift</option><option value="gift:5" selected>5× gift</option><option value="gift:10">10× gift</option><option value="gift:15">15× gift</option><option value="gift:20">20× gift</option><option value="gift:25">25× gift</option><option value="gift:50">50× gift</option><option value="gift:100">100× gift</option></optgroup>
+    <optgroup label="Donate"><option value="donate:30">30 Kč</option><option value="donate:50">50 Kč</option><option value="donate:69">69 Kč</option><option value="donate:100">100 Kč</option><option value="donate:120">120 Kč</option><option value="donate:200">200 Kč</option><option value="donate:500">500 Kč</option><option value="donate:600">600 Kč</option><option value="donate:700">700 Kč</option><option value="donate:900">900 Kč</option><option value="donate:1000">1 000 Kč</option><option value="donate:2000">2 000 Kč</option></optgroup>
+  </select>
+  <div class="studio-actions"><button class="primary" id="playBtn">▶ Spustit</button><button id="autoBtn">↻ Auto demo</button></div>
+  <div class="sound-row"><button id="muteBtn">🔊 Sound ON</button><input id="volume" type="range" min="0" max="100" value="55" aria-label="Hlasitost"></div>
+  <div class="sound-now" id="soundNow">♫ Farm sound pack · mince + stodola bell</div>
+</aside>
+
+<script>
+(() => {
+  "use strict";
+  const params = new URLSearchParams(location.search);
+  const studio = params.has("studio");
+  if (studio) document.body.classList.add("studio");
+  const liveMode = !studio && !params.has("demo");   // OBS ostrý režim → reálná data
+
+  const giftCopy = {
+    1:["PRVNÍ SEMÍNKO","daroval první semínko!","green"],5:["MALÁ SKLIZEŇ","zasel radost!","green"],
+    10:["PLNÝ PYTEL SUBŮ","přivezl pytel subů!","gold"],15:["STATEK ROSTE","rozšířil celý statek!","gold"],
+    20:["VELKÁ SKLIZEŇ","spustil velké žně!","gold"],25:["ČTVRT STOVKY","zaplnil sýpku!","purple"],
+    50:["KRÁLOVSKÉ ŽNĚ","ovládl celé pole!","purple"],100:["STO SUBŮ","CELÝ STATEK ŠÍLÍ!","legend"]
+  };
+  const donateCopy = {
+    30:["NA OSIVO","přihodil na novou úrodu","green"],50:["SVAČINA PRO SEDLÁKA","koupil sedlákovi limču","green"],
+    69:["NICE SKLIZEŇ","zasel přesně 69. Nice.","meme"],100:["PYTEL ZRNÍ","doručil zásoby na statek","gold"],
+    120:["FARM BOOST","nakopl dnešní sklizeň","gold"],200:["PLNÝ TRAKAŘ","přivezl trakař podpory","gold"],
+    500:["ZLATÁ SKLIZEŇ","rozsvítil celé pole","purple"],600:["ŠEST STOVEK","naplnil půl sýpky","purple"],
+    700:["SEDLÁK TANČÍ","rozjel farmářskou party","purple"],900:["TĚSNĚ POD LITREM","zasypal statek zlatem","purple"],
+    1000:["TISÍCOVKA","ODPALUJE VELKÉ ŽNĚ!","legend"],2000:["MEGA ÚRODA","CELÝ STATEK SLAVÍ!","legend"]
+  };
+  const allSamples = ["sub:1","resub:12","gift:1","gift:5","gift:10","gift:25","gift:50","gift:100","donate:69","donate:500","donate:1000","donate:2000"];
+  const subSamples = ["sub:1","resub:12","gift:1","gift:5","gift:10","gift:15","gift:20","gift:25","gift:50","gift:100"];
+  const samples = params.get("set")==="subs" ? subSamples : allSamples;
+  let queue = [], playing = false, autoTimer = null, autoIndex = 0, trainTotal = 0, goalNow = 28;
+  const host = document.getElementById("alertHost"), train = document.getElementById("train"), goal = document.getElementById("goal");
+
+  function eventData(kind, value, override={}) {
+    let d;
+    if (kind === "sub") d={kind,amount:1,kicker:"NOVÝ SEDLÁK",action:"dorazil na statek!",name:"NovákCZ",subtitle:"Vítej v komunitě · první sklizeň začíná",value:"SUB",unit:"NOVÝ ČLEN",tier:"green",parts:["🌱","🌾","🐔","✨","🌱"]};
+    else if (kind === "resub") d={kind,amount:value,kicker:"VĚRNÝ FARMÁŘ",action:"se vrací na sklizeň!",name:"NovákCZ",subtitle:"Podporuje statek už "+value+" měsíců",value:String(value),unit:"MĚSÍCŮ",tier:"purple",parts:["💜","🌾","⭐","💜","🌱"]};
+    else if (kind === "gift") { const c=giftCopy[value]||giftCopy[1]; d={kind,amount:value,kicker:c[0],action:c[1],name:"Martech1",subtitle:"Daroval komunitě "+value+" subů · +"+value+" do SUB cíle",value:value+"×",unit:"GIFT SUB",tier:c[2],parts:value>=50?["👑","🌾","✨","🎁","🔥","🌾","⭐"]:["🌾","🎁","🌾","✨","🌱","🪙"]}; }
+    else { const c=donateCopy[value]||donateCopy[30]; d={kind,amount:value,kicker:c[0],action:c[1]+"!",name:"DonátorCZ",subtitle:"Podpora farmy · „Jen tak dál!“",value:Number(value).toLocaleString("cs-CZ"),unit:"KČ DONATE",tier:c[2],parts:value>=1000?["👑","💰","🌾","🔥","✨","🪙","⭐"]:(value===69?["😏","🌾","✨","😎","🌱"]:["🪙","🌾","✨","🌱","🪙"])}; }
+    return Object.assign(d,override);
+  }
+
+  function particles(parts) {
+    // randomizované rozmístění (každý alert jiný, organičtější)
+    return parts.concat(parts.slice(0,2)).map((x)=>{
+      const left=(4+Math.random()*92).toFixed(1), dx=(-110+Math.random()*220).toFixed(0), rot=(-160+Math.random()*320).toFixed(0), delay=(Math.random()*.5).toFixed(2), dur=(1.6+Math.random()*.9).toFixed(2);
+      return '<span class="particle" style="left:'+left+'%;--dx:'+dx+'px;--rot:'+rot+'deg;--delay:'+delay+'s;--dur:'+dur+'s">'+x+'</span>';
+    }).join("");
+  }
+  function cap(s,n){s=String(s||"");return s.length>n?s.slice(0,n)+"…":s;}
+  function bigBurst(strong){
+    const overlay=document.getElementById("overlay");
+    overlay.classList.add("shake"); setTimeout(()=>overlay.classList.remove("shake"), strong?1050:650);
+    const layer=document.createElement("div"); layer.className="burst";
+    const n=strong?56:26, cols=["#ffd23f","#ffb423","#7ed957","#ff8a14","#fff0a8"], emo=["🪙","🌾","✨","🌟"];
+    let h="";
+    for(let i=0;i<n;i++){
+      const left=(Math.random()*100).toFixed(1), d=(1.4+Math.random()*1.4).toFixed(2), dl=(Math.random()*.7).toFixed(2), r=((Math.random()*720-360)|0)+"deg";
+      if(strong&&Math.random()<.28){ h+='<span class="bp" style="left:'+left+'%;--d:'+d+'s;--dl:'+dl+'s;--r:'+r+';font-size:'+((16+Math.random()*16)|0)+'px">'+emo[(Math.random()*emo.length)|0]+'</span>'; }
+      else { const w=((6+Math.random()*7)|0), ht=((9+Math.random()*9)|0); h+='<span class="bp" style="left:'+left+'%;--d:'+d+'s;--dl:'+dl+'s;--r:'+r+';width:'+w+'px;height:'+ht+'px;background:'+cols[(Math.random()*cols.length)|0]+';border-radius:'+(Math.random()<.5?"50%":"1px")+'"></span>'; }
+    }
+    layer.innerHTML=h; overlay.appendChild(layer);
+    setTimeout(()=>layer.remove(), strong?3400:2600);
+  }
+
+  function render(d) {
+    const wrap=document.createElement("div"); wrap.className="alert-wrap "+d.tier;
+    wrap.innerHTML='<div class="flash"></div><div class="particles">'+particles(d.parts)+'</div><div class="farmer-wrap"><img src="../sedlak-cut.png" alt=""></div><div class="shell"><div class="kicker"></div><div class="title"><span class="who"></span> <span class="action"></span></div><div class="subtitle"></div><div class="value"><b></b><span></span></div></div>';
+    wrap.querySelector(".kicker").textContent=d.kicker; wrap.querySelector(".who").textContent=cap(d.name,18); wrap.querySelector(".action").textContent=d.action; wrap.querySelector(".subtitle").textContent=d.subtitle; wrap.querySelector(".value b").textContent=d.value; wrap.querySelector(".value span").textContent=d.unit;
+    host.appendChild(wrap); requestAnimationFrame(()=>wrap.classList.add("enter")); playSound(d);
+    if(d.tier==="legend")bigBurst(true);else if(d.tier==="purple")bigBurst(false);
+    if(d.kind==="gift") updateGiftUI(parseInt(d.value,10)||1,d.name);
+    const hold=d.tier==="legend"?8500:5000;
+    setTimeout(()=>{wrap.classList.remove("enter");wrap.classList.add("exit");setTimeout(()=>{wrap.remove();playing=false;next();},480);},hold);
+  }
+  function enqueue(d){queue.push(d);next();}
+  function next(){if(playing||!queue.length)return;playing=true;render(queue.shift());}
+
+  function updateGiftUI(n,name){
+    trainTotal+=n; if(!liveMode) goalNow=Math.min(50,goalNow+n);
+    document.getElementById("trainTotal").textContent=trainTotal+" subů"; document.getElementById("trainLast").textContent=cap(name,14)+" +"+n; document.getElementById("trainLevel").textContent="LEVEL "+Math.max(1,Math.ceil(trainTotal/10));
+    if(!liveMode){document.getElementById("goalNow").textContent=goalNow; document.getElementById("goalFill").style.width=(goalNow/50*100)+"%";}
+    document.getElementById("trainTrack").innerHTML=Array.from({length:10},(_,i)=>'<i class="'+(i<Math.min(10,Math.ceil((trainTotal%100)/10))?'on':'')+'"></i>').join("");
+    train.classList.add("visible");goal.classList.add("bump");setTimeout(()=>goal.classList.remove("bump"),300);clearTimeout(updateGiftUI.hide);updateGiftUI.hide=setTimeout(()=>train.classList.remove("visible"),8500);
+  }
+
+  let muted=false, volume=.55, audioState=null;
+  const activeClips=new Set();
+  const soundFiles={coins:"../audio/alerts/coins.wav",rooster:"../audio/alerts/rooster-bell.wav",accordion:"../audio/alerts/accordion.wav",bell:"../audio/alerts/barn-bell.wav",tractor:"../audio/alerts/tractor.wav",polka:"../audio/alerts/polka.wav",legend:"../audio/alerts/legend-harvest.wav",nice:"../audio/alerts/nice.wav"};
+  // HYBRID zvuk: u song-ready tierů zkusí TikTok override (audio/alerts/override/<key>.mp3) → jinak farm WAV → jinak syntéza.
+  const SONG_READY=["legend","polka","tractor","nice"];
+  const overrideFiles={},hasOverride={};
+  SONG_READY.forEach(k=>{const u="../audio/alerts/override/"+k+".mp3";overrideFiles[k]=u;const a=new Audio(u);a.preload="auto";a.addEventListener("canplaythrough",()=>{hasOverride[k]=true;},{once:true});a.addEventListener("error",()=>{hasOverride[k]=false;},{once:true});});
+  function audio(){
+    const AC=window.AudioContext||window.webkitAudioContext;if(!AC)return null;
+    if(!audioState){const c=new AC(),master=c.createGain();master.gain.value=volume*.42;master.connect(c.destination);audioState={c,master};}
+    if(audioState.c.state==="suspended")audioState.c.resume().catch(()=>{});
+    audioState.master.gain.setTargetAtTime(muted?0:volume*.42,audioState.c.currentTime,.02);
+    return audioState;
+  }
+  function tone(freq,delay=.0,dur=.35,gain=.09,type="sine",endFreq=0){
+    const a=audio();if(!a)return;const {c,master}=a,s=c.currentTime+delay,o=c.createOscillator(),g=c.createGain();o.type=type;o.frequency.setValueAtTime(freq,s);if(endFreq)o.frequency.exponentialRampToValueAtTime(Math.max(20,endFreq),s+dur);o.connect(g);g.connect(master);g.gain.setValueAtTime(.0001,s);g.gain.exponentialRampToValueAtTime(gain,s+.018);g.gain.exponentialRampToValueAtTime(.0001,s+dur);o.start(s);o.stop(s+dur+.03);
+  }
+  function noise(delay=.0,dur=.4,gain=.08,cutoff=1200){
+    const a=audio();if(!a)return;const {c,master}=a,s=c.currentTime+delay,len=Math.max(1,Math.floor(c.sampleRate*dur)),buf=c.createBuffer(1,len,c.sampleRate),data=buf.getChannelData(0);for(let i=0;i<len;i++)data[i]=(Math.random()*2-1)*(1-i/len);const src=c.createBufferSource(),f=c.createBiquadFilter(),g=c.createGain();src.buffer=buf;f.type="lowpass";f.frequency.value=cutoff;src.connect(f);f.connect(g);g.connect(master);g.gain.setValueAtTime(.0001,s);g.gain.exponentialRampToValueAtTime(gain,s+.015);g.gain.exponentialRampToValueAtTime(.0001,s+dur);src.start(s);src.stop(s+dur+.02);
+  }
+  function coin(){tone(1046,0,.18,.11,"sine",1568);tone(1568,.13,.32,.1,"sine",2093);}
+  function barnBell(){tone(392,0,.75,.12,"triangle");tone(784,.02,.58,.07,"sine");tone(1175,.05,.42,.035,"sine");}
+  function rooster(){[880,1175,1046,1397].forEach((f,i)=>tone(f,i*.105,.18,.06,"sawtooth",f*1.13));tone(659,.47,.26,.05,"triangle",988);}
+  function accordion(){[523,659,784,659,698,880].forEach((f,i)=>{tone(f,i*.13,.24,.055,"sawtooth");tone(f/2,i*.13,.24,.03,"triangle");});}
+  function tractor(){for(let i=0;i<7;i++)tone(72+i%2*8,i*.09,.12,.055,"sawtooth",58+i%2*5);noise(0,.65,.05,320);barnBell();}
+  function polka(){const melody=[659,784,880,784,659,523,659,784];melody.forEach((f,i)=>{tone(f,i*.11,.16,.055,i%2?"triangle":"square");if(i%2===0)tone(i%4?196:131,i*.11,.12,.04,"triangle");});}
+  function harvestHorn(){[261,329,392].forEach(f=>tone(f,0,.8,.055,"sawtooth"));[329,415,494].forEach(f=>tone(f,.48,.85,.06,"sawtooth"));tone(784,.9,.65,.05,"triangle");}
+  function thunder(){noise(.18,1.35,.15,180);tone(55,.12,1.2,.11,"sine",34);}
+  function nice(){tone(392,0,.24,.07,"square",330);tone(330,.22,.3,.07,"square",220);noise(.54,.12,.08,700);tone(880,.62,.18,.055,"sine",1046);}
+  function legend(){harvestHorn();setTimeout(()=>{coin();polka();thunder();},420);}
+  function soundProfile(d){
+    if(d.kind==="sub")return["kohout + barn bell",()=>{rooster();setTimeout(barnBell,360);}];
+    if(d.kind==="resub")return["farmářská harmonika",accordion];
+    if(d.kind==="gift"){if(d.amount>=100)return["epic harvest horn + thunder",legend];if(d.amount>=50)return["královská polka + harvest horn",()=>{polka();setTimeout(harvestHorn,420);}];if(d.amount>=20)return["traktor + stodola bell",tractor];if(d.amount>=10)return["stodola bell + mince",()=>{barnBell();setTimeout(coin,180);}];return["zlaté mince",coin];}
+    if(d.amount===69)return["NICE comedy sting",nice];if(d.amount>=1000)return["jackpot harvest + thunder",legend];if(d.amount>=500)return["farmářská polka",polka];if(d.amount>=100)return["traktor + mince",()=>{tractor();setTimeout(coin,240);}];return["mince + barn bell",()=>{coin();setTimeout(barnBell,150);}];
+  }
+  function soundKey(d){
+    if(d.kind==="sub")return"rooster";if(d.kind==="resub")return"accordion";
+    if(d.kind==="gift"){if(d.amount>=100)return"legend";if(d.amount>=50)return"polka";if(d.amount>=20)return"tractor";if(d.amount>=10)return"bell";return"coins";}
+    if(d.amount===69)return"nice";if(d.amount>=1000)return"legend";if(d.amount>=500)return"polka";if(d.amount>=100)return"tractor";return"coins";
+  }
+  function playClip(url,key,label,onFail){
+    try{
+      const clip=new Audio(url);clip.hidden=true;clip.dataset.alertSound=key;clip.volume=Math.min(1,volume*.9);clip.muted=muted;document.body.appendChild(clip);activeClips.add(clip);if(label)label.dataset.state="loading";
+      clip.addEventListener("playing",()=>{if(label)label.dataset.state="playing";},{once:true});
+      clip.addEventListener("ended",()=>{activeClips.delete(clip);clip.remove();},{once:true});
+      const started=clip.play();if(started&&started.catch)started.catch(()=>{activeClips.delete(clip);clip.remove();if(onFail)onFail();});
+    }catch(e){if(onFail)onFail();}
+  }
+  function playSound(d){
+    const [name,fallback]=soundProfile(d),key=soundKey(d),label=document.getElementById("soundNow");if(label)label.textContent="♫ "+name;if(muted)return;
+    // chain: TikTok override → farm WAV → syntéza
+    const farm=()=>playClip(soundFiles[key],key,label,()=>{if(label)label.dataset.state="fallback";try{fallback();}catch(ignore){}});
+    if(SONG_READY.indexOf(key)>=0&&hasOverride[key])playClip(overrideFiles[key],key,label,farm);else farm();
+  }
+
+  function fromKey(key){const [kind,v]=key.split(":");return eventData(kind,Number(v));}
+  window.ZurysAlerts={enqueue:(data)=>enqueue(eventData(data.kind||data.type,Number(data.value||data.count||1),data))};
+  window.addEventListener("message",e=>{if(e.data&&e.data.type==="zurys-alert")window.ZurysAlerts.enqueue(e.data);});
+
+  if(studio){
+    const picker=document.getElementById("eventPicker"),play=document.getElementById("playBtn"),auto=document.getElementById("autoBtn"),mute=document.getElementById("muteBtn"),vol=document.getElementById("volume");
+    const initial=params.get("event")||"gift:5";if(picker.querySelector('option[value="'+initial+'"]'))picker.value=initial;
+    play.addEventListener("click",()=>enqueue(fromKey(picker.value)));
+    auto.addEventListener("click",()=>{if(autoTimer){clearInterval(autoTimer);autoTimer=null;auto.classList.remove("on");auto.textContent="↻ Auto demo";return;}auto.classList.add("on");auto.textContent="■ Zastavit";enqueue(fromKey(samples[autoIndex++%samples.length]));autoTimer=setInterval(()=>enqueue(fromKey(samples[autoIndex++%samples.length])),7200);});
+    mute.addEventListener("click",()=>{muted=!muted;mute.textContent=muted?"🔇 Sound OFF":"🔊 Sound ON";mute.classList.toggle("on",!muted);activeClips.forEach(x=>x.muted=muted);audio();});
+    vol.addEventListener("input",()=>{volume=Number(vol.value)/100;activeClips.forEach(x=>x.volume=Math.min(1,volume*.9));audio();});
+    document.addEventListener("pointerdown",()=>audio(),{once:true});
+    setTimeout(()=>enqueue(fromKey(initial)),500);
+  } else if(params.has("demo")) {
+    enqueue(fromKey(samples[autoIndex++%samples.length]));setInterval(()=>enqueue(fromKey(samples[autoIndex++%samples.length])),7200);
+  } else {
+    // LIVE režim (pro OBS): JEN alerty — žádný trvalý SUB cíl ani gift train (na přání). Source je průhledný dokud nevyskočí alert.
+    // Baseline první poll (zapamatuje poslední id, staré eventy nehlásí), pak jen id > since. Jen ČTE, žádný zápis.
+    goal.style.display="none"; train.style.display="none";
+    let lastId=null;
+    const pollLive=()=>{
+      const url=lastId==null?"/api/recent-events":"/api/recent-events?since="+lastId;
+      fetch(url,{cache:"no-store"}).then(r=>r.json()).then(d=>{
+        if(lastId==null){lastId=d.latest_id;return;}
+        (d.events||[]).forEach(e=>{
+          const name=e.username||"Anonym";
+          if(e.kind==="gift") enqueue(eventData("gift",e.count||1,{name}));
+          else if(e.kind==="resub") enqueue(eventData("resub",1,{name,subtitle:"Obnovil podporu farmy 🌾",value:"RE",unit:"RESUB",parts:["💜","🌾","⭐","💜","🌱"]}));
+          else enqueue(eventData("sub",1,{name}));
+        });
+        lastId=d.latest_id;
+      }).catch(()=>{});
+    };
+    pollLive();setInterval(pollLive,2000);
+  }
+})();
+</script>
+</body>
+</html>

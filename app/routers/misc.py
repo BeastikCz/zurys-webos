@@ -14,7 +14,7 @@ from ..deps import (db_dep, require_user, add_points, try_debit, record_audit, c
                     user_rank, tier_for_rank, self_excluded_until, level_info)
 from ..models import (RedeemIn, TradeUrlIn, GiftIn, QuestClaimIn, CosmeticIn, FairSeedIn, SelfExcludeIn,
                       ProfileBioIn, WagerLimitIn, ModApplyIn, BattlePassClaimIn, LoginCalClaimIn,
-                      GardenPlantIn, GardenHarvestIn, DecorBuyIn, LevelPassClaimIn)
+                      GardenPlantIn, GardenPlantAllIn, GardenHarvestIn, DecorBuyIn, LevelPassClaimIn)
 from ..services import product_public, role_allows
 from ..ratelimit import rate_limit
 from ..security import secure_weighted_choice
@@ -288,6 +288,10 @@ def public_profile(nick: str = Query("", max_length=64),
         showcase.append({"name": r["name"], "image_url": r["image_url"], "rarity": r["rarity"],
                          "type": r["type"], "created_at": r["created_at"], "won": False})
     showcase = showcase[:12]
+    from .. import garden as _g
+    _decor_owned = {r["decor_key"] for r in conn.execute("SELECT decor_key FROM garden_decor WHERE user_id = ?", (uid,))}
+    garden_decor = [d["icon"] for d in _g.DECOR if d["key"] in _decor_owned]
+    garden_plots = _g.N_PLOTS + sum(1 for k in _g.PLOT_DECORS if k in _decor_owned)
     return {
         "id": uid,
         "username": u["username"], "avatar_url": u["avatar_url"] or "", "role": u["role"],
@@ -301,6 +305,7 @@ def public_profile(nick: str = Query("", max_length=64),
         "garden_gained_total": garden_gained,
         "garden_spent_total": garden_spent,
         "garden_net_total": garden_net,
+        "garden_decor": garden_decor, "garden_plots": garden_plots,
         "level": lvl["level"], "level_pct": lvl["pct"], "level_into": lvl["into"], "level_span": lvl["span"],
         "games_played": played, "games_won": won,
         "win_rate": round(won / played, 3) if played else 0,
@@ -325,6 +330,30 @@ def sub_goal_status(conn: sqlite3.Connection = Depends(db_dep)):
     """Stav komunitního SUB cíle (veřejné – pro lištu na webu)."""
     from ..subgoal import status
     return status(conn)
+
+
+@router.get("/top-gifters")
+def top_gifters_status(conn: sqlite3.Connection = Depends(db_dep)):
+    """Top gifteři aktuální session (veřejné – pro stream overlay spotlight)."""
+    from ..subgoal import top_gifters
+    g = top_gifters(conn, 5)
+    return {"gifters": g, "count": len(g)}
+
+
+@router.get("/recent-gifts")
+def recent_gifts_status(since: int = None, conn: sqlite3.Connection = Depends(db_dep)):
+    """Nové gift sub eventy s id > since (pro jednorázový gift-alert overlay).
+    Bez since → jen baseline latest_id (overlay si ustaví výchozí bod, nehlásí staré gifty)."""
+    from ..subgoal import recent_gifts
+    return recent_gifts(conn, since)
+
+
+@router.get("/recent-events")
+def recent_events_status(since: int = None, conn: sqlite3.Connection = Depends(db_dep)):
+    """Nové sub-typ eventy (new/resub/gift) s id > since (pro sjednocený alert overlay alerts.html).
+    Bez since → baseline latest_id. kind: 'gift'|'resub'|'new'."""
+    from ..subgoal import recent_events
+    return recent_events(conn, since)
 
 
 @router.get("/happy-hour")
@@ -556,9 +585,13 @@ def egg_claim(user: sqlite3.Row = Depends(require_user),
     """Easter egg „tajný klas": 1×/DEN, náhodná denní odměna (reset každý den). Reason s datem =
     denní ledger. Luck bonus → body ANO, XP NE (level = úsilí/podpora, ne náhoda)."""
     from ..db import local_date
-    reason = f"Tajný klas 🥚 {local_date()}"
-    if conn.execute("SELECT 1 FROM points_log WHERE user_id = ? AND reason = ? LIMIT 1",
-                    (user["id"], reason)).fetchone():
+    day = local_date()
+    reason = f"Tajný klas 🥚 {day}"
+    # Atomický zámek: odměnu připíše JEN request, který reálně vložil dnešní claim řádek (rowcount==1).
+    # Bez toho dva souběžné /egg/claim oba projdou SELECTem (řádek ještě není) a oba připíšou (double-pay).
+    if conn.execute("INSERT OR IGNORE INTO claim_locks (user_id, claim_key, created_at) VALUES (?, ?, ?)",
+                    (user["id"], f"egg:{day}", now_iso())).rowcount == 0:
+        conn.commit()
         return {"ok": False, "already": True}
     reward = egg_reward_today()
     add_points(conn, user["id"], reward, reason, xp=False)
@@ -706,6 +739,14 @@ def redeem(data: RedeemIn, request: Request,
         raise HTTPException(status_code=400, detail="Platnost tohoto kódu už vypršela.")
     if row["uses_count"] >= row["max_uses"]:
         raise HTTPException(status_code=400, detail="Tento kód je už vyčerpaný.")
+    # Atomický claim místa: increment PŘED dalšími operacemi, podmíněný na nepřekročení limitu.
+    # Chrání před souběžným dvojím uplatněním stejného single-use kódu dvěma různými uživateli.
+    cur_claim = conn.execute(
+        "UPDATE redeem_codes SET uses_count = uses_count + 1 WHERE id = ? AND uses_count < max_uses",
+        (row["id"],))
+    if cur_claim.rowcount == 0:
+        conn.rollback()
+        raise HTTPException(status_code=400, detail="Tento kód je už vyčerpaný.")
     already = conn.execute(
         "SELECT 1 FROM redeem_uses WHERE code_id = ? AND user_id = ?",
         (row["id"], user["id"]),
@@ -727,7 +768,7 @@ def redeem(data: RedeemIn, request: Request,
     product_payload = None
     parts = []
 
-    if row["points_value"] and row["points_value"] != 0:
+    if row["points_value"] and row["points_value"] > 0:
         points_added = row["points_value"]
         add_points(conn, user["id"], points_added, f"Redeem kód {row['code']}")
         parts.append(f"+{points_added} b")
@@ -745,14 +786,16 @@ def redeem(data: RedeemIn, request: Request,
                 "VALUES (?, ?, ?, 0, ?, ?)",
                 (user["id"], product["id"], product["name"], ORDER_PENDING, now_iso()),
             )
-            if product["stock"] != UNLIMITED_STOCK and product["stock"] > 0:
-                conn.execute("UPDATE products SET stock = stock - 1 WHERE id = ?", (product["id"],))
+            if product["stock"] != UNLIMITED_STOCK:
+                cur_stock = conn.execute(
+                    "UPDATE products SET stock = stock - 1 WHERE id = ? AND stock > 0",
+                    (product["id"],))
+                if cur_stock.rowcount == 0:
+                    conn.rollback()
+                    raise HTTPException(status_code=400, detail="Tato odměna je vyprodaná. 😔")
             product_payload = product_public(product)
             parts.append(f"odměna „{product['name']}“")
 
-    conn.execute(
-        "UPDATE redeem_codes SET uses_count = uses_count + 1 WHERE id = ?", (row["id"],)
-    )
     conn.execute(
         "INSERT INTO redeem_uses (code_id, user_id, created_at) VALUES (?, ?, ?)",
         (row["id"], user["id"], now_iso()),
@@ -993,12 +1036,10 @@ def gift_points(data: GiftIn, request: Request,
         "SELECT * FROM users WHERE LOWER(kick_username) = ? OR LOWER(username) = ? "
         "ORDER BY (kick_username IS NOT NULL) DESC LIMIT 1", (key, key),
     ).fetchone()
-    if not rcp:
-        raise HTTPException(status_code=400, detail=f"Uživatel {data.username} neexistuje.")
+    if not rcp or rcp["banned"]:
+        raise HTTPException(status_code=400, detail="Příjemce nebyl nalezen nebo ho nelze obdarovat.")
     if rcp["id"] == user["id"]:
         raise HTTPException(status_code=400, detail="Sobě poslat sedláky nemůžeš. 😄")
-    if rcp["banned"]:
-        raise HTTPException(status_code=400, detail="Tomuto účtu poslat nelze (je zabanovaný).")
     # anti-funnel: nový účet nesmí hned posílat dary. Klasický trik je založit alt na čisté
     # IP/zařízení a poslat body na hlavní účet DŘÍV, než se stihne propojit otisk – proto
     # darování pustíme až po pár dnech od založení (admin výjimka). Doplňuje _shared_identity níž.
@@ -1117,9 +1158,22 @@ def daily_claim(user: sqlite3.Row = Depends(require_user),
     idx = streak % 7
     mult = tier_for_rank(user_rank(conn, user["points"], user["username"]))[1]
     reward = DAILY_LADDER[idx] * mult
+    # Atomický claim: přepni last_daily JEN když má pořád hodnotu, kterou jsme načetli (optimistic lock).
+    # Při souběhu (16 requestů) přepne řádek jen první z nich – zbytek má WHERE last_daily=prev nesplněno
+    # (rowcount==0) → odmítnut, takže odměnu i streak připíše právě jeden request, ne všechny.
+    prev = user["last_daily"]
+    if prev is None:
+        claimed = conn.execute(
+            "UPDATE users SET last_daily = ?, daily_streak = ? WHERE id = ? AND last_daily IS NULL",
+            (now.isoformat(), streak + 1, user["id"]))
+    else:
+        claimed = conn.execute(
+            "UPDATE users SET last_daily = ?, daily_streak = ? WHERE id = ? AND last_daily = ?",
+            (now.isoformat(), streak + 1, user["id"], prev))
+    if claimed.rowcount == 0:
+        conn.commit()
+        raise HTTPException(status_code=400, detail="Denní bonus už sis dnes vyzvedl. ⏳")
     add_points(conn, user["id"], reward, f"Denní streak – den {idx + 1} (×{mult} liga)")
-    conn.execute("UPDATE users SET last_daily = ?, daily_streak = ? WHERE id = ?",
-                 (now.isoformat(), streak + 1, user["id"]))
     from ..logincal import mark as _mark_cal
     _mark_cal(conn, user["id"])     # login kalendář: označ dnešní den jako aktivní
     conn.commit()
@@ -1192,6 +1246,27 @@ def garden_harvest(data: GardenHarvestIn, user: sqlite3.Row = Depends(require_us
     return r
 
 
+@router.post("/garden/harvest-all")
+def garden_harvest_all(user: sqlite3.Row = Depends(require_user),
+                       conn: sqlite3.Connection = Depends(db_dep)):
+    """Sklidí VŠECHNY dozrálé záhony naráz."""
+    _garden_guard()
+    from .. import garden
+    return garden.harvest_all(conn, user)
+
+
+@router.post("/garden/plant-all")
+def garden_plant_all(data: GardenPlantAllIn, user: sqlite3.Row = Depends(require_user),
+                     conn: sqlite3.Connection = Depends(db_dep)):
+    """Zasadí plodinu na VŠECHNY prázdné záhony."""
+    _garden_guard()
+    from .. import garden
+    r = garden.plant_all(conn, user, data.crop)
+    if not r.get("ok"):
+        raise HTTPException(status_code=400, detail=r.get("error", "Zasadit se to teď nepodařilo."))
+    return r
+
+
 @router.post("/garden/rescue")
 def garden_rescue(data: GardenHarvestIn, user: sqlite3.Row = Depends(require_user),
                   conn: sqlite3.Connection = Depends(db_dep)):
@@ -1211,6 +1286,21 @@ def garden_decor(user: sqlite3.Row = Depends(require_user),
     _garden_guard()
     from .. import garden
     return garden.decor_status(conn, user)
+
+
+_garden_lb_cache = {"at": 0.0, "data": None}
+
+
+@router.get("/garden/leaderboard")
+def garden_leaderboard(conn: sqlite3.Connection = Depends(db_dep)):
+    """Top zahradníci dle sklizených sedláků (cache 60 s – scan points_log je drahý)."""
+    import time
+    if _garden_lb_cache["data"] is not None and time.time() - _garden_lb_cache["at"] < 60:
+        return _garden_lb_cache["data"]
+    from .. import garden
+    data = garden.leaderboard(conn, 10)
+    _garden_lb_cache.update(at=time.time(), data=data)
+    return data
 
 
 @router.post("/garden/decor/buy")

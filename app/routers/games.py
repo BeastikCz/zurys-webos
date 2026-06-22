@@ -359,6 +359,8 @@ def create_game(data: GameCreateIn, user: sqlite3.Row = Depends(require_user),
     ).fetchone()["c"]
     if openc >= 3:
         raise HTTPException(status_code=400, detail="Máš příliš mnoho otevřených her (nejvýše 3). Některou prosím zruš.")
+    if data.stake < DUEL_MIN:                        # min PvP sázka (sdíleno s duely) – anti quest-abuse (1-sedlák piškvorky)
+        raise HTTPException(status_code=400, detail=f"Minimální sázka je {DUEL_MIN} sedláků.")
     # atomický escrow – nejde do mínusu ani při souběhu
     check_wager_limit(conn, user, data.stake)        # responsible gaming: denní limit sázek
     if not try_debit(conn, user["id"], data.stake, "Sázka – piškvorky (vklad)"):
@@ -502,7 +504,7 @@ def claim_timeout(gid: int, user: sqlite3.Row = Depends(require_user),
 #  DUELY 1v1 o bank – coinflip / kostky (okamžité vyhodnocení při přijetí výzvy)
 # ============================================================
 DUEL_TYPES = ("coinflip", "dice")
-DUEL_MIN = 10
+DUEL_MIN = 50           # min PvP sázka (duely I piškvorky) – anti quest-abuse na pvp_won quest
 DUEL_MAX = 500_000
 DUEL_OPEN_TTL_S = 30 * 60        # otevřená výzva bez soupeře expiruje za 30 min (refund)
 _DUEL_LABEL = {"coinflip": "Coinflip duel", "dice": "Kostky duel", "rps": "Kámen-nůžky-papír"}

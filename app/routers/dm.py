@@ -10,7 +10,7 @@ import sqlite3
 from fastapi import APIRouter, Depends, HTTPException
 
 from ..db import now_iso
-from ..deps import db_dep, require_user, require_staff
+from ..deps import db_dep, require_user, require_broadcaster
 from ..models import DmIn
 
 router = APIRouter(prefix="/dm", tags=["dm"])
@@ -42,7 +42,7 @@ def my_thread(user: sqlite3.Row = Depends(require_user), conn: sqlite3.Connectio
 @router.get("/unread")
 def unread(user: sqlite3.Row = Depends(require_user), conn: sqlite3.Connection = Depends(db_dep)):
     """Počet nepřečtených PM (pro badge poll). Levné – jen COUNT."""
-    if user["role"] in ("admin", "broadcaster", "mod"):
+    if user["role"] in ("admin", "broadcaster"):                # mod NEMÁ přístup k PM
         c = conn.execute("SELECT COUNT(*) c FROM dm_messages WHERE from_id = user_id AND seen = 0").fetchone()["c"]
     else:
         c = conn.execute("SELECT COUNT(*) c FROM dm_messages WHERE user_id = ? AND from_id != user_id AND seen = 0",
@@ -67,7 +67,7 @@ def reply(data: DmIn, user: sqlite3.Row = Depends(require_user), conn: sqlite3.C
 
 # ---------------- staff strana ----------------
 @router.post("/send/{uid}")
-def staff_send(uid: int, data: DmIn, staff: sqlite3.Row = Depends(require_staff),
+def staff_send(uid: int, data: DmIn, staff: sqlite3.Row = Depends(require_broadcaster),
                conn: sqlite3.Connection = Depends(db_dep)):
     if not conn.execute("SELECT 1 FROM users WHERE id = ?", (uid,)).fetchone():
         raise HTTPException(status_code=404, detail="Uživatel nenalezen.")
@@ -81,7 +81,7 @@ def staff_send(uid: int, data: DmIn, staff: sqlite3.Row = Depends(require_staff)
 
 
 @router.get("/admin/threads")
-def staff_threads(staff: sqlite3.Row = Depends(require_staff), conn: sqlite3.Connection = Depends(db_dep)):
+def staff_threads(staff: sqlite3.Row = Depends(require_broadcaster), conn: sqlite3.Connection = Depends(db_dep)):
     rows = conn.execute(
         "SELECT m.user_id, u.username, u.avatar_url, u.role, MAX(m.id) AS last_id, "
         "       SUM(CASE WHEN m.from_id = m.user_id AND m.seen = 0 THEN 1 ELSE 0 END) AS unread "
@@ -97,7 +97,7 @@ def staff_threads(staff: sqlite3.Row = Depends(require_staff), conn: sqlite3.Con
 
 
 @router.get("/admin/thread/{uid}")
-def staff_thread(uid: int, staff: sqlite3.Row = Depends(require_staff), conn: sqlite3.Connection = Depends(db_dep)):
+def staff_thread(uid: int, staff: sqlite3.Row = Depends(require_broadcaster), conn: sqlite3.Connection = Depends(db_dep)):
     rows = conn.execute("SELECT * FROM dm_messages WHERE user_id = ? ORDER BY id", (uid,)).fetchall()
     conn.execute("UPDATE dm_messages SET seen = 1 WHERE user_id = ? AND from_id = user_id AND seen = 0", (uid,))
     conn.commit()
