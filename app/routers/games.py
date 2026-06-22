@@ -274,8 +274,15 @@ def _get_game(conn, gid):
     return g
 
 
-def _finish(conn, g, winner: int):
-    """Ukončí hru a vyplatí. winner: 0=remíza, 1=p1, 2=p2."""
+def _finish(conn, g, winner: int) -> bool:
+    """Ukončí hru a vyplatí. winner: 0=remíza, 1=p1, 2=p2. Vrací True když reálně dohrál tento request.
+
+    Atomicky přepne active→finished a vyplácí JEN ten request, který přechod reálně provedl (rowcount==1).
+    Bez toho dva souběžné claim-timeout (nebo timeout + vítězný tah) projdou stavovou kontrolou oba a banka
+    se vyplatí víckrát (200 → 400). Po prvním přepnutí má každý další WHERE status='active' nesplněno."""
+    if conn.execute("UPDATE games SET status='finished', winner=?, updated_at=? WHERE id=? AND status='active'",
+                    (winner, now_iso(), g["id"])).rowcount == 0:
+        return False     # hru už dohrál někdo jiný – nevyplácej znovu
     stake = g["stake"]
     if winner == 0:  # remíza → vrať oběma vklad
         add_points(conn, g["p1_id"], stake, f"Remíza v piškvorkách #{g['id']}")
@@ -291,8 +298,7 @@ def _finish(conn, g, winner: int):
         note_game_net(conn, win_uid, prize - stake)      # denní strop grindu (net zisk)
         if lose_uid:
             note_game_net(conn, lose_uid, -stake)
-    conn.execute("UPDATE games SET status='finished', winner=?, updated_at=? WHERE id=?",
-                 (winner, now_iso(), g["id"]))
+    return True
 
 
 def _resolve_timeouts(conn, g):
@@ -463,10 +469,12 @@ def cancel_game(gid: int, user: sqlite3.Row = Depends(require_user),
     g = _get_game(conn, gid)
     if g["p1_id"] != user["id"]:
         raise HTTPException(status_code=403, detail="Zrušit hru může jen její zakladatel.")
-    if g["status"] != "open":
+    # Atomicky přepni open→cancelled; refund dostane JEN request, který přepnul (rowcount==1).
+    # Bez toho N souběžných /cancel vrátí vklad N×.
+    if conn.execute("UPDATE games SET status='cancelled', updated_at=? WHERE id=? AND status='open'",
+                    (now_iso(), gid)).rowcount == 0:
         raise HTTPException(status_code=400, detail="Tuhle hru už nejde zrušit.")
     add_points(conn, g["p1_id"], g["stake"], f"Zrušená hra #{gid} – vrácení vkladu")
-    conn.execute("UPDATE games SET status='cancelled', updated_at=? WHERE id=?", (now_iso(), gid))
     conn.commit()
     return {"ok": True}
 
@@ -646,10 +654,11 @@ def duel_cancel(did: int, user: sqlite3.Row = Depends(require_user),
         raise HTTPException(status_code=404, detail="Duel nenalezen.")
     if d["p1_id"] != user["id"]:
         raise HTTPException(status_code=403, detail="Zrušit výzvu může jen ten, kdo ji vytvořil.")
-    if d["status"] != "open":
+    # Atomicky open→cancelled; refund jen request, který přepnul (rowcount==1) – jinak N× vrácení vkladu.
+    if conn.execute("UPDATE duels SET status='cancelled', updated_at=? WHERE id=? AND status='open'",
+                    (now_iso(), did)).rowcount == 0:
         raise HTTPException(status_code=400, detail="Tuhle výzvu už nejde zrušit.")
     add_points(conn, d["p1_id"], d["stake"], f"Zrušená výzva (duel #{did}) – vrácení vkladu")
-    conn.execute("UPDATE duels SET status='cancelled', updated_at=? WHERE id=?", (now_iso(), did))
     conn.commit()
     return {"ok": True}
 

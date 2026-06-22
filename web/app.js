@@ -2873,7 +2873,7 @@ function coinIconCardHTML() {
       <button type="button" class="btn btn-sm" data-action="coin-upload">📁 Nahrát ikonu z PC</button>
       <span id="coinInfo" class="faint" style="font-size:12px"></span>
     </div>
-    <input type="file" id="coinFile" accept="image/png,image/jpeg,image/webp,image/gif" style="display:none" onchange="uploadCoinIcon()">
+    <input type="file" id="coinFile" accept="image/png,image/jpeg,image/webp,image/gif" style="display:none">
   </div>`;
 }
 function coinUploadClick() { const f = $("#coinFile"); if (f) f.click(); }
@@ -3406,11 +3406,11 @@ function productForm(p) {
           <button type="button" class="btn btn-sm" data-action="upload-image" title="Nahrát obrázek z počítače" style="white-space:nowrap">📁 Z PC</button>
           <button type="button" class="btn btn-sm" data-action="skin-picker" title="Vyhledat CS2 skin z katalogu (s náhledy)" style="white-space:nowrap">🔍 Najít skin</button>
         </div>
-        <input type="file" id="pf_file" accept="image/png,image/jpeg,image/webp,image/gif" style="display:none" onchange="uploadImageFile()">
+        <input type="file" id="pf_file" accept="image/png,image/jpeg,image/webp,image/gif" style="display:none">
         <div id="pf_skininfo" class="faint" style="font-size:11.5px;margin-top:6px"></div>
         <div id="skinPicker" class="skin-picker" style="display:none">
           <div style="display:flex;gap:8px">
-            <input class="input" id="skinQ" placeholder="napiš skin: asiimov, butterfly, dragon lore…" autocomplete="off" oninput="debouncedSkinSearch()" onkeydown="if(event.key==='Enter'){event.preventDefault();searchSkins();}" style="flex:1">
+            <input class="input" id="skinQ" placeholder="napiš skin: asiimov, butterfly, dragon lore…" autocomplete="off" style="flex:1">
             <button type="button" class="btn btn-sm btn-primary" data-action="skin-search">Hledat</button>
           </div>
           <div id="skinResults" class="skin-results"></div>
@@ -4007,7 +4007,7 @@ async function loadMinesBans() {
       <div class="section-title" style="margin:0 0 4px">🚫 Mines — zákaz hraní</div>
       <p class="muted" style="font-size:12.5px;margin:0 0 10px">Zabanovaný nemůže spustit Mines (dostane 403). Zbytek webu — shop, ostatní hry, predikce — mu funguje dál.</p>
       <div class="toolbar" style="margin-bottom:10px">
-        <input id="minesBanNick" class="input input-sm" placeholder="Kick nick" style="max-width:200px" onkeydown="if(event.key==='Enter')this.nextElementSibling.click()">
+        <input id="minesBanNick" class="input input-sm" placeholder="Kick nick" style="max-width:200px">
         <button class="btn btn-danger btn-sm" data-action="mines-ban-add">🚫 Zabanovat na Mines</button>
       </div>
       <div class="lb-list">${rows}</div>
@@ -6410,5 +6410,24 @@ function startHeartbeat() {
   setTimeout(activityHeartbeat, 8000);              // první po 8 s
 }
 document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") activityHeartbeat(); });
+
+/* Delegované listenery místo inline on*= atributů v innerHTML → SPA nemá žádný inline JS,
+   takže CSP script-src smí být 'self' (tvrdší obrana proti XSS). Delegace na document funguje
+   i pro prvky vykreslené později (upload coin/profil obrázku, hledání skinů, ban nicku v Mines). */
+document.addEventListener("change", (e) => {
+  const id = e.target && e.target.id;
+  if (id === "coinFile") uploadCoinIcon();
+  else if (id === "pf_file") uploadImageFile();
+});
+document.addEventListener("input", (e) => {
+  if (e.target && e.target.id === "skinQ") debouncedSkinSearch();
+});
+document.addEventListener("keydown", (e) => {
+  if (e.key !== "Enter") return;
+  const t = e.target;
+  if (!t) return;
+  if (t.id === "skinQ") { e.preventDefault(); searchSkins(); }
+  else if (t.id === "minesBanNick" && t.nextElementSibling) t.nextElementSibling.click();
+});
 
 init().then(startHeartbeat);

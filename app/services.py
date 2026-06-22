@@ -141,6 +141,19 @@ def role_allows(user: Optional[sqlite3.Row], product: sqlite3.Row) -> bool:
     return True
 
 
+def _aggregate_items(items: List[Tuple[int, int]]) -> List[Tuple[int, int]]:
+    """Sloučí stejný product_id (duplicitní řádek v košíku) do jednoho (pid, suma_qty); zachová pořadí.
+    Bez toho duplicitní položka obejde kontrolu skladu i limit tomboly – každý řádek se totiž validuje
+    proti stejnému (neaktualizovanému) skladu zvlášť, takže `2× sklad-1` projde a sklad spadne na -1."""
+    order: List[int] = []
+    agg: dict = {}
+    for pid, qty in items:
+        if pid not in agg:
+            order.append(pid)
+        agg[pid] = agg.get(pid, 0) + qty
+    return [(pid, agg[pid]) for pid in order]
+
+
 def validate_items(conn: sqlite3.Connection, user: sqlite3.Row,
                    items: List[Tuple[int, int]]) -> Tuple[int, Optional[str]]:
     """
@@ -149,7 +162,7 @@ def validate_items(conn: sqlite3.Connection, user: sqlite3.Row,
     """
     total = 0
     disc = shop_discount_pct(conn)
-    for product_id, qty in items:
+    for product_id, qty in _aggregate_items(items):
         if qty < 1:
             return 0, "Neplatné množství."
         p = conn.execute("SELECT * FROM products WHERE id = ?", (product_id,)).fetchone()
@@ -198,9 +211,18 @@ def apply_purchase(conn: sqlite3.Connection, user: sqlite3.Row,
     ts = now_iso()
     total = 0
     disc = shop_discount_pct(conn)
-    for product_id, qty in items:
+    for product_id, qty in _aggregate_items(items):
         p = conn.execute("SELECT * FROM products WHERE id = ?", (product_id,)).fetchone()
         unit = disc_unit(p["cost_points"], disc)
+        # Atomický odpočet skladu: sníží JEN když je pořád dost kusů (stock >= qty). Při souběhu dvou
+        # nákupů posledního kusu uspěje právě jeden – druhý má rowcount==0 → rollback (žádný přeprodej
+        # do mínusu). Validace skladu výš je jen rychlá zpětná vazba; tohle je skutečná pojistka.
+        if p["stock"] != UNLIMITED_STOCK:
+            if conn.execute("UPDATE products SET stock = stock - ? WHERE id = ? AND stock >= ?",
+                            (qty, product_id, qty)).rowcount == 0:
+                conn.rollback()
+                raise HTTPException(status_code=400,
+                                    detail=f"Odměna „{p['name']}“ se mezitím vyprodala. Zkus to prosím znovu.")
         for _ in range(qty):
             cur = conn.execute(
                 "INSERT INTO orders (user_id, product_id, product_name, points_spent, status, created_at) "
@@ -213,8 +235,6 @@ def apply_purchase(conn: sqlite3.Connection, user: sqlite3.Row,
                     "INSERT INTO raffle_entries (product_id, user_id, created_at) VALUES (?, ?, ?)",
                     (product_id, user["id"], ts),
                 )
-        if p["stock"] != UNLIMITED_STOCK:
-            conn.execute("UPDATE products SET stock = stock - ? WHERE id = ?", (qty, product_id))
         total += unit * qty
     # atomický odečet – když zůstatek mezitím nestačí (souběh), vrať vše zpět
     if not try_debit(conn, user["id"], total, f"Nákup odměn ({len(order_ids)} ks)"):

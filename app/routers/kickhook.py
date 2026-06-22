@@ -6,17 +6,31 @@ Dedup přes Kick-Event-Message-Id (Kick retryuje).
 """
 import json
 import time
-from collections import deque
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, BackgroundTasks, Request, Response
 
-from ..db import get_conn
+from ..db import get_conn, now_iso
 from .. import kickevents, kickbot, alerts
 
 router = APIRouter(tags=["kick-webhook"])
 
-_seen = deque(maxlen=1000)      # idempotence – ID zpracovaných zpráv
-_seen_set = set()
+# Idempotence webhooku je PERZISTENTNÍ v tabulce webhook_seen (přežije restart/deploy) – na rozdíl
+# od dřívější paměťové dedup, kterou restart vynuloval a Kickův replay tak přičetl body znovu.
+PRUNE_EVERY = 2000        # po kolika zpracováních zkusit úklid starých ID
+SEEN_TTL_DAYS = 3         # ID se drží 3 dny (Kick retryuje v řádu minut) → pak se smaže
+_since_prune = 0
+
+
+def _maybe_prune(conn) -> None:
+    """Občas (každých PRUNE_EVERY zpracování) smaž ID webhooků starší než SEEN_TTL_DAYS, ať tabulka neroste."""
+    global _since_prune
+    _since_prune += 1
+    if _since_prune < PRUNE_EVERY:
+        return
+    _since_prune = 0
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=SEEN_TTL_DAYS)).isoformat()
+    conn.execute("DELETE FROM webhook_seen WHERE created_at < ?", (cutoff,))
 
 
 def _send_command_reply(text: str) -> None:
@@ -44,29 +58,30 @@ async def kick_webhook(request: Request, background: BackgroundTasks):
     if not kickevents.verify(msg_id, ts, body, sig):
         return Response(status_code=403)
 
-    # 2) dedup (Kick posílá retry až 3×)
-    if msg_id and msg_id in _seen_set:
-        return Response(status_code=200)
-    if msg_id:
-        if len(_seen) >= _seen.maxlen:
-            _seen_set.discard(_seen[0])
-        _seen.append(msg_id)
-        _seen_set.add(msg_id)
-
-    # 3) zpracování – chyba NESMÍ vrátit 5xx (jinak Kick event odhlásí)
+    # 2) parse payload – chyba NESMÍ vrátit 5xx (jinak Kick event odhlásí)
     try:
         payload = json.loads(body.decode("utf-8")) if body else {}
     except (ValueError, UnicodeDecodeError):
         payload = {}
-    # Zpracování s RETRY na přechodný „database is locked" (1-writer SQLite, krátká
-    # contention pod zátěží). Každý pokus = čerstvý conn; neúspěšný commit se rollbackne
-    # (nic nezapsáno) → retry je bezpečný, žádné dvojí připsání.
-    result, last_exc = None, None
+
+    # 3) dedup + zpracování ATOMICKY v jedné transakci: claim message_id i připsání bodů se commitnou
+    # SPOLEČNĚ. Když zpracování spadne, rollback vrátí i claim → Kickův retry to zkusí znovu (žádný
+    # ztracený event). Duplikát/replay (ID už v tabulce, i po restartu) se přeskočí bez dvojího připsání.
+    # RETRY na přechodný „database is locked" (1-writer SQLite); čerstvý conn = bezpečný rollback.
+    result, last_exc, duplicate = None, None, False
     for attempt in range(3):
         try:
             conn = get_conn()
             try:
+                if msg_id and conn.execute(
+                    "INSERT OR IGNORE INTO webhook_seen (message_id, created_at) VALUES (?, ?)",
+                    (msg_id, now_iso()),
+                ).rowcount == 0:
+                    conn.commit()
+                    duplicate = True
+                    break
                 result = kickevents.handle_event(conn, etype, payload)
+                _maybe_prune(conn)
                 conn.commit()
             finally:
                 conn.close()
@@ -79,6 +94,8 @@ async def kick_webhook(request: Request, background: BackgroundTasks):
                 continue
             break
 
+    if duplicate:
+        return Response(status_code=200)        # už zpracováno (retry/replay) – nepřičítat znovu
     if last_exc is None:
         if etype and etype != "chat.message.sent":   # diagnostika: sub/resub/gift/follow eventy
             print(f"[kick-webhook] event {etype} -> {result}")

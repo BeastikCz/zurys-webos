@@ -331,18 +331,29 @@ _SECURITY_HEADERS = {
 }
 if _PROD:
     _SECURITY_HEADERS["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
-    _SECURITY_HEADERS["Content-Security-Policy"] = (
+
+
+def _csp(script_src: str) -> str:
+    return (
         "default-src 'self'; "
         "base-uri 'self'; "
         "object-src 'none'; "
         "frame-ancestors 'self'; "
         "img-src 'self' data: https:; "
         "style-src 'self' 'unsafe-inline'; "
-        "script-src 'self' 'unsafe-inline'; "
+        f"script-src {script_src}; "
         "connect-src 'self'; "
         "form-action 'self'; "
         "upgrade-insecure-requests"
     )
+
+
+# CSP se nastavuje per-request (viz security_headers). Hlavní SPA běží STRICT: script-src 'self',
+# tj. ŽÁDNÝ inline JS (app.js nemá inline on*= ani <script> bloky) → tvrdší obrana proti XSS
+# z uživatelského obsahu. Overlaye (/overlay/*) a údržbová stránka mají vlastní inline <script>,
+# pro ně držíme RELAXED ('unsafe-inline'). style-src 'unsafe-inline' zůstává všude (inline styly v UI).
+_CSP_STRICT = _csp("'self'")
+_CSP_RELAXED = _csp("'self' 'unsafe-inline'")
 
 
 _UNSAFE_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
@@ -397,6 +408,13 @@ async def security_headers(request: Request, call_next):
     response = await call_next(request)
     for k, v in _SECURITY_HEADERS.items():
         response.headers.setdefault(k, v)
+    if _PROD:
+        # Overlaye + údržbová stránka mají inline <script> → RELAXED CSP; zbytek (hlavně SPA) STRICT.
+        # Údržbovou stránku poznáme podle X-Maintenance (servíruje se i na "/"), overlaye podle cesty.
+        relaxed = (response.headers.get("X-Maintenance") == "1"
+                   or request.url.path.startswith("/overlay/")
+                   or request.url.path == "/maintenance.html")
+        response.headers.setdefault("Content-Security-Policy", _CSP_RELAXED if relaxed else _CSP_STRICT)
     # SPA shell (index.html na "/") vždy revalidovat → ?v= busting se projeví hned a
     # uživatelům nezůstane viset stará verze app.js/styles.css v cache (bez toho prohlížeč
     # heuristicky cachoval index.html a držel starý kód i po deployi). Assety s ?v= se cacheovat smí.

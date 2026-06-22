@@ -273,6 +273,15 @@ def resolve_prediction(pid: int, data: PredictionResolveIn, request: Request,
     if not opt:
         raise HTTPException(status_code=400, detail="Neplatná vítězná možnost.")
 
+    # Atomicky přepni do 'resolved' – vyplácí JEN request, který přechod reálně provedl (rowcount==1).
+    # Bez toho dvě souběžná /resolve projdou read-checkem oba a bank se vyplatí dvakrát.
+    if conn.execute(
+        "UPDATE predictions SET status = 'resolved', winner_option_id = ?, resolved_at = ? "
+        "WHERE id = ? AND status NOT IN ('resolved', 'cancelled')",
+        (data.option_id, now_iso(), pid),
+    ).rowcount == 0:
+        raise HTTPException(status_code=400, detail="Predikce už je uzavřená.")
+
     bets = conn.execute("SELECT * FROM prediction_bets WHERE prediction_id = ?", (pid,)).fetchall()
     total = sum(b["amount"] for b in bets)
     win_pool = sum(b["amount"] for b in bets if b["option_id"] == data.option_id)
@@ -293,10 +302,7 @@ def resolve_prediction(pid: int, data: PredictionResolveIn, request: Request,
             else:
                 conn.execute("UPDATE prediction_bets SET payout = 0 WHERE id = ?", (b["id"],))
 
-    conn.execute(
-        "UPDATE predictions SET status = 'resolved', winner_option_id = ?, resolved_at = ? WHERE id = ?",
-        (data.option_id, now_iso(), pid),
-    )
+    # (stav už přepnut atomicky nahoře – tady jen výplaty/audit)
     record_audit(conn, staff, request, "prediction.resolve", f"#{pid}",
                  f"vítěz: {opt['label']} ({paid_winners} výherců, bank {total})")
     conn.commit()
@@ -325,6 +331,16 @@ def reresolve_prediction(pid: int, data: PredictionResolveIn, request: Request,
     if data.option_id == p["winner_option_id"]:
         raise HTTPException(status_code=400, detail="Tahle možnost už je nastavená jako vítěz.")
 
+    old = conn.execute("SELECT label FROM prediction_options WHERE id = ?", (p["winner_option_id"],)).fetchone()
+    # Atomicky přepni vítěze – jen když je pořád 'resolved' a starý vítěz sedí (rowcount==1). Dvě souběžné
+    # opravy tak neudělají dvojí storno/výplatu: druhá má WHERE winner_option_id=starý nesplněno → odmítnuta.
+    if conn.execute(
+        "UPDATE predictions SET winner_option_id = ?, resolved_at = ? "
+        "WHERE id = ? AND status = 'resolved' AND winner_option_id = ?",
+        (data.option_id, now_iso(), pid, p["winner_option_id"]),
+    ).rowcount == 0:
+        raise HTTPException(status_code=400, detail="Predikce se mezitím změnila – načti ji znovu.")
+
     bets = conn.execute("SELECT * FROM prediction_bets WHERE prediction_id = ?", (pid,)).fetchall()
     # 1) STORNO starých výplat (vrátíme stav do escrow – každý je zase jen mínus svůj vklad)
     for b in bets:
@@ -348,9 +364,7 @@ def reresolve_prediction(pid: int, data: PredictionResolveIn, request: Request,
                 conn.execute("UPDATE prediction_bets SET payout = ? WHERE id = ?", (payout, b["id"]))
                 paid_winners += 1
 
-    old = conn.execute("SELECT label FROM prediction_options WHERE id = ?", (p["winner_option_id"],)).fetchone()
-    conn.execute("UPDATE predictions SET winner_option_id = ?, resolved_at = ? WHERE id = ?",
-                 (data.option_id, now_iso(), pid))
+    # (vítěz už přepnut atomicky nahoře – tady jen storno/výplata/audit)
     record_audit(conn, staff, request, "prediction.reresolve", f"#{pid}",
                  f"OPRAVA: {old['label'] if old else '?'} → {opt['label']} ({paid_winners} výherců, bank {total})")
     conn.commit()
@@ -365,12 +379,16 @@ def cancel_prediction(pid: int, request: Request,
     p = _get_pred(conn, pid)
     if p["status"] in ("resolved", "cancelled"):
         raise HTTPException(status_code=400, detail="Predikce už je uzavřená.")
+    # Atomicky přepni do 'cancelled' – refund pošle JEN request, který přechod provedl (rowcount==1);
+    # jinak by dvě souběžná /cancel vrátila vklady dvakrát.
+    if conn.execute("UPDATE predictions SET status = 'cancelled', resolved_at = ? "
+                    "WHERE id = ? AND status NOT IN ('resolved', 'cancelled')",
+                    (now_iso(), pid)).rowcount == 0:
+        raise HTTPException(status_code=400, detail="Predikce už je uzavřená.")
     bets = conn.execute("SELECT * FROM prediction_bets WHERE prediction_id = ?", (pid,)).fetchall()
     for b in bets:
         add_points(conn, b["user_id"], b["amount"], f"Predikce #{pid} zrušena – vráceno")
         conn.execute("UPDATE prediction_bets SET payout = ? WHERE id = ?", (b["amount"], b["id"]))
-    conn.execute("UPDATE predictions SET status = 'cancelled', resolved_at = ? WHERE id = ?",
-                 (now_iso(), pid))
     record_audit(conn, staff, request, "prediction.cancel", f"#{pid}", f"vráceno {len(bets)} sázek")
     conn.commit()
     return {"ok": True, "refunded": len(bets)}

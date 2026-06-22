@@ -185,6 +185,24 @@ CREATE TABLE IF NOT EXISTS drop_claims (
     UNIQUE(drop_id, user_id)
 );
 
+-- Univerzální zámek jednorázových výplat (egg, podobné „1×/den" claimy).
+-- INSERT OR IGNORE + kontrola rowcount → atomický „kdo první ten bere", odolný i proti souběhu
+-- (PRIMARY KEY garantuje, že odměnu připíše jen jeden request, ne každý paralelní pokus).
+CREATE TABLE IF NOT EXISTS claim_locks (
+    user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    claim_key  TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    PRIMARY KEY (user_id, claim_key)
+);
+
+-- Idempotence Kick webhooku: ID už zpracovaných zpráv. PERZISTENTNÍ (na rozdíl od paměťové
+-- dedup) → přežije restart/deploy, takže Kickův retry ani replay po restartu nepřičte body 2×.
+-- Staré řádky se průběžně mažou (prune), tabulka neroste donekonečna.
+CREATE TABLE IF NOT EXISTS webhook_seen (
+    message_id TEXT PRIMARY KEY,
+    created_at TEXT NOT NULL
+);
+
 -- Anticheat pravidla (konfigurace) + klientské signály (fingerprint)
 CREATE TABLE IF NOT EXISTS anticheat_rules (
     key       TEXT PRIMARY KEY,
