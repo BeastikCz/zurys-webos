@@ -668,8 +668,14 @@ function productCardHTML(p) {
   else if (!state.user) btn = `<button class="da-btn buy" data-action="connect">Připoj se a hraj</button>`;
   else if (subLocked) btn = `<button class="da-btn locked" disabled>🔒 Pouze pro subs</button>`;
   else if (!p.in_stock) btn = `<button class="da-btn waiting" disabled>Vyprodáno</button>`;
-  else if (state.user.points < p.cost_points) btn = `<button class="da-btn waiting" disabled>chybí ${(p.cost_points - state.user.points).toLocaleString("cs-CZ")} 🌾</button>`;
-  else btn = `<button class="da-btn buy" data-action="buy" data-id="${p.id}">${isRaffle ? "Koupit tiket" : "Vyzvednout"} — ${priceTxt}</button>`;
+  else if (state.user.points < p.cost_points) {
+    const gpct = Math.max(3, Math.min(100, Math.round(state.user.points / p.cost_points * 100)));
+    btn = `<div class="da-goal" title="Tvůj postup k této odměně">
+      <div class="da-goal-bar"><div class="da-goal-fill" style="width:${gpct}%"></div></div>
+      <div class="da-goal-txt"><span>máš <b>${gpct} %</b></span><span class="da-goal-miss">chybí ${(p.cost_points - state.user.points).toLocaleString("cs-CZ")} 🌾</span></div>
+    </div>`;
+  }
+  else btn = `<button class="da-btn buy" data-action="buy-confirm" data-id="${p.id}">${isRaffle ? "Koupit tiket" : "Vyzvednout"} — ${priceTxt}</button>`;
 
   return `
     <div class="da-card ${ended ? "sold-out" : ""}${cant ? " cant" : ""}" style="--rar:${rhex}">
@@ -999,7 +1005,7 @@ async function openProduct(id) {
   let actionBtn = "";
   const buyLabel = isRaffle ? `Koupit tiket za ${fmtPts(p.cost_points)}` : `Koupit za ${fmtPts(p.cost_points)}`;
   if (c.ok) {
-    actionBtn = `<button class="btn btn-primary" data-action="buy" data-id="${p.id}">${buyLabel}</button>
+    actionBtn = `<button class="btn btn-primary" data-action="buy-confirm" data-id="${p.id}">${buyLabel}</button>
                  <button class="btn btn-ghost" data-action="add-cart" data-id="${p.id}">➕ Do košíku</button>`;
   } else if (c.reason === "login") {
     actionBtn = `<button class="btn btn-kick" data-action="connect">🟢 Pro nákup připoj svůj Kick účet</button>`;
@@ -1063,6 +1069,40 @@ async function buyProduct(id) {
     try { confettiBurst(); } catch (e) {}      // 🎉 gamifikace: oslava při koupi
     render();
   } catch (e) { toast(e.message, "error"); }
+}
+
+// Reveal-then-confirm: ukáže CO kupuješ + DOPAD na zůstatek PŘED potvrzením (lepší UX i pojistka).
+// Potvrzovací tlačítko nese data-action="buy" → volá původní buyProduct (nezměněný).
+async function confirmBuyModal(id) {
+  let p;
+  try { p = await api("/shop/products/" + id); } catch (e) { toast(e.message, "error"); return; }
+  const c = canBuy(p);
+  if (!c.ok) { openProduct(id); return; }   // nejde koupit → otevři detail (ukáže důvod)
+  const [rlabel, rhex] = rarityInfo(p.rarity);
+  const isRaffle = p.type === "raffle";
+  const after = state.user.points - p.cost_points;
+  const thumb = p.image_url
+    ? `<div class="cf-img" style="background-image:url('${esc(p.image_url)}')"></div>`
+    : `<div class="cf-img" style="background:${gradFor(p)}"><span>${emojiFor(p)}</span></div>`;
+  openModal(`
+    <div class="modal-body cf-buy" style="--rar:${rhex}">
+      <div class="cf-row">
+        ${thumb}
+        <div class="cf-meta">
+          ${rlabel ? `<span class="cf-rar" style="color:${rhex}">${esc(rlabel)}</span>` : ""}
+          <div class="cf-name">${esc(p.name)}</div>
+          <div class="cf-cost">−${Number(p.cost_points).toLocaleString("cs-CZ")} 🌾</div>
+        </div>
+      </div>
+      <div class="cf-after">
+        <span>Zůstatek po koupi</span>
+        <b>${Number(after).toLocaleString("cs-CZ")} 🌾</b>
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-primary btn-block" data-action="buy" data-id="${p.id}">${isRaffle ? "✓ Koupit tiket" : "✓ Potvrdit vyzvednutí"}</button>
+        <button class="btn btn-ghost" data-action="close-modal">Zpět</button>
+      </div>
+    </div>`);
 }
 
 /* ---------- LEADERBOARD ---------- */
@@ -5425,6 +5465,7 @@ function handleAction(action, el) {
     case "row-scroll": { const t = document.getElementById(el.dataset.target); if (t) t.scrollBy({ left: parseInt(el.dataset.dir, 10) * 460, behavior: "smooth" }); break; }
     case "open-product": openProduct(id); break;
     case "buy": buyProduct(id); break;
+    case "buy-confirm": confirmBuyModal(id); break;
     case "add-cart": {
       const p = shopState.items.find((x) => x.id === id) || adminState.products.find((x) => x.id === id);
       if (p) { addToCart(p); toast("Přidáno do košíku 🛒", "success"); } else { api("/shop/products/" + id).then((pp) => { addToCart(pp); toast("Přidáno do košíku 🛒", "success"); }); }

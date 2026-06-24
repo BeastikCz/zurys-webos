@@ -36,7 +36,12 @@
   --bronze: #e0934f;
 
   --r: 14px; --r-sm: 9px; --r-lg: 18px;
-  --shadow: 0 14px 38px rgba(0, 0, 0, .5);
+  /* Vrstvené stíny (ambient + key + contact) — prémiová hloubka místo jednoho těžkého stínu */
+  --shadow-sm: 0 2px 6px rgba(0, 0, 0, .28), 0 1px 2px rgba(0, 0, 0, .4);
+  --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 10px 26px -8px rgba(0, 0, 0, .5), 0 20px 50px -16px rgba(0, 0, 0, .5);
+  --shadow-lg: 0 2px 5px rgba(0, 0, 0, .4), 0 18px 44px -10px rgba(0, 0, 0, .58), 0 34px 76px -20px rgba(0, 0, 0, .6);
+  --card-grad: linear-gradient(180deg, rgba(255, 255, 255, .03), rgba(255, 255, 255, 0) 96px);
+  --hairline: inset 0 1px 0 rgba(255, 255, 255, .05);   /* horní světelná hrana = sklo/depth */
   --maxw: 1280px;
   --header-h: 64px;
 }
@@ -64,7 +69,7 @@ input, select, textarea { font-family: inherit; }
 main { padding: 0 0 80px; min-height: calc(100vh - var(--header-h)); overflow-x: clip; }
 .muted { color: var(--text-dim); } .faint { color: var(--text-faint); }
 .page-head { margin: 26px 0 22px; }
-.page-head h1 { font-size: 27px; font-weight: 800; }
+.page-head h1 { font-size: 27px; font-weight: 800; letter-spacing: -.02em; }
 .page-head p { color: var(--text-dim); margin-top: 5px; }
 .section-title { font-size: 16px; font-weight: 800; margin: 6px 0 14px; text-transform: uppercase; letter-spacing: .03em; }
 
@@ -86,7 +91,7 @@ main { padding: 0 0 80px; min-height: calc(100vh - var(--header-h)); overflow-x:
 .nav-link.active::after { content: ""; position: absolute; left: 14px; right: 14px; bottom: -1px; height: 3px; border-radius: 3px; background: var(--accent); box-shadow: 0 0 10px var(--accent-glow); }
 
 .top-right { display: flex; align-items: center; gap: 10px; margin-left: auto; }
-.pts-pill { display: inline-flex; align-items: center; gap: 8px; background: var(--surface-2); border: 1px solid rgba(255,157,46,.45); padding: 7px 14px; border-radius: 999px; font-weight: 800; font-size: 14px; }
+.pts-pill { display: inline-flex; align-items: center; gap: 8px; background: var(--surface-2); border: 1px solid rgba(255,157,46,.45); padding: 7px 14px; border-radius: 999px; font-weight: 800; font-size: 14px; font-variant-numeric: tabular-nums; }
 .pts-pill b { color: var(--accent); } .pts-pill .lbl { color: var(--text-faint); font-size: 11px; font-weight: 700; }
 .icon-btn { position: relative; width: 40px; height: 40px; border-radius: 10px; background: var(--surface-2); border: 1px solid var(--border); color: var(--text); display: grid; place-items: center; font-size: 16px; transition: .14s; }
 .icon-btn:hover { border-color: var(--accent); color: var(--accent); }
@@ -180,6 +185,23 @@ main { padding: 0 0 80px; min-height: calc(100vh - var(--header-h)); overflow-x:
 .da-btn.buy:hover { filter: brightness(1.06); }
 .da-btn.locked { background: rgba(136,71,255,.14); color: #c4a6ff; border: 1px solid rgba(136,71,255,.4); cursor: not-allowed; }
 .da-btn.waiting { background: var(--surface-3); color: var(--text-dim); cursor: not-allowed; }
+/* Goal-gradient: postup k odměně místo mrtvého „chybí X" tlačítka → každá karta = mini-cíl (motivace farmit) */
+.da-goal { margin-top: auto; }
+.da-goal-bar { height: 8px; border-radius: 999px; background: var(--surface-3); overflow: hidden; }
+.da-goal-fill { height: 100%; border-radius: 999px; background: linear-gradient(90deg, var(--accent), var(--accent-2)); box-shadow: 0 0 10px var(--accent-glow); transition: width .6s cubic-bezier(.4, 0, .2, 1); }
+.da-goal-txt { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 11.5px; font-weight: 700; margin-top: 6px; }
+.da-goal-txt b { color: var(--accent); }
+.da-goal-miss { color: var(--text-faint); }
+/* Reveal-then-confirm modal: CO kupuješ + DOPAD na zůstatek před potvrzením */
+.cf-buy .cf-row { display: flex; gap: 14px; align-items: center; }
+.cf-img { width: 96px; height: 72px; flex: 0 0 auto; border-radius: 11px; background-size: cover; background-position: center; background-color: rgba(8, 9, 16, .4); display: grid; place-items: center; font-size: 34px; border: 1px solid color-mix(in srgb, var(--rar, var(--border)) 55%, var(--border)); }
+.cf-meta { min-width: 0; }
+.cf-rar { display: block; font-size: 11px; font-weight: 900; letter-spacing: .05em; text-transform: uppercase; }
+.cf-name { font-size: 19px; font-weight: 800; margin: 2px 0 5px; line-height: 1.2; }
+.cf-cost { font-size: 15px; font-weight: 800; color: var(--danger); }
+.cf-after { display: flex; justify-content: space-between; align-items: center; margin-top: 16px; padding: 13px 16px; border-radius: 12px; background: var(--surface-2); border: 1px solid var(--border); }
+.cf-after span { color: var(--text-dim); font-weight: 700; font-size: 13.5px; }
+.cf-after b { font-size: 19px; font-weight: 900; color: var(--success); font-variant-numeric: tabular-nums; }
 .da-card.sold-out { opacity: .6; }
 
 /* ===== Kick bot konzole ===== */
@@ -306,9 +328,12 @@ main { padding: 0 0 80px; min-height: calc(100vh - var(--header-h)); overflow-x:
 
 /* feed / recent (zachováno pro jiné pohledy) */
 .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 18px; }
+/* Produktové/itemové karty v gridu: jemný lift + accent okraj na hover (prémiový pocit, ne křiklavý) */
+.grid > .card { transition: transform .16s ease, box-shadow .16s ease, border-color .16s ease; }
+.grid > .card:hover { transform: translateY(-3px); border-color: color-mix(in srgb, var(--accent) 45%, var(--border)); box-shadow: var(--hairline), var(--shadow-lg); }
 
 /* ============ Panely ============ */
-.card, .panel { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r); box-shadow: var(--shadow); }
+.card, .panel { background: var(--card-grad), var(--surface); border: 1px solid var(--border); border-radius: var(--r); box-shadow: var(--hairline), var(--shadow); }
 .panel { padding: 20px; border-left: 3px solid var(--accent); }
 .panel.ok { border-left-color: var(--success); }
 .panel.bad { border-left-color: var(--danger); }
@@ -1163,7 +1188,7 @@ footer.site-footer { border-top: 1px solid var(--border); padding: 22px 0; color
 .shop-hero-img { width: 190px; height: 112px; flex: 0 0 auto; border-radius: 12px; background-size: cover; background-repeat: no-repeat; background-position: center; display: grid; place-items: center; background-color: rgba(8,9,16,.4); cursor: pointer; }
 .shop-hero-body { flex: 1; min-width: 0; }
 .shop-hero-rar { font-size: 11px; font-weight: 900; letter-spacing: .04em; }
-.shop-hero-name { font-size: 22px; font-weight: 900; margin: 4px 0 6px; cursor: pointer; }
+.shop-hero-name { font-size: 22px; font-weight: 900; letter-spacing: -.01em; margin: 4px 0 6px; cursor: pointer; }
 .shop-hero-cd { font-size: 12.5px; color: #ff9e6b; font-weight: 700; margin-bottom: 10px; }
 .shop-hero-buy { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
 @media (max-width: 560px) { .shop-hero { flex-direction: column; align-items: stretch; } .shop-hero-img { width: 100%; } }
