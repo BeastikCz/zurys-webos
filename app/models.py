@@ -430,6 +430,15 @@ class OrderStatusIn(BaseModel):
     status: str
 
 
+class BroadcastIn(BaseModel):
+    """Admin broadcast: in-app notifikace (zvoneček) segmentu uživatelů."""
+    title: str = Field(min_length=2, max_length=120)
+    body: str = Field(default="", max_length=300)
+    icon: str = Field(default="📣", max_length=8)
+    link: str = Field(default="", max_length=80)
+    segment: str = Field(default="all")        # all | active | subs
+
+
 class ManualOrderIn(BaseModel):
     """Ruční ticket/objednávka v adminu (např. kompenzace za bug). NEúčtuje žádné body –
     jen založí záznam k vyřízení. Uživatele hledá podle nicku (kick_username/username)."""

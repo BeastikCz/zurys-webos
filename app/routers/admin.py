@@ -24,7 +24,7 @@ from ..models import (ProductIn, SkinLookupIn, SkinSearchIn, ImageUploadIn, User
                       BanIn, DropCreateIn, AutoDropIn, RuleIn, EconomyIn, IpBanIn, IpUnbanIn, BotToggleIn,
                       LiveModeIn, LegacyImportIn, PatchNoteIn, CommunityGoalIn, SubGoalIn, ModAppDecideIn, ManualOrderIn, ManualOrderBulkIn,
                       PointsLogPurgeIn, PartnerLinkIn, PartnerFlashConfigIn, GamesRakeIn, LiveHappyIn,
-                      SelfExcludeIn, TimeoutIn, ShopDiscountIn, BanClusterIn, MinesBanIn)
+                      SelfExcludeIn, TimeoutIn, ShopDiscountIn, BanClusterIn, MinesBanIn, BroadcastIn)
 from ..services import product_public, shop_discount_pct
 from ..security import new_code, secure_choice
 
@@ -533,6 +533,36 @@ def set_live_mode(data: LiveModeIn, request: Request,
     record_audit(conn, admin, request, "economy.live_mode", "stream live", data.mode)
     conn.commit()
     return live.status(conn)
+
+
+@router.post("/news/broadcast")
+def broadcast_notification(data: BroadcastIn, request: Request,
+                           conn: sqlite3.Connection = Depends(db_dep),
+                           admin: sqlite3.Row = Depends(require_broadcaster)):
+    """Rozešle in-app notifikaci (zvoneček) segmentu uživatelů. broadcaster+admin (sekce 'news').
+
+    segment: all (všichni) · active (login za 14 dní) · subs (jen subové). Jeden hromadný
+    INSERT (ne notify() v cyklu) → škáluje i na tisíce uživatelů bez zátěže writeru."""
+    seg = data.segment if data.segment in ("all", "active", "subs") else "all"
+    icon = (data.icon or "📣").strip()[:8] or "📣"
+    title = data.title.strip()[:120]
+    body = (data.body or "").strip()[:300]
+    link = (data.link or "").strip()[:80]
+    if seg == "subs":
+        where, params = "is_sub = 1", []
+    elif seg == "active":
+        cutoff = (datetime.now(timezone.utc) - timedelta(days=14)).isoformat()
+        where, params = "id IN (SELECT user_id FROM sessions WHERE last_seen >= ?)", [cutoff]
+    else:
+        where, params = "1 = 1", []
+    cur = conn.execute(
+        "INSERT INTO notifications (user_id, icon, title, body, link, created_at) "
+        f"SELECT id, ?, ?, ?, ?, ? FROM users WHERE {where}",
+        [icon, title, body, link, now_iso(), *params])
+    sent = cur.rowcount
+    record_audit(conn, admin, request, "news.broadcast", f"segment:{seg}", f"{sent} příjemců · {title}")
+    conn.commit()
+    return {"ok": True, "sent": sent, "segment": seg}
 
 
 @router.post("/import/legacy")

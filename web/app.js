@@ -1784,6 +1784,18 @@ async function adminNews() {
       <button class="btn btn-primary" type="submit">📣 Publikovat novinku</button>
     </form>
   </div>`;
+  const broadcast = `<div class="panel" style="margin-bottom:18px">
+    <div class="section-title" style="margin-top:0">🔔 Rozeslat oznámení (push)</div>
+    <p class="muted" style="font-size:12.5px;margin:0 0 12px">Pošle in-app notifikaci na zvoneček vybranému segmentu. Nevratné — doručí se hned všem.</p>
+    <div class="field-row">
+      <div class="field" style="flex:0 0 64px"><label>Ikona</label><input class="input" id="bc_icon" maxlength="4" value="📣" style="text-align:center"></div>
+      <div class="field" style="flex:2;min-width:170px"><label>Titulek</label><input class="input" id="bc_title" maxlength="120" placeholder="Limitka je živá! 🔥"></div>
+      <div class="field" style="flex:1;min-width:150px"><label>Komu</label><select class="select" id="bc_segment"><option value="all">Všem</option><option value="active">Aktivním (14 d)</option><option value="subs">Jen subům</option></select></div>
+    </div>
+    <div class="field"><label>Text (volitelně)</label><textarea class="input" id="bc_body" rows="2" maxlength="300" placeholder="Krátká zpráva pro diváky…"></textarea></div>
+    <div class="field"><label>Odkaz (volitelně)</label><input class="input" id="bc_link" maxlength="80" placeholder="#/shop"></div>
+    <button class="btn btn-primary" data-action="broadcast-send">🔔 Rozeslat oznámení</button>
+  </div>`;
   const list = notes.length ? `<div class="lb-list">${notes.map((n) => {
     const t = NEWS_TAG[n.tag] || NEWS_TAG.new;
     return `<div class="lb-row">
@@ -1795,7 +1807,21 @@ async function adminNews() {
       <button class="btn btn-danger btn-sm" data-action="news-delete" data-id="${n.id}" style="margin-left:auto" title="Smazat">✕</button>
     </div>`;
   }).join("")}</div>` : `<div class="empty"><div class="big">📣</div>Zatím žádné novinky.</div>`;
-  box.innerHTML = form + `<div class="section-title">Publikované novinky (${notes.length})</div>` + list;
+  box.innerHTML = broadcast + form + `<div class="section-title">Publikované novinky (${notes.length})</div>` + list;
+}
+async function sendBroadcast() {
+  const title = ($("#bc_title").value || "").trim();
+  if (title.length < 2) { toast("Zadej titulek oznámení.", "error"); return; }
+  const segment = $("#bc_segment").value || "all";
+  const segLbl = { all: "VŠEM", active: "aktivním (14 d)", subs: "jen subům" }[segment] || "všem";
+  if (!confirm(`Rozeslat „${title}" ${segLbl}? Nejde vzít zpět.`)) return;
+  const body = { title, body: ($("#bc_body").value || "").trim(),
+                 icon: ($("#bc_icon").value || "📣").trim(), link: ($("#bc_link").value || "").trim(), segment };
+  try {
+    const r = await api("/admin/news/broadcast", { method: "POST", body });
+    toast(`🔔 Posláno ${Number(r.sent).toLocaleString("cs-CZ")} ${r.sent === 1 ? "uživateli" : "uživatelům"}.`, "success");
+    $("#bc_title").value = ""; $("#bc_body").value = ""; $("#bc_link").value = "";
+  } catch (e) { toast(e.message, "error"); }
 }
 async function createNote() {
   const title = ($("#nt_title").value || "").trim();
@@ -5571,6 +5597,7 @@ function handleAction(action, el) {
     case "subgoal-save": saveSubGoal(); break;
     case "subgoal-toggle": saveSubGoal(el.dataset.on === "1" ? 0 : 1); break;
     case "news-delete": deleteNote(id); break;
+    case "broadcast-send": sendBroadcast(); break;
     case "rule-toggle": toggleRule(el.dataset.key, el.dataset.on !== "1"); break;
     case "ip-unban": unbanIp(el.dataset.ip); break;
     case "ddos-autoban": toggleAutoban(el.dataset.on !== "1"); break;
