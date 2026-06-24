@@ -13,10 +13,10 @@ from .db import now_iso
 N_PLOTS = 4
 SEED_PCT = 0.75       # cena semínka = 75 % výnosu; zahrádka je fun bonus, ne hlavní faucet
 SEED_PCT_SUB = 0.65   # sub perk: lepší marže, ale pořád bez tisku sedláků
-PEST_CHANCE = 0.85    # base pest chance; full current decor lowers 85 % to 25 %
+PEST_CHANCE = 0.85    # base pest chance; plná dekorace teď sráží 85 % jen na strop 40 % (ne na 25 %)
 PEST_RESCUE_PCT = 0.20  # záchrana před chrobáci = 20 % výnosu (sink). Nezachráníš → sklizeň jen poloviční.
 PEST_PENALTY = 0.5    # neošetření chrobáci sežerou půlku úrody
-PEST_MIN_CHANCE = 0.10   # dolní strop šance i s plnou výbavou dekorací
+PEST_MIN_CHANCE = 0.40   # dolní strop šance i s plnou výbavou dekorací – chrobáci jsou VŽDY reálná hrozba (decor nedá imunitu zadarmo)
 PEST_SPAWN_MIN = 0.15    # chrobáci se objeví DYNAMICKY nejdřív po 15 % doby růstu (ne při zasazení)
 PEST_SPAWN_MAX = 0.85    # … nejpozdějc po 85 %
 PEST_WINDOW_FRAC = 0.30  # okno na záchranu = 30 % doby růstu; po něm sežerou půlku úrody (zamčeno)
@@ -32,7 +32,7 @@ CROPS = [
 ]
 _BY_KEY = {c["key"]: c for c in CROPS}
 
-DECOR_PEST_REDUCTION = {   # součet = 60 pb → plná výbava sráží 85 % na 25 %
+DECOR_PEST_REDUCTION = {   # součet = 60 pb, ALE floor 40 % → plná výbava reálně 85 % → 40 % (horní decor tiery jsou capnuté)
     "sunflower": 0.02,
     "tree": 0.03,
     "well": 0.04,
