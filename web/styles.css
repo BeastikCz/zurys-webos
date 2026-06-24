@@ -202,6 +202,14 @@ main { padding: 0 0 80px; min-height: calc(100vh - var(--header-h)); overflow-x:
 .cf-after { display: flex; justify-content: space-between; align-items: center; margin-top: 16px; padding: 13px 16px; border-radius: 12px; background: var(--surface-2); border: 1px solid var(--border); }
 .cf-after span { color: var(--text-dim); font-weight: 700; font-size: 13.5px; }
 .cf-after b { font-size: 19px; font-weight: 900; color: var(--success); font-variant-numeric: tabular-nums; }
+/* Tajný klas (denní hon) — HARD: malinký, hodně ztlumený 🌾 = těžko najít v 🌾-heavy UI.
+   Hover ho prozradí (rozsvítí + zvětší) = odměna za to, že jsi trefil přesný pixel. */
+.egg-klas { position: fixed; z-index: 40; font-size: 13px; line-height: 1; cursor: pointer; opacity: .16;
+  filter: grayscale(.45); transform: translate(-50%, -50%); user-select: none;
+  transition: opacity .2s, transform .2s, filter .2s; animation: eggbob 3.6s ease-in-out infinite; }
+.egg-klas:hover { opacity: 1; filter: none; transform: translate(-50%, -50%) scale(1.7); text-shadow: 0 0 14px var(--accent-glow); }
+@keyframes eggbob { 0%, 100% { margin-top: 0; } 50% { margin-top: -2px; } }
+@media (prefers-reduced-motion: reduce) { .egg-klas { animation: none; } }
 .da-card.sold-out { opacity: .6; }
 
 /* ===== Kick bot konzole ===== */

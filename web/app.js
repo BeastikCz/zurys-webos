@@ -237,6 +237,7 @@ function render() {
   };
   (pages[r.name] || pageShop)(r.param);
   window.scrollTo({ top: 0, behavior: "instant" in window ? "instant" : "auto" });
+  try { refreshEggHunt(); } catch (e) {}   // denní hon: schovaný klas na dnešní stránce
 }
 
 /* ---------------- Horní navigace (ZURYS) ---------------- */
@@ -5676,14 +5677,43 @@ document.addEventListener("click", (e) => {
 
 // (skrytá drobnost) – rohová tečka / sekvence kláves
 let _eggBusy = false;
-/* Tajný klas: SKRYTÝ secret přes Konami kód (↑↑↓↓←→←→ba). Žádný viditelný 🌾 v UI – denní
-   odměnu (1×/den) bere, kdo zná kód. Backend /egg/claim. */
-async function claimEgg() {
+/* Tajný klas — DENNÍ HON: každý den se skrytý klikací 🌾 schová na JINÉ stránce + JINÉ pozici.
+   seed = dnešní datum → stejné pro všechny ten den (fér, sdílitelný hint, denní závod). Konami
+   kód (↑↑↓↓←→←→ba) zůstává jako bonus pro znalce. Odměnu řeší backend /egg/claim (1×/den, idempotentní). */
+const _EGG_ROUTES = ["shop", "zahrada", "leaderboard", "bonusy", "ukoly", "exchange", "predikce", "games"];
+function eggPlan() {
+  const d = new Date();
+  const key = d.getFullYear() + "-" + (d.getMonth() + 1) + "-" + d.getDate();
+  const h = hashStr(key);
+  return {
+    key,
+    route: _EGG_ROUTES[h % _EGG_ROUTES.length],
+    x: 6 + (Math.floor(h / 11) % 86),    // 6–92 % šířky
+    y: 20 + (Math.floor(h / 977) % 68),  // 20–88 % výšky (pod hlavičkou)
+  };
+}
+function refreshEggHunt() {
+  const old = document.getElementById("eggKlas"); if (old) old.remove();
+  if (!state.user) return;
+  const plan = eggPlan();
+  if (localStorage.getItem("egg_found_" + plan.key)) return;   // už dnes nalezeno (toto zařízení)
+  if ((parseRoute().name || "shop") !== plan.route) return;     // jen na dnešní stránce
+  const el = document.createElement("div");
+  el.id = "eggKlas"; el.className = "egg-klas"; el.textContent = "🌾";
+  el.style.left = plan.x + "vw"; el.style.top = plan.y + "vh";
+  el.setAttribute("aria-label", "tajný klas");
+  el.addEventListener("click", () => claimEgg(plan.key));
+  document.body.appendChild(el);
+}
+async function claimEgg(dayKey) {
   if (_eggBusy) return;
   if (!state.user) { toast("🌾 Tajný klas dne! Přihlas se přes Kick a vyzvedni si ho.", "info"); return; }
   _eggBusy = true;
+  const key = dayKey || eggPlan().key;
   try {
     const r = await api("/egg/claim", { method: "POST" });
+    localStorage.setItem("egg_found_" + key, "1");
+    const klas = document.getElementById("eggKlas"); if (klas) klas.remove();
     if (r.already) { toast("🌾 Dnešní klas už máš. Vrať se zítra! 😉", "info"); }
     else {
       if (state.user) state.user.points = r.balance;
