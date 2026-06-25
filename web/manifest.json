@@ -1,0 +1,14 @@
+{
+  "name": "Zurys",
+  "short_name": "Zurys",
+  "description": "Sbírej sedláky, utrácej v shopu, pěstuj zahrádku.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#0c0d18",
+  "theme_color": "#ff9d2e",
+  "icons": [
+    { "src": "/sedlak-cut.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/sedlak-cut.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
+  ]
+}

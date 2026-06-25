@@ -204,6 +204,18 @@ CREATE TABLE IF NOT EXISTS webhook_seen (
     created_at TEXT NOT NULL
 );
 
+-- Web Push subscriptiony (notifikace do mobilu i když je appka zavřená). 1 řádka = 1
+-- prohlížeč/zařízení; uživatel jich může mít víc. endpoint UNIQUE (re-subscribe přepíše).
+CREATE TABLE IF NOT EXISTS push_subs (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    endpoint   TEXT NOT NULL UNIQUE,
+    p256dh     TEXT NOT NULL,
+    auth       TEXT NOT NULL,
+    ua         TEXT,
+    created_at TEXT NOT NULL
+);
+
 -- Anticheat pravidla (konfigurace) + klientské signály (fingerprint)
 CREATE TABLE IF NOT EXISTS anticheat_rules (
     key       TEXT PRIMARY KEY,

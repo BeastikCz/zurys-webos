@@ -12,9 +12,23 @@ from datetime import datetime, timezone
 
 from .db import get_conn, now_iso
 from .deps import notify
-from . import garden
+from . import garden, webpush
 
 CHECK_INTERVAL_SEC = 60      # jak často daemon projede zahrádky
+
+
+def _push_user(conn, user_id: int, title: str, body: str, url: str) -> None:
+    """Best-effort web push na všechna zařízení uživatele (vedle in-app notify). Mrtvé subs (404/410) maže."""
+    if not webpush.enabled():
+        return
+    for s in conn.execute("SELECT id, endpoint, p256dh, auth FROM push_subs WHERE user_id = ?", (user_id,)).fetchall():
+        info = {"endpoint": s["endpoint"], "keys": {"p256dh": s["p256dh"], "auth": s["auth"]}}
+        try:
+            webpush.send(info, title, body, url, "/sedlak-cut.png")
+        except webpush.DeadSubscription:
+            conn.execute("DELETE FROM push_subs WHERE id = ?", (s["id"],))
+        except Exception:
+            pass
 
 
 def _scan(conn) -> None:
@@ -26,6 +40,8 @@ def _scan(conn) -> None:
         c = garden._BY_KEY.get(r["crop"], {})
         notify(conn, r["user_id"], "🌾", "Úroda dozrála!",
                f"{c.get('icon', '')} {c.get('name', 'Plodina')} je připravená ke sklizni.", "#/zahrada")
+        _push_user(conn, r["user_id"], "Úroda dozrála! 🌾",
+                   f"{c.get('name', 'Plodina')} je připravená ke sklizni.", "#/zahrada")
         conn.execute("UPDATE garden SET notified = notified | 1 WHERE user_id = ? AND plot = ?",
                      (r["user_id"], r["plot"]))
     # 2) CHROBÁCI – aktivní okno a ještě neoznámeni (bit 2); incoming/eaten/none přeskoč
@@ -38,6 +54,8 @@ def _scan(conn) -> None:
         c = garden._BY_KEY.get(r["crop"], {})
         notify(conn, r["user_id"], "🐛", "Chrobáci v zahrádce!",
                f"Zachraň {c.get('name', 'plodinu')} než ti sežerou půlku úrody. 🚜", "#/zahrada")
+        _push_user(conn, r["user_id"], "Chrobáci v zahrádce! 🐛",
+                   f"Zachraň {c.get('name', 'plodinu')} než ti sežerou půlku úrody.", "#/zahrada")
         conn.execute("UPDATE garden SET notified = notified | 2 WHERE user_id = ? AND plot = ?",
                      (r["user_id"], r["plot"]))
     conn.commit()

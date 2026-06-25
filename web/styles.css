@@ -210,6 +210,12 @@ main { padding: 0 0 80px; min-height: calc(100vh - var(--header-h)); overflow-x:
 .egg-klas:hover { opacity: 1; filter: none; transform: translate(-50%, -50%) scale(1.7); text-shadow: 0 0 14px var(--accent-glow); }
 @keyframes eggbob { 0%, 100% { margin-top: 0; } 50% { margin-top: -2px; } }
 @media (prefers-reduced-motion: reduce) { .egg-klas { animation: none; } }
+/* Web Push tlačítko/banner v zahrádce (upozornění na chrobáky na mobil) */
+.gpush, .gpush-hint { margin: 0 0 14px; padding: 11px 14px; border-radius: var(--r-sm); font-size: 13px; }
+.gpush.on { display: flex; align-items: center; gap: 8px; background: rgba(70, 224, 138, .1); border: 1px solid rgba(70, 224, 138, .35); color: var(--success); font-weight: 700; }
+.gpush.on b { color: var(--success); }
+.gpush-hint { background: var(--surface-2); border: 1px solid var(--border); color: var(--text-dim); line-height: 1.5; }
+.gpush-btn { margin-bottom: 14px; }
 .da-card.sold-out { opacity: .6; }
 
 /* ===== Kick bot konzole ===== */

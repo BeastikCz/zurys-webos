@@ -439,6 +439,17 @@ class BroadcastIn(BaseModel):
     segment: str = Field(default="all")        # all | active | subs
 
 
+class PushKeys(BaseModel):
+    p256dh: str = Field(max_length=200)
+    auth: str = Field(max_length=100)
+
+
+class PushSubIn(BaseModel):
+    """Web Push subscription z prohlížeče (PushSubscription.toJSON())."""
+    endpoint: str = Field(min_length=10, max_length=600)
+    keys: PushKeys
+
+
 class ManualOrderIn(BaseModel):
     """Ruční ticket/objednávka v adminu (např. kompenzace za bug). NEúčtuje žádné body –
     jen založí záznam k vyřízení. Uživatele hledá podle nicku (kick_username/username)."""

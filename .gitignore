@@ -2,6 +2,9 @@
 kick.json
 kick.json.*
 
+# Web Push VAPID klíče (privátní klíč) – NIKDY necommitovat (prod = Fly secret)
+webpush.json
+
 # Databáze a data
 data/
 *.db

@@ -2135,12 +2135,62 @@ function pageGarden() {
   const view = $("#view");
   if (!state.user) { view.innerHTML = `<div class="empty"><div class="big">🌱</div>Přihlas se přes Kick a začni pěstovat sedláky!</div>`; return; }
   view.innerHTML = `<div class="page-head with-mascot"><img class="page-mascot" src="/sedlak-cut.png" alt=""><div class="ph-text"><h1>🌱 Zahrádka</h1><p class="muted">Vyber semínko → zasaď na záhon → počkej až doroste → sklidíš sedláky! 🌾</p></div></div>
+    <div id="gardenPush">${gardenPushBtnHTML()}</div>
     <div id="gardenBox">${skeletonCards(1)}</div>
     <div id="gardenDecor" style="margin-top:8px"></div>
     <div id="gardenLb" style="margin-top:8px"></div>`;
   loadGarden();
   loadGardenDecor();
   loadGardenLeaderboard();
+}
+/* Web Push „chrobáci na mobil": tlačítko + subscribe flow. Service worker je /sw.js. */
+function _pushSupported() { return ("serviceWorker" in navigator) && ("PushManager" in window) && ("Notification" in window); }
+function gardenPushBtnHTML() {
+  if (!_pushSupported()) {
+    const iOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+    const standalone = window.matchMedia && window.matchMedia("(display-mode: standalone)").matches;
+    if (iOS && !standalone)
+      return `<div class="gpush-hint">📱 Chceš upozornění na chrobáky i na iPhone? Dej v Safari <b>Sdílet → Přidat na plochu</b> a otevři Zurys odtud.</div>`;
+    return "";
+  }
+  const on = localStorage.getItem("push_on") === "1" && Notification.permission === "granted";
+  return on
+    ? `<div class="gpush on">🔔 Upozornění na chrobáky <b>zapnutá</b><button class="btn btn-ghost btn-sm" data-action="garden-push-off" style="margin-left:auto">Vypnout</button></div>`
+    : `<button class="btn btn-ghost btn-sm gpush-btn" data-action="garden-push-on">🔔 Upozornit na chrobáky (i na mobil)</button>`;
+}
+function renderGardenPushBtn() { const el = document.getElementById("gardenPush"); if (el) el.innerHTML = gardenPushBtnHTML(); }
+function _urlB64ToU8(b64) {
+  const pad = "=".repeat((4 - (b64.length % 4)) % 4);
+  const s = (b64 + pad).replace(/-/g, "+").replace(/_/g, "/");
+  const raw = atob(s); const u8 = new Uint8Array(raw.length);
+  for (let i = 0; i < raw.length; i++) u8[i] = raw.charCodeAt(i);
+  return u8;
+}
+async function enableGardenPush() {
+  if (!_pushSupported()) { toast("Tvůj prohlížeč push notifikace nepodporuje. 😕", "error"); return; }
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    const perm = await Notification.requestPermission();
+    if (perm !== "granted") { toast("Bez povolení notifikací to nepůjde — povol je v prohlížeči.", "info"); return; }
+    const vp = await api("/push/vapid-public");
+    if (!vp.enabled || !vp.key) { toast("Push zatím není nastavený na serveru.", "error"); return; }
+    let sub = await reg.pushManager.getSubscription();
+    if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: _urlB64ToU8(vp.key) });
+    await api("/push/subscribe", { method: "POST", body: sub.toJSON() });
+    localStorage.setItem("push_on", "1");
+    toast("🔔 Hotovo! Když ti chrobáci napadnou zahrádku, cinkne ti to i na mobil.", "success");
+    renderGardenPushBtn();
+  } catch (e) { toast("Push se nepodařilo zapnout: " + (e.message || e), "error"); }
+}
+async function disableGardenPush() {
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    const sub = await reg.pushManager.getSubscription();
+    if (sub) { try { await api("/push/unsubscribe", { method: "POST", body: sub.toJSON() }); } catch (e) {} await sub.unsubscribe(); }
+    localStorage.removeItem("push_on");
+    toast("Upozornění na chrobáky vypnutá.", "info");
+    renderGardenPushBtn();
+  } catch (e) { toast(e.message || String(e), "error"); }
 }
 async function loadGardenDecor() {
   const box = document.getElementById("gardenDecor"); if (!box) return;
@@ -5599,6 +5649,8 @@ function handleAction(action, el) {
     case "subgoal-toggle": saveSubGoal(el.dataset.on === "1" ? 0 : 1); break;
     case "news-delete": deleteNote(id); break;
     case "broadcast-send": sendBroadcast(); break;
+    case "garden-push-on": enableGardenPush(); break;
+    case "garden-push-off": disableGardenPush(); break;
     case "rule-toggle": toggleRule(el.dataset.key, el.dataset.on !== "1"); break;
     case "ip-unban": unbanIp(el.dataset.ip); break;
     case "ddos-autoban": toggleAutoban(el.dataset.on !== "1"); break;
@@ -5731,6 +5783,11 @@ document.addEventListener("keydown", (e) => {
   if (k === _konami[_konamiPos]) { _konamiPos++; if (_konamiPos === _konami.length) { _konamiPos = 0; claimEgg(); } }
   else { _konamiPos = (k === _konami[0]) ? 1 : 0; }
 });
+
+/* Service worker pro Web Push (notifikace do mobilu). Registruje se 1× na pozadí. */
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => { navigator.serviceWorker.register("/sw.js").catch(() => {}); });
+}
 
 document.addEventListener("change", (e) => {
   const op = e.target.closest('[data-action="order-product-filter"]');
