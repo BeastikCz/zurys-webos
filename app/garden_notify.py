@@ -17,22 +17,10 @@ from . import garden, webpush
 CHECK_INTERVAL_SEC = 60      # jak často daemon projede zahrádky
 
 
-def _push_user(conn, user_id: int, title: str, body: str, url: str) -> None:
-    """Best-effort web push na všechna zařízení uživatele (vedle in-app notify). Mrtvé subs (404/410) maže."""
-    if not webpush.enabled():
-        return
-    for s in conn.execute("SELECT id, endpoint, p256dh, auth FROM push_subs WHERE user_id = ?", (user_id,)).fetchall():
-        info = {"endpoint": s["endpoint"], "keys": {"p256dh": s["p256dh"], "auth": s["auth"]}}
-        try:
-            webpush.send(info, title, body, url, "/sedlak-cut.png")
-        except webpush.DeadSubscription:
-            conn.execute("DELETE FROM push_subs WHERE id = ?", (s["id"],))
-        except Exception:
-            pass
-
-
 def _scan(conn) -> None:
     now = datetime.now(timezone.utc)
+    push_queue: list = []  # (user_id, title, body, url) — odesíláme AŽ po commitu
+
     # 1) ÚRODA DOZRÁLA – záhon zralý a ještě neoznámen (bit 1)
     for r in conn.execute(
         "SELECT user_id, plot, crop FROM garden WHERE ready_at <= ? AND (notified & 1) = 0",
@@ -40,10 +28,11 @@ def _scan(conn) -> None:
         c = garden._BY_KEY.get(r["crop"], {})
         notify(conn, r["user_id"], "🌾", "Úroda dozrála!",
                f"{c.get('icon', '')} {c.get('name', 'Plodina')} je připravená ke sklizni.", "#/zahrada")
-        _push_user(conn, r["user_id"], "Úroda dozrála! 🌾",
-                   f"{c.get('name', 'Plodina')} je připravená ke sklizni.", "#/zahrada")
         conn.execute("UPDATE garden SET notified = notified | 1 WHERE user_id = ? AND plot = ?",
                      (r["user_id"], r["plot"]))
+        push_queue.append((r["user_id"], "Úroda dozrála! 🌾",
+                           f"{c.get('name', 'Plodina')} je připravená ke sklizni.", "#/zahrada"))
+
     # 2) CHROBÁCI – aktivní okno a ještě neoznámeni (bit 2); incoming/eaten/none přeskoč
     for r in conn.execute(
         "SELECT user_id, plot, crop, pest, pest_at FROM garden "
@@ -54,11 +43,30 @@ def _scan(conn) -> None:
         c = garden._BY_KEY.get(r["crop"], {})
         notify(conn, r["user_id"], "🐛", "Chrobáci v zahrádce!",
                f"Zachraň {c.get('name', 'plodinu')} než ti sežerou půlku úrody. 🚜", "#/zahrada")
-        _push_user(conn, r["user_id"], "Chrobáci v zahrádce! 🐛",
-                   f"Zachraň {c.get('name', 'plodinu')} než ti sežerou půlku úrody.", "#/zahrada")
         conn.execute("UPDATE garden SET notified = notified | 2 WHERE user_id = ? AND plot = ?",
                      (r["user_id"], r["plot"]))
-    conn.commit()
+        push_queue.append((r["user_id"], "Chrobáci v zahrádce! 🐛",
+                           f"Zachraň {c.get('name', 'plodinu')} než ti sežerou půlku úrody.", "#/zahrada"))
+
+    conn.commit()  # ← write lock uvolněna PŘED síťovými voláními
+
+    if push_queue and webpush.enabled():
+        dead_ids: list = []
+        for user_id, title, body, url in push_queue:
+            for s in conn.execute(
+                "SELECT id, endpoint, p256dh, auth FROM push_subs WHERE user_id = ?",
+                (user_id,)).fetchall():
+                info = {"endpoint": s["endpoint"], "keys": {"p256dh": s["p256dh"], "auth": s["auth"]}}
+                try:
+                    webpush.send(info, title, body, url, "/sedlak-cut.png")
+                except webpush.DeadSubscription:
+                    dead_ids.append(s["id"])
+                except Exception:
+                    pass
+        if dead_ids:
+            for dead_id in dead_ids:
+                conn.execute("DELETE FROM push_subs WHERE id = ?", (dead_id,))
+            conn.commit()
 
 
 def _loop() -> None:

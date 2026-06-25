@@ -237,7 +237,6 @@ function render() {
   };
   (pages[r.name] || pageShop)(r.param);
   window.scrollTo({ top: 0, behavior: "instant" in window ? "instant" : "auto" });
-  try { refreshEggHunt(); } catch (e) {}   // denní hon: schovaný klas na dnešní stránce
 }
 
 /* ---------------- Horní navigace (ZURYS) ---------------- */
@@ -2175,6 +2174,12 @@ async function enableGardenPush() {
     const vp = await api("/push/vapid-public");
     if (!vp.enabled || !vp.key) { toast("Push zatím není nastavený na serveru.", "error"); return; }
     let sub = await reg.pushManager.getSubscription();
+    if (sub) {
+      // Re-subscribe pokud byl VAPID klíč rotován (mismatch = stará subscription = 401/403)
+      const storedKey = btoa(String.fromCharCode(...new Uint8Array(sub.options.applicationServerKey)))
+        .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+      if (storedKey !== vp.key) { await sub.unsubscribe(); sub = null; }
+    }
     if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: _urlB64ToU8(vp.key) });
     await api("/push/subscribe", { method: "POST", body: sub.toJSON() });
     localStorage.setItem("push_on", "1");
@@ -2722,6 +2727,16 @@ async function doKickConnect() {
   } catch (e) { toast(e.message, "error"); }
 }
 async function doLogout() {
+  // Odregistrovat push subscription před odhlášením (sdílené zařízení nesmí dál dostávat notifikace)
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    const sub = await reg.pushManager.getSubscription();
+    if (sub) {
+      try { await api("/push/unsubscribe", { method: "POST", body: sub.toJSON() }); } catch (_) {}
+      await sub.unsubscribe();
+      localStorage.removeItem("push_on");
+    }
+  } catch (_) {}
   try { await api("/auth/logout", { method: "POST" }); } catch (e) {}
   state.user = null; toast("Odhlášeno.", "info"); navigate("shop");
 }
@@ -3115,15 +3130,6 @@ function retentionHTML(r) {
       <div class="faint" style="font-size:12px;margin-top:10px">Týdenní retence: z <b>${r.prev_week_active}</b> aktivních minulý týden se <b>${r.retained}</b> vrátilo i tento týden. Stickiness 20 %+ = zdravé · celkem účtů ${r.total_users}.</div>
     </div>`;
 }
-function eggFindersHTML(eggs) {
-  if (!eggs) return "";
-  const rows = (eggs.finders || []).map((f) => `<tr><td>${esc(f.username)}</td><td class="faint">${f.found_at ? new Date(f.found_at).toLocaleString("cs-CZ") : "—"}</td><td style="color:var(--accent)">+${fmtPts(f.reward)}</td></tr>`).join("");
-  return `<div class="panel" style="margin-bottom:16px">
-    <div class="section-title" style="margin-top:0">🥚 Easter egg — kdo našel tajný klas</div>
-    <p class="muted" style="font-size:12.5px;margin:0 0 12px">Našlo <b>${eggs.count}</b> hráčů · celkem vyplaceno <b style="color:var(--accent)">${fmtPts(eggs.total_reward || 0)}</b> 🌾</p>
-    ${eggs.count ? `<div class="table-wrap"><table class="tbl"><thead><tr><th>Hráč</th><th>Kdy našel</th><th>Odměna</th></tr></thead><tbody>${rows}</tbody></table></div>` : `<p class="faint" style="font-size:13px">Zatím nikdo nenašel. 🤫</p>`}
-  </div>`;
-}
 function gardenEconomyHTML(g) {
   if (!g || !g.by_window) return "";
   const win = (key, label) => {
@@ -3202,7 +3208,7 @@ function economyInsightsHTML(d) {
 async function adminEconomy() {
   const box = $("#adminContent");
   try {
-    const [e, lv, dash, rake, health, hh, ret, garden, insights, eggs] = await Promise.all([api("/admin/economy"), api("/admin/economy/live"), api("/admin/economy/dashboard"), api("/admin/economy/games-rake"), api("/admin/economy/health?days=14").catch(() => null), api("/admin/shop-discount").catch(() => ({ pct: 0, live_only: false, active_now: 0 })), api("/admin/analytics/retention").catch(() => null), api("/admin/economy/garden").catch(() => null), api("/admin/economy/insights?days=1").catch(() => null), api("/admin/egg-finders").catch(() => null)]);
+    const [e, lv, dash, rake, health, hh, ret, garden, insights] = await Promise.all([api("/admin/economy"), api("/admin/economy/live"), api("/admin/economy/dashboard"), api("/admin/economy/games-rake"), api("/admin/economy/health?days=14").catch(() => null), api("/admin/shop-discount").catch(() => ({ pct: 0, live_only: false, active_now: 0 })), api("/admin/analytics/retention").catch(() => null), api("/admin/economy/garden").catch(() => null), api("/admin/economy/insights?days=1").catch(() => null)]);
     const modeBtn = (m, label) => `<button class="btn btn-sm ${lv.mode === m ? "btn-primary" : "btn-ghost"}" data-action="eco-live-mode" data-mode="${m}">${label}</button>`;
     box.innerHTML = `
       ${economyDashboardHTML(dash)}
@@ -3210,7 +3216,6 @@ async function adminEconomy() {
       ${retentionHTML(ret)}
       ${economyHealthHTML(health)}
       ${gardenEconomyHTML(garden)}
-      ${eggFindersHTML(eggs)}
       ${coinIconCardHTML()}
       <div class="panel" style="margin-bottom:16px">
         <div class="section-title" style="margin-top:0">📡 Stream — body za sledování jen když je LIVE</div>
@@ -5505,7 +5510,6 @@ function handleAction(action, el) {
     case "bp-claim-premium": claimBpTier(el.dataset.tier, true); break;
     case "lp-claim": claimLevelPass(el.dataset.level); break;
     case "user-sort": setUserSort(el.dataset.sort); break;
-    case "ft-spk": claimEgg(); break;
     case "bp-daily": claimBpDaily(); break;
     case "grd-pick": grdPick(el.dataset.crop); break;
     case "grd-plant": grdPlant(el.dataset.plot); break;
@@ -5574,11 +5578,13 @@ function handleAction(action, el) {
     case "bjr-deal": bjrAct("deal"); break;
     case "bjr-hit": bjrAct("hit"); break;
     case "bjr-stand": bjrAct("stand"); break;
+    case "bjr-double": bjrAct("double"); break;
     case "bjr-next": bjrAct("next"); break;
     case "bjr-leave": bjrLeave(); break;
     case "bjr-chat": bjrChat(); break;
     case "bjr-copy": bjrCopy(el.dataset.code); break;
     case "bjr-chip": bjrChip(el.dataset.amt); break;
+    case "bjr-mute": bjrMute(); break;
     case "game-back": navigate("games"); break;
     case "open-news": openNewsPanel(); break;
     case "open-welcome": welcomeGuide(); break;
@@ -5727,62 +5733,7 @@ document.addEventListener("click", (e) => {
   handleAction(actEl.dataset.action, actEl);
 });
 
-// (skrytá drobnost) – rohová tečka / sekvence kláves
-let _eggBusy = false;
-/* Tajný klas — DENNÍ HON: každý den se skrytý klikací 🌾 schová na JINÉ stránce + JINÉ pozici.
-   seed = dnešní datum → stejné pro všechny ten den (fér, sdílitelný hint, denní závod). Konami
-   kód (↑↑↓↓←→←→ba) zůstává jako bonus pro znalce. Odměnu řeší backend /egg/claim (1×/den, idempotentní). */
-const _EGG_ROUTES = ["shop", "zahrada", "leaderboard", "bonusy", "ukoly", "exchange", "predikce", "games"];
-function eggPlan() {
-  const d = new Date();
-  const key = d.getFullYear() + "-" + (d.getMonth() + 1) + "-" + d.getDate();
-  const h = hashStr(key);
-  return {
-    key,
-    route: _EGG_ROUTES[h % _EGG_ROUTES.length],
-    x: 6 + (Math.floor(h / 11) % 86),    // 6–92 % šířky
-    y: 20 + (Math.floor(h / 977) % 68),  // 20–88 % výšky (pod hlavičkou)
-  };
-}
-function refreshEggHunt() {
-  const old = document.getElementById("eggKlas"); if (old) old.remove();
-  if (!state.user) return;
-  const plan = eggPlan();
-  if (localStorage.getItem("egg_found_" + plan.key)) return;   // už dnes nalezeno (toto zařízení)
-  if ((parseRoute().name || "shop") !== plan.route) return;     // jen na dnešní stránce
-  const el = document.createElement("div");
-  el.id = "eggKlas"; el.className = "egg-klas"; el.textContent = "🌾";
-  el.style.left = plan.x + "vw"; el.style.top = plan.y + "vh";
-  el.setAttribute("aria-label", "tajný klas");
-  el.addEventListener("click", () => claimEgg(plan.key));
-  document.body.appendChild(el);
-}
-async function claimEgg(dayKey) {
-  if (_eggBusy) return;
-  if (!state.user) { toast("🌾 Tajný klas dne! Přihlas se přes Kick a vyzvedni si ho.", "info"); return; }
-  _eggBusy = true;
-  const key = dayKey || eggPlan().key;
-  try {
-    const r = await api("/egg/claim", { method: "POST" });
-    localStorage.setItem("egg_found_" + key, "1");
-    const klas = document.getElementById("eggKlas"); if (klas) klas.remove();
-    if (r.already) { toast("🌾 Dnešní klas už máš. Vrať se zítra! 😉", "info"); }
-    else {
-      if (state.user) state.user.points = r.balance;
-      toast(`🥚 NAŠEL JSI DNEŠNÍ KLAS! +${fmtPts(r.reward)} 🌾🎉`, "success");
-      try { confettiBurst(); } catch (e) {}
-      renderHeader();
-    }
-  } catch (e) { toast(e.message, "error"); }
-  finally { setTimeout(() => { _eggBusy = false; }, 800); }
-}
-const _konami = ["arrowup", "arrowup", "arrowdown", "arrowdown", "arrowleft", "arrowright", "arrowleft", "arrowright", "b", "a"];
-let _konamiPos = 0;
-document.addEventListener("keydown", (e) => {
-  const k = (e.key || "").toLowerCase();
-  if (k === _konami[_konamiPos]) { _konamiPos++; if (_konamiPos === _konami.length) { _konamiPos = 0; claimEgg(); } }
-  else { _konamiPos = (k === _konami[0]) ? 1 : 0; }
-});
+// (easter egg „tajný klas" zrušen 25.6.2026)
 
 /* Service worker pro Web Push (notifikace do mobilu). Registruje se 1× na pozadí. */
 if ("serviceWorker" in navigator) {
@@ -5848,20 +5799,53 @@ async function refreshMe() {
 }
 
 /* ---------------- 🃏 Karta (sdílí ji multiplayer stůl) ---------------- */
-function bjCard(code) {
+function bjCard(code, cls, idx) {
+  const a = cls ? (" " + cls) : "";
+  const v = (cls && idx != null) ? (";--i:" + idx) : "";
   const base = "display:inline-flex;align-items:center;justify-content:center;min-width:40px;height:56px;padding:0 7px;border-radius:7px;font-weight:700;font-size:17px;box-shadow:0 2px 6px rgba(0,0,0,.35)";
-  if (!code || code === "??") return `<span style="${base};background:linear-gradient(135deg,#3a2d6e,#281f4d);border:1px solid #5a4db0"></span>`;
+  if (!code || code === "??") return `<span class="bjc${a}" style="${base};background:linear-gradient(135deg,#3a2d6e,#281f4d);border:1px solid #5a4db0${v}"></span>`;
   const rank = code[0] === "T" ? "10" : code[0];
   const sym = ({ S: "♠", H: "♥", D: "♦", C: "♣" })[code[1]] || "?";
   const red = code[1] === "H" || code[1] === "D";
-  return `<span style="${base};background:#fff;color:${red ? "#d4233a" : "#1a1a2e"}"><b style="margin-right:1px">${rank}</b>${sym}</span>`;
+  return `<span class="bjc${a}" style="${base};background:#fff;color:${red ? "#d4233a" : "#1a1a2e"}${v}"><b style="margin-right:1px">${rank}</b>${sym}</span>`;
 }
 
 /* ---------------- 🃏 Soukromý sdílený stůl (multiplayer + chat) ---------------- */
 let _bjRoom = null, _bjRoomId = null, _bjPoll = null;
+/* 🃏 BlackJack „juice" (Tier 1): animace-na-diff + zvuk. Reuse beep()/confettiBurst()/audioCtx()/sndWin/sndLose (def níž, hoisted). */
+let _bjAnim = { round: -1, dealerLen: 0, dealerHidden: true, youActing: false, seats: {} };
+let _bjMuted = (() => { try { return localStorage.getItem("bj_muted") === "1"; } catch (e) { return false; } })();
+let _bjTick = null, _bjSkew = 0, _bjCount = null;   // auto-flow odpočet (Tier 2): tiká lokálně mezi polly
+function _bjSnd(fn) { if (!_bjMuted) try { fn(); } catch (e) {} }
+function sndBjDeal() { beep(740, 0.04, "square", 0, 0.045); }
+function sndBjFlip() { beep(520, 0.07, "triangle", 0, 0.10); beep(360, 0.10, "sine", 0.05, 0.08); }
+function sndBjBlackjack() { [659, 880, 1047, 1319, 1568].forEach((f, i) => beep(f, 0.18, "triangle", i * 0.08, 0.16)); }
+function sndBjDing() { beep(1175, 0.12, "triangle", 0, 0.13); }
+function _bjAnimReset() { _bjAnim = { round: -1, dealerLen: 0, dealerHidden: true, youActing: false, seats: {} }; _bjCount = null; }
+function _bjStopTimers() { if (_bjPoll) { clearTimeout(_bjPoll); _bjPoll = null; } if (_bjTick) { clearInterval(_bjTick); _bjTick = null; } }
+function _bjSchedule() { if (_bjPoll) clearTimeout(_bjPoll); _bjPoll = setTimeout(bjPollRoom, (_bjRoom && _bjRoom.can_act) ? 900 : 2200); }
+function bjTickCountdown() {
+  const el = document.getElementById("bjCountdown");
+  if (!el) return;
+  if (!_bjCount) { el.style.display = "none"; return; }
+  const rem = Math.max(0, Math.round((_bjCount.target - (Date.now() + _bjSkew)) / 1000));
+  el.style.display = "";
+  el.innerHTML = `${_bjCount.label} <b>${rem}s</b>`;
+}
+/* hand s animací: animFrom = index od kterého jsou karty NOVÉ (bj-deal); flipIdx = která se otočí (reveal hole-karty) */
+function _bjHand(hand, animFrom, flipIdx) {
+  hand = hand || [];
+  if (!hand.length) return '<span class="faint" style="font-size:12px">—</span>';
+  return hand.map((c, i) => {
+    if (flipIdx != null && i === flipIdx) return bjCard(c, "bj-flip", 0);
+    if (animFrom != null && i >= animFrom) return bjCard(c, "bj-deal", i - animFrom);
+    return bjCard(c);
+  }).join("");
+}
 async function pageBjRoom(param) {
   if (!state.user) { navigate("connect"); return; }
-  if (_bjPoll) { clearInterval(_bjPoll); _bjPoll = null; }
+  _bjStopTimers();
+  _bjAnimReset();
   $("#view").innerHTML = `<div class="page-head"><h1>🃏 Soukromý stůl</h1><p class="muted">Blackjack mezi kamarády — jen na pozvánku. 🔒</p></div><div id="bjRoomWrap">${skeletonCards(1)}</div>`;
   _bjRoom = null; _bjRoomId = null;
   try {
@@ -5877,15 +5861,18 @@ async function pageBjRoom(param) {
     }
   } catch (e) { toast(e.message, "error"); _bjRoom = null; _bjRoomId = null; }
   renderBjRoom();
-  if (_bjRoomId) _bjPoll = setInterval(bjPollRoom, 2200);
+  if (_bjRoomId) { _bjSchedule(); _bjTick = setInterval(bjTickCountdown, 500); }
 }
 async function bjPollRoom() {
-  if (!document.getElementById("bjRoomWrap")) { if (_bjPoll) clearInterval(_bjPoll); _bjPoll = null; return; }
-  if (!_bjRoomId || document.hidden) return;
-  try { _bjRoom = await api("/blackjack/room/" + _bjRoomId + "/state"); } catch (e) { return; }
-  renderBjRoom();   // granulární update – vstupní pole (sázka/chat) se nepřepisují, takže psaní/focus drží
+  if (_bjPoll) { clearTimeout(_bjPoll); _bjPoll = null; }
+  if (!document.getElementById("bjRoomWrap")) { _bjStopTimers(); return; }   // odešel ze stránky → stop
+  if (_bjRoomId && !document.hidden) {
+    // granulární update – vstupní pole (sázka/chat) se nepřepisují, takže psaní/focus drží
+    try { _bjRoom = await api("/blackjack/room/" + _bjRoomId + "/state"); renderBjRoom(); } catch (e) {}
+  }
+  _bjSchedule();   // adaptivně: tvůj tah → 900 ms, jinak 2200 ms
 }
-function _bjSeat(s, g) {
+function _bjSeat(s, g, hint) {
   const crown = s.is_host ? "👑 " : "";
   const tag = s.is_you ? ' · <span style="color:var(--accent)">TY</span>' : "";
   let line;
@@ -5896,9 +5883,9 @@ function _bjSeat(s, g) {
     const net = s.payout - s.bet;
     line = s.result ? `<span style="color:${col};font-weight:600">${rmap[s.result] || s.result} ${net >= 0 ? "+" : ""}${fmtPts(net)}</span>` : '<span class="faint">—</span>';
   } else line = s.state === "acting" ? "🎴 hraje…" : (s.state === "stood" ? "✋ stojí" : (s.state === "bust" ? "💥 přebral" : '<span class="faint">sedí</span>'));
-  const cards = (s.hand || []).map(bjCard).join("") || '<span class="faint" style="font-size:12px">—</span>';
+  const cards = _bjHand(s.hand, hint && hint.animFrom != null ? hint.animFrom : null, null);
   const onTurn = s.state === "acting" && g.status === "playing";
-  const cls = "bj-spot" + (onTurn ? " turn" : (s.is_you ? " you" : ""));
+  const cls = "bj-spot" + (onTurn ? " turn" : (s.is_you ? " you" : "")) + (hint && hint.justWin ? " win" : "") + (hint && hint.justBust ? " bust" : "");
   return `<div class="${cls}">
     <div style="font-weight:700;font-size:13px">${crown}${esc(s.username)}${tag} <span class="faint" style="font-weight:400">${s.bet ? "· " + fmtPts(s.bet) : ""}</span></div>
     <div style="display:flex;gap:5px;flex-wrap:wrap;margin:8px 0 6px;min-height:34px">${cards}</div>
@@ -5927,6 +5914,7 @@ function renderBjRoom() {
       <div class="panel" style="margin-bottom:12px"><div class="row-between" id="bjHeader" style="flex-wrap:wrap;gap:8px"></div></div>
       <div class="bj-felt">
         <div class="bj-rules"><div class="r1">BLACKJACK PAYS 3 TO 2</div><div class="r2">Dealer stojí na 17 · blackjack platí 3:2</div></div>
+        <div id="bjCountdown" class="bj-countdown" style="display:none"></div>
         <div class="bj-dealer">
           <div class="bj-lbl" id="bjDealerLbl">DEALER</div>
           <div id="bjDealerCards" class="bj-cards-row"></div></div>
@@ -5956,24 +5944,66 @@ function renderBjRoom() {
   updateBjRoom(g);
 }
 function updateBjRoom(g) {
+  if (g.round_no !== _bjAnim.round) _bjAnim = { round: g.round_no, dealerLen: 0, dealerHidden: true, youActing: false, seats: {} };
   const statusTxt = { betting: "💰 Sázení", playing: "🃏 Hra běží", done: "✅ Vyhodnoceno", closed: "Zavřeno" }[g.status] || g.status;
   const hdr = document.getElementById("bjHeader");
   if (hdr) hdr.innerHTML = `<div><b>Kód: <span style="color:var(--accent)">${esc(g.code)}</span></b> <span class="faint">· ${statusTxt} · kolo ${g.round_no}</span></div>
-    <div class="toolbar" style="gap:6px"><button class="btn btn-sm btn-ghost" data-action="bjr-copy" data-code="${esc(g.code)}">📋 Link</button>
+    <div class="toolbar" style="gap:6px"><button class="btn btn-sm btn-ghost" data-action="bjr-mute" title="Zvuk u stolu">${_bjMuted ? "🔇" : "🔊"}</button><button class="btn btn-sm btn-ghost" data-action="bjr-copy" data-code="${esc(g.code)}">📋 Link</button>
       <button class="btn btn-sm btn-danger" data-action="bjr-leave">Odejít</button></div>`;
   const dealerVal = g.dealer && g.dealer.length ? (g.dealer_hidden ? g.dealer_value + "+" : g.dealer_value) : "";
   const dl = document.getElementById("bjDealerLbl");
   if (dl) dl.textContent = "DEALER" + (dealerVal !== "" ? " (" + dealerVal + ")" : "");
+  // DEALER diff: nové dobírané karty = bj-deal; otočení hole-karty při revealu = bj-flip
+  const dealer = g.dealer || [];
+  const prevDLen = _bjAnim.dealerLen, nowHidden = !!g.dealer_hidden;
+  let flipIdx = null;
+  if (_bjAnim.dealerHidden && !nowHidden && prevDLen > 0) flipIdx = prevDLen - 1;
+  const dAnim = dealer.length > prevDLen ? prevDLen : null;
   const dc = document.getElementById("bjDealerCards");
-  if (dc) dc.innerHTML = (g.dealer || []).length ? g.dealer.map(bjCard).join("") : '<span class="faint">—</span>';
+  if (dc) dc.innerHTML = dealer.length ? _bjHand(dealer, dAnim, flipIdx) : '<span class="faint">—</span>';
+  if (flipIdx != null) _bjSnd(sndBjFlip);
+  else if (dAnim != null && dealer.length) _bjSnd(sndBjDeal);
+  _bjAnim.dealerLen = dealer.length; _bjAnim.dealerHidden = nowHidden;
+  // SEATY diff: nové karty = bj-deal; přechod na výsledek = glow/shake + zvuk/confetti (jen jednou, jen pro tebe)
   const se = document.getElementById("bjSeats");
-  if (se) se.innerHTML = g.seats.map((s) => _bjSeat(s, g)).join("");
+  if (se) se.innerHTML = g.seats.map((s, i) => {
+    const key = s.username || ("i" + i);
+    const prev = _bjAnim.seats[key] || { len: 0, result: null };
+    const hand = s.hand || [];
+    const animFrom = hand.length > prev.len ? prev.len : null;
+    const resultNow = (s.state === "resolved" || g.status === "done") ? (s.result || null) : null;
+    const justResolved = !!resultNow && resultNow !== prev.result;
+    const hint = {
+      animFrom,
+      justWin: justResolved && (resultNow === "win" || resultNow === "blackjack"),
+      justBust: justResolved && (resultNow === "bust" || resultNow === "lose"),
+    };
+    if (justResolved && s.is_you) {
+      if (resultNow === "blackjack") { _bjSnd(sndBjBlackjack); try { confettiBurst(); } catch (e) {} }
+      else if (resultNow === "win") _bjSnd(sndWin);
+      else if (resultNow === "bust" || resultNow === "lose") _bjSnd(sndLose);
+    } else if (animFrom != null && s.is_you && g.status === "playing") _bjSnd(sndBjDeal);
+    _bjAnim.seats[key] = { len: hand.length, result: resultNow };
+    return _bjSeat(s, g, hint);
+  }).join("");
+  // „jsi na tahu" ding (jen na přechodu)
+  const youAct = !!(g.you && g.you.state === "acting" && g.status === "playing");
+  if (youAct && !_bjAnim.youActing) _bjSnd(sndBjDing);
+  _bjAnim.youActing = youAct;
+  // auto-flow odpočet: server pošle phase_until + server_now; přepočti na lokální čas a nech tikat
+  _bjSkew = (g.server_now ? Date.parse(g.server_now) : Date.now()) - Date.now();
+  const youSeat = (g.seats || []).find((s) => s.is_you);
+  if (g.status === "betting" && g.phase_until) _bjCount = { target: Date.parse(g.phase_until), label: "🃏 Rozdání za" };
+  else if (g.status === "done" && g.phase_until) _bjCount = { target: Date.parse(g.phase_until), label: "🔄 Nové kolo za" };
+  else if (youAct && youSeat && youSeat.turn_until) _bjCount = { target: Date.parse(youSeat.turn_until), label: "⏳ Tvůj tah" };
+  else _bjCount = null;
+  bjTickCountdown();
   const bb = document.getElementById("bjBetBar");
   if (bb) bb.style.display = g.can_bet ? "" : "none";
   let controls = "";
-  if (!g.can_bet && g.status === "betting" && g.you && g.you.state === "ready") controls = '<div class="faint">Vsazeno ✔ — čeká se, až host rozdá kolo.</div>';
-  if (g.can_deal) controls += `<button class="btn btn-success btn-block" data-action="bjr-deal"${controls ? ' style="margin-top:8px"' : ""}>🃏 Rozdat kolo</button>`;
-  if (g.can_act) controls = `<div class="toolbar" style="gap:8px"><button class="btn btn-success" data-action="bjr-hit">Hit 🎴</button><button class="btn btn-primary" data-action="bjr-stand">Stand ✋</button></div>`;
+  if (!g.can_bet && g.status === "betting" && g.you && g.you.state === "ready") controls = '<div class="faint">Vsazeno ✔ — kolo se rozdá po odpočtu (nebo dřív, když host klikne).</div>';
+  if (g.can_deal) controls += `<button class="btn btn-success btn-block" data-action="bjr-deal"${controls ? ' style="margin-top:8px"' : ""}>🃏 Rozdat hned</button>`;
+  if (g.can_act) controls = `<div class="toolbar" style="gap:8px"><button class="btn btn-success" data-action="bjr-hit">Hit 🎴</button><button class="btn btn-primary" data-action="bjr-stand">Stand ✋</button>${g.can_double ? '<button class="btn btn-accent" data-action="bjr-double">Double ✖2</button>' : ""}</div>`;
   else if (g.status === "playing" && g.you && g.you.state !== "acting") controls = controls || '<div class="faint">Čeká se na ostatní hráče… 🃏</div>';
   if (g.can_next) controls += `<button class="btn btn-accent btn-block" data-action="bjr-next" style="margin-top:8px">🔄 Nové kolo</button>`;
   const ab = document.getElementById("bjActions");
@@ -6024,7 +6054,7 @@ async function bjrChat() {
   catch (e) { toast(e.message, "error"); }
 }
 async function bjrLeave() {
-  if (_bjPoll) { clearInterval(_bjPoll); _bjPoll = null; }
+  _bjStopTimers();
   const rid = _bjRoomId; _bjRoom = null; _bjRoomId = null;
   if (rid) { try { await api("/blackjack/room/" + rid + "/leave", { method: "POST" }); } catch (e) {} }
   navigate("games");
@@ -6033,6 +6063,13 @@ function bjrCopy(code) {
   const link = location.origin + "/#/bj/" + code;
   if (navigator.clipboard) navigator.clipboard.writeText(link).then(() => toast("Link zkopírován! 📋", "success"));
   else toast(link, "info");
+}
+function bjrMute() {
+  _bjMuted = !_bjMuted;
+  try { localStorage.setItem("bj_muted", _bjMuted ? "1" : "0"); } catch (e) {}
+  if (!_bjMuted) audioCtx();   // resume audio kontextu na klik (autoplay policy)
+  if (_bjRoom) updateBjRoom(_bjRoom);
+  toast(_bjMuted ? "🔇 Zvuk u stolu vypnut" : "🔊 Zvuk u stolu zapnut", "info");
 }
 
 async function pageGames() {

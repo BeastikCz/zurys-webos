@@ -21,15 +21,32 @@ def vapid_public():
     return {"key": webpush.public_key(), "enabled": webpush.enabled()}
 
 
+_MAX_SUBS_PER_USER = 10
+
+
 @router.post("/subscribe")
 def subscribe(data: PushSubIn, request: Request,
               user: sqlite3.Row = Depends(require_user),
               conn: sqlite3.Connection = Depends(db_dep)):
     """Uloží/aktualizuje push subscription přihlášeného uživatele (UPSERT na endpoint)."""
     ua = (request.headers.get("user-agent") or "")[:300]
+    # Ownership guard: odmítnout přepsání endpointu jiného uživatele
+    existing = conn.execute("SELECT user_id FROM push_subs WHERE endpoint = ?",
+                            (data.endpoint,)).fetchone()
+    if existing and existing["user_id"] != user["id"]:
+        print(f"[push] ownership conflict: user {user['id']} tried to claim endpoint of user {existing['user_id']}")
+        return {"ok": True}  # silent — neodhalovat komu endpoint patří
+    # Per-user cap: max _MAX_SUBS_PER_USER zařízení; pruning nejstarší
+    count = conn.execute("SELECT count(*) FROM push_subs WHERE user_id = ?",
+                         (user["id"],)).fetchone()[0]
+    if count >= _MAX_SUBS_PER_USER:
+        conn.execute(
+            "DELETE FROM push_subs WHERE id = ("
+            "SELECT id FROM push_subs WHERE user_id = ? ORDER BY created_at LIMIT 1)",
+            (user["id"],))
     conn.execute(
         "INSERT INTO push_subs (user_id, endpoint, p256dh, auth, ua, created_at) VALUES (?,?,?,?,?,?) "
-        "ON CONFLICT(endpoint) DO UPDATE SET user_id=excluded.user_id, p256dh=excluded.p256dh, "
+        "ON CONFLICT(endpoint) DO UPDATE SET p256dh=excluded.p256dh, "
         "auth=excluded.auth, ua=excluded.ua",
         (user["id"], data.endpoint, data.keys.p256dh, data.keys.auth, ua, now_iso()))
     conn.commit()

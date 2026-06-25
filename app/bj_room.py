@@ -19,7 +19,9 @@ from .security import secure_choice, new_code
 from .blackjack import hand_value, _is_bj, _val, _RANKS, _SUITS, MIN_BET, MAX_BET
 
 MAX_SEATS = 6
-ACT_TIMEOUT_S = 30        # AFK: kdo do 30 s nezahraje, automaticky se postaví
+ACT_TIMEOUT_S = 30        # AFK / tah: kdo do 30 s nezahraje, automaticky se postaví
+BET_SECONDS = 25          # auto-flow: odpočet sázení od PRVNÍ sázky → pak auto-rozdání
+RESOLVE_SECONDS = 8       # auto-flow: odpočet po vyhodnocení → pak auto-nové kolo
 CHAT_TAIL = 40
 
 
@@ -128,21 +130,24 @@ def place_bet(conn, uid, room_id, amount):
     if not try_debit(conn, uid, amount, "Blackjack stůl – sázka 🃏"):
         raise ValueError("Nemáš dostatek sedláků.")
     conn.execute("UPDATE bj_seats SET bet=?, state='ready' WHERE id=?", (amount, s["id"]))
+    if not room["phase_until"]:                  # první sázka u stolu spustí odpočet do auto-rozdání
+        until = (datetime.now(timezone.utc) + timedelta(seconds=BET_SECONDS)).isoformat()
+        conn.execute("UPDATE bj_rooms SET phase_until=? WHERE id=? AND phase_until IS NULL", (until, room_id))
     conn.commit()
     return _public(conn, _room(conn, room_id), uid)
 
 
-def deal(conn, uid, room_id):
+def _do_deal(conn, room_id):
+    """Rozdá kolo (BEZ auth – sdílí host i auto-flow). Atomicky claimne betting→playing, aby dvě
+    souběžná rozdání (host klik + auto na pollu) neudělala karty 2×."""
     room = _room(conn, room_id)
-    if not room:
-        raise ValueError("Stůl neexistuje.")
-    if room["host_id"] != uid:
-        raise ValueError("Rozdat karty může jen host stolu.")
-    if room["status"] != "betting":
-        raise ValueError("Teď není možné rozdávat.")
+    if not room or room["status"] != "betting":
+        return False
     ready = [s for s in _seats(conn, room_id) if s["state"] == "ready" and s["bet"] > 0]
     if not ready:
-        raise ValueError("Zatím nikdo nevsadil.")
+        return False
+    if conn.execute("UPDATE bj_rooms SET status='playing' WHERE id=? AND status='betting'", (room_id,)).rowcount == 0:
+        return False                              # někdo jiný už claimnul rozdání (souběh)
     deck = _shoe()
     pos = 0
     dealer = [deck[pos], deck[pos + 1]]
@@ -155,10 +160,23 @@ def deal(conn, uid, room_id):
         conn.execute("UPDATE bj_seats SET hand=?, state=?, acted_at=? WHERE id=?",
                      (json.dumps(hand), st, ts, s["id"]))
     conn.execute(
-        "UPDATE bj_rooms SET status='playing', dealer=?, deck=?, deck_pos=?, round_no=round_no+1, updated_at=? WHERE id=?",
+        "UPDATE bj_rooms SET dealer=?, deck=?, deck_pos=?, round_no=round_no+1, phase_until=NULL, updated_at=? WHERE id=?",
         (json.dumps(dealer), json.dumps(deck), pos, ts, room_id))
     conn.commit()
     _maybe_resolve(conn, room_id)            # všichni měli BJ → rovnou vyhodnoť
+    return True
+
+
+def deal(conn, uid, room_id):
+    room = _room(conn, room_id)
+    if not room:
+        raise ValueError("Stůl neexistuje.")
+    if room["host_id"] != uid:
+        raise ValueError("Rozdat karty může jen host stolu.")
+    if room["status"] != "betting":
+        raise ValueError("Teď není možné rozdávat.")
+    if not _do_deal(conn, room_id):
+        raise ValueError("Zatím nikdo nevsadil.")
     return _public(conn, _room(conn, room_id), uid)
 
 
@@ -194,6 +212,49 @@ def stand(conn, uid, room_id):
     return _public(conn, _room(conn, room_id), uid)
 
 
+def double(conn, uid, room_id):
+    """Double down: zdvojí sázku, vezme PŘESNĚ jednu kartu, pak automaticky stojí. Jen na první 2 karty."""
+    room = _room(conn, room_id)
+    if not room or room["status"] != "playing":
+        raise ValueError("Teď není možné hrát.")
+    s = _seat(conn, room_id, uid)
+    if not s or s["state"] != "acting":
+        raise ValueError("Teď nejsi na tahu.")
+    hand = json.loads(s["hand"])
+    if len(hand) != 2:
+        raise ValueError("Zdvojit (double) jde jen na první dvě karty.")
+    bet = s["bet"]
+    if not try_debit(conn, uid, bet, "Blackjack stůl – zdvojení (double) 🃏"):
+        raise ValueError("Nemáš dost sedláků na zdvojení.")
+    deck = json.loads(room["deck"])
+    hand.append(_draw(conn, room_id, deck))
+    v = hand_value(hand)
+    st = "bust" if v > 21 else "stood"           # double = přesně 1 karta, pak konec tahu
+    conn.execute("UPDATE bj_seats SET hand=?, bet=?, state=?, acted_at=? WHERE id=?",
+                 (json.dumps(hand), bet * 2, st, now_iso(), s["id"]))
+    conn.commit()
+    _maybe_resolve(conn, room_id)
+    return _public(conn, _room(conn, room_id), uid)
+
+
+def _do_next(conn, room_id):
+    """Nové kolo (BEZ auth – host i auto-flow): done→betting + reset seatů. Atomický claim proti dvojímu resetu."""
+    room = _room(conn, room_id)
+    if not room:
+        return False
+    if room["status"] == "done":
+        if conn.execute("UPDATE bj_rooms SET status='betting' WHERE id=? AND status='done'", (room_id,)).rowcount == 0:
+            return False                          # někdo jiný už spustil nové kolo (souběh)
+    elif room["status"] != "betting":
+        return False
+    conn.execute("UPDATE bj_seats SET bet=0, hand='[]', state='idle', result=NULL, payout=0, acted_at=NULL WHERE room_id=?",
+                 (room_id,))
+    conn.execute("UPDATE bj_rooms SET dealer='[]', deck='[]', deck_pos=0, phase_until=NULL, updated_at=? WHERE id=?",
+                 (now_iso(), room_id))
+    conn.commit()
+    return True
+
+
 def next_round(conn, uid, room_id):
     room = _room(conn, room_id)
     if not room:
@@ -202,11 +263,7 @@ def next_round(conn, uid, room_id):
         raise ValueError("Nové kolo může spustit jen host stolu.")
     if room["status"] not in ("done", "betting"):
         raise ValueError("Kolo ještě běží.")
-    conn.execute("UPDATE bj_seats SET bet=0, hand='[]', state='idle', result=NULL, payout=0, acted_at=NULL WHERE room_id=?",
-                 (room_id,))
-    conn.execute("UPDATE bj_rooms SET status='betting', dealer='[]', deck='[]', deck_pos=0, updated_at=? WHERE id=?",
-                 (now_iso(), room_id))
-    conn.commit()
+    _do_next(conn, room_id)
     return _public(conn, _room(conn, room_id), uid)
 
 
@@ -255,6 +312,9 @@ def _maybe_resolve(conn, room_id):
         return                                # někdo už claimnul vyhodnocení (souběh)
     conn.commit()
     _resolve(conn, room_id)
+    until = (datetime.now(timezone.utc) + timedelta(seconds=RESOLVE_SECONDS)).isoformat()
+    conn.execute("UPDATE bj_rooms SET phase_until=? WHERE id=?", (until, room_id))   # odpočet → auto-nové kolo
+    conn.commit()
 
 
 def _resolve(conn, room_id):
@@ -290,10 +350,32 @@ def _resolve(conn, room_id):
     conn.commit()
 
 
+def _auto_advance(conn, room_id):
+    """Motor fází (běží na KAŽDÉM pollu /state): betting→auto-rozdání po odpočtu, playing→auto-vyhodnocení
+    (AFK), done→auto-nové kolo po odpočtu. Vše atomicky claimnuté → bezpečné při souběhu pollů více hráčů."""
+    room = _room(conn, room_id)
+    if not room:
+        return
+    st = room["status"]
+    if st == "playing":
+        _maybe_resolve(conn, room_id)
+        return
+    now = datetime.now(timezone.utc).isoformat()
+    pu = room["phase_until"]
+    if not pu or now < pu:
+        return
+    if st == "betting":
+        if not _do_deal(conn, room_id):          # odpočet vypršel, ale nikdo nevsadil → zruš odpočet (čeká dál)
+            conn.execute("UPDATE bj_rooms SET phase_until=NULL WHERE id=? AND status='betting'", (room_id,))
+            conn.commit()
+    elif st == "done":
+        _do_next(conn, room_id)
+
+
 # ---------------- veřejný stav (polling) ----------------
 def _public(conn, room, viewer_uid):
     room_id = room["id"]
-    _maybe_resolve(conn, room_id)            # polling = motor postupu fází
+    _auto_advance(conn, room_id)             # polling = motor postupu fází (auto-deal / resolve / next)
     room = _room(conn, room_id)
     conn.execute("UPDATE bj_seats SET seen_at=? WHERE room_id=? AND user_id=?", (now_iso(), room_id, viewer_uid))
     conn.commit()
@@ -304,12 +386,19 @@ def _public(conn, room, viewer_uid):
     for s in _seats(conn, room_id):
         hand = json.loads(s["hand"])
         u = conn.execute("SELECT username, avatar_url FROM users WHERE id=?", (s["user_id"],)).fetchone()
+        turn_until = None
+        if s["state"] == "acting" and s["acted_at"]:
+            try:
+                turn_until = (datetime.fromisoformat(s["acted_at"]) + timedelta(seconds=ACT_TIMEOUT_S)).isoformat()
+            except ValueError:
+                turn_until = None
         seats_out.append({
             "user_id": s["user_id"], "username": u["username"] if u else "?",
             "avatar_url": (u["avatar_url"] if u else "") or "",
             "bet": s["bet"], "hand": hand, "value": hand_value(hand) if hand else 0,
             "state": s["state"], "result": s["result"], "payout": s["payout"],
             "is_you": s["user_id"] == viewer_uid, "is_host": s["user_id"] == room["host_id"],
+            "turn_until": turn_until,
         })
     you = next((x for x in seats_out if x["is_you"]), None)
     chat = [dict(r) for r in conn.execute(
@@ -330,6 +419,8 @@ def _public(conn, room, viewer_uid):
         "can_bet": status == "betting" and you is not None and you["state"] == "idle",
         "can_deal": status == "betting" and room["host_id"] == viewer_uid and any(s["state"] == "ready" for s in seats_out),
         "can_act": status == "playing" and you is not None and you["state"] == "acting",
+        "can_double": status == "playing" and you is not None and you["state"] == "acting" and len(you["hand"]) == 2,
         "can_next": status == "done" and room["host_id"] == viewer_uid,
+        "phase_until": room["phase_until"], "server_now": now_iso(),
         "chat": chat, "min_bet": MIN_BET, "max_bet": MAX_BET,
     }

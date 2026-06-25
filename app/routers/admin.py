@@ -294,18 +294,6 @@ def economy_insights(days: int = Query(1, ge=1, le=30),
     return data
 
 
-@router.get("/egg-finders")
-def egg_finders(conn: sqlite3.Connection = Depends(db_dep)):
-    """Easter egg „tajný klas" – kdo a kdy ho našel (z points_log, nejnovější první)."""
-    rows = conn.execute(
-        "SELECT u.username, l.created_at, l.change FROM points_log l "
-        "JOIN users u ON u.id = l.user_id WHERE l.reason LIKE 'Tajný klas 🥚%' "
-        "ORDER BY l.id DESC LIMIT 200").fetchall()
-    finders = [{"username": r["username"], "found_at": r["created_at"], "reward": r["change"]} for r in rows]
-    return {"finders": finders, "count": len(finders),
-            "total_reward": sum(f["reward"] for f in finders)}
-
-
 _retention_cache = {"at": 0.0, "data": None}
 
 

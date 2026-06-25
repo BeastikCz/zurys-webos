@@ -185,3 +185,70 @@ def test_leave_refunds_bet_in_betting(client):
     assert _points(p) == 800
     _run(bj_room.leave, p, rid)
     assert _points(p) == 1000                               # nevyužitá sázka vrácena
+
+
+# ---- Tier 2: Double down ----
+def test_double_win_pays_double(client):
+    h = _mk_user(1000)
+    rid = _mk_room_playing(h, ["TS", "7D"], ["2C"], 0)      # dealer 17; deck next = 2C
+    _add_seat(rid, h, 100, ["9S", "9D"], "acting")          # 18 → double +2C = 20 > 17 → win
+    b = _points(h)
+    _run(bj_room.double, h, rid)
+    s = _seatrow(rid, h)
+    assert s["bet"] == 200                                  # sázka zdvojena
+    assert len(json.loads(s["hand"])) == 3                  # přesně 1 karta navíc, pak konec
+    assert s["result"] == "win"
+    assert _points(h) == b - 100 + 400                      # -100 extra sázka, +400 výplata (2:1 z 200)
+
+
+def test_double_only_on_two_cards(client):
+    h = _mk_user(1000)
+    rid = _mk_room_playing(h, ["TS", "7D"], ["2C", "3C"], 0)
+    _add_seat(rid, h, 100, ["5S", "4D", "3H"], "acting")    # 3 karty → double nesmí
+    try:
+        _run(bj_room.double, h, rid)
+        assert False, "double jen na 2 karty"
+    except ValueError as e:
+        assert "dvě" in str(e).lower() or "double" in str(e).lower()
+
+
+# ---- Tier 2: auto-flow (server deadline, lazy na pollu) ----
+def _expire_phase(rid):
+    conn = get_conn()
+    try:
+        conn.execute("UPDATE bj_rooms SET phase_until=? WHERE id=?",
+                     ((datetime.now(timezone.utc) - timedelta(seconds=1)).isoformat(), rid))
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def test_first_bet_starts_countdown(client):
+    h = _mk_user(1000); st = _run(bj_room.create, h, "host")
+    rid = st["room_id"]
+    assert _roomrow(rid)["phase_until"] is None             # bez sázky žádný odpočet
+    _run(bj_room.place_bet, h, rid, 100)
+    assert _roomrow(rid)["phase_until"] is not None         # první sázka spustí odpočet
+
+
+def test_auto_deal_after_betting_deadline(client):
+    h = _mk_user(1000); st = _run(bj_room.create, h, "host")
+    rid = st["room_id"]
+    _run(bj_room.place_bet, h, rid, 100)
+    _expire_phase(rid)
+    s = _run(bj_room.state, h, rid)                          # poll → _auto_advance → _do_deal
+    assert s["status"] in ("playing", "done")
+    assert len(json.loads(_seatrow(rid, h)["hand"])) >= 2    # karty se rozdaly bez host kliku
+
+
+def test_auto_next_after_done_deadline(client):
+    h = _mk_user()
+    rid = _mk_room_playing(h, ["TS", "9C"], [], 0)          # dealer 19
+    _add_seat(rid, h, 100, ["KS", "KD"], "stood")            # 20 → win
+    _run(bj_room._maybe_resolve, rid)                        # → done + odpočet do nového kola
+    assert _roomrow(rid)["status"] == "done" and _roomrow(rid)["phase_until"] is not None
+    _expire_phase(rid)
+    _run(bj_room.state, h, rid)                              # poll → _auto_advance → _do_next
+    r = _roomrow(rid)
+    assert r["status"] == "betting" and json.loads(r["dealer"]) == []
+    assert _seatrow(rid, h)["state"] == "idle" and _seatrow(rid, h)["bet"] == 0

@@ -73,7 +73,7 @@ def send(subscription_info: dict, title: str, body: str = "", url: str = "/", ic
     payload = json.dumps({"title": title, "body": body, "url": url or "/", "icon": icon or "/sedlak-cut.png"})
     try:
         webpush(subscription_info=subscription_info, data=payload,
-                vapid_private_key=_VAPID, vapid_claims={"sub": _SUBJECT}, ttl=600)
+                vapid_private_key=_VAPID, vapid_claims={"sub": _SUBJECT}, ttl=600, timeout=5)
         return True
     except WebPushException as e:
         code = getattr(getattr(e, "response", None), "status_code", None)

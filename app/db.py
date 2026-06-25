@@ -578,6 +578,7 @@ CREATE TABLE IF NOT EXISTS bj_rooms (
     deck        TEXT NOT NULL DEFAULT '[]',       -- JSON shoe (server-only)
     deck_pos    INTEGER NOT NULL DEFAULT 0,       -- atomické tahání karet (RETURNING)
     round_no    INTEGER NOT NULL DEFAULT 0,
+    phase_until TEXT,                             -- auto-flow: deadline aktuální fáze (betting/done) → auto-posun na pollu
     created_at  TEXT NOT NULL,
     updated_at  TEXT NOT NULL
 );
@@ -742,6 +743,8 @@ _MIGRATIONS = [
     # gift_requests: tabulka už na prod vznikla bez sloupce `note` (CREATE IF NOT EXISTS = no-op),
     # tady ho dorovnáme. Nullable – nepovinný důvod od odesílatele.
     ("gift_requests", "note", "TEXT"),
+    # BJ auto-flow: deadline fáze (betting → auto-rozdání, done → auto-nové kolo). NULL = bez odpočtu.
+    ("bj_rooms", "phase_until", "TEXT"),
 ]
 
 

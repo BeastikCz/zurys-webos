@@ -60,26 +60,6 @@ def test_daily_claim_no_double_pay(client):
         conn.close()
 
 
-# ---------------- Tajný klas (egg): odměna max 1× ----------------
-def test_egg_claim_idempotent(client):
-    from app.db import get_conn
-    from app.routers.misc import egg_claim, egg_reward_today
-    conn = get_conn()
-    try:
-        uid = _mk(conn, points=0)
-        user = _row(conn, uid)
-        r1 = egg_claim(user=user, conn=conn)
-        assert r1["ok"] is True
-        bal = _points(conn, uid)
-        assert bal == egg_reward_today()
-        # druhý pokus (i kdyby prošel starou SELECT kontrolou) – atomický zámek ho zařízne
-        r2 = egg_claim(user=user, conn=conn)
-        assert r2.get("already") is True
-        assert _points(conn, uid) == bal             # připsáno jen jednou
-    finally:
-        conn.close()
-
-
 # ---------------- PvP cancel: 1 hra → 1 refund ----------------
 def test_cancel_game_refund_once(client):
     from app.db import get_conn, now_iso

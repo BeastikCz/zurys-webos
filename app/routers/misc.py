@@ -570,36 +570,6 @@ def battlepass_claim(data: BattlePassClaimIn, user: sqlite3.Row = Depends(requir
     return r
 
 
-def egg_reward_today() -> int:
-    """Deterministická DENNÍ odměna za tajný klas (500–2500, krok 100). Stejná pro všechny ten den
-    (fér, nejde rerollnout), ale každý den jiná. Seed = český datum."""
-    import hashlib
-    from ..db import local_date
-    h = int(hashlib.sha256(local_date().encode()).hexdigest()[:8], 16)
-    return 500 + (h % 21) * 100
-
-
-@router.post("/egg/claim")
-def egg_claim(user: sqlite3.Row = Depends(require_user),
-              conn: sqlite3.Connection = Depends(db_dep)):
-    """Easter egg „tajný klas": 1×/DEN, náhodná denní odměna (reset každý den). Reason s datem =
-    denní ledger. Luck bonus → body ANO, XP NE (level = úsilí/podpora, ne náhoda)."""
-    from ..db import local_date
-    day = local_date()
-    reason = f"Tajný klas 🥚 {day}"
-    # Atomický zámek: odměnu připíše JEN request, který reálně vložil dnešní claim řádek (rowcount==1).
-    # Bez toho dva souběžné /egg/claim oba projdou SELECTem (řádek ještě není) a oba připíšou (double-pay).
-    if conn.execute("INSERT OR IGNORE INTO claim_locks (user_id, claim_key, created_at) VALUES (?, ?, ?)",
-                    (user["id"], f"egg:{day}", now_iso())).rowcount == 0:
-        conn.commit()
-        return {"ok": False, "already": True}
-    reward = egg_reward_today()
-    add_points(conn, user["id"], reward, reason, xp=False)
-    conn.commit()
-    bal = conn.execute("SELECT points FROM users WHERE id = ?", (user["id"],)).fetchone()["points"]
-    return {"ok": True, "reward": reward, "balance": bal}
-
-
 @router.get("/level-pass")
 def level_pass_status(user: sqlite3.Row = Depends(require_user),
                       conn: sqlite3.Connection = Depends(db_dep)):

@@ -202,14 +202,6 @@ main { padding: 0 0 80px; min-height: calc(100vh - var(--header-h)); overflow-x:
 .cf-after { display: flex; justify-content: space-between; align-items: center; margin-top: 16px; padding: 13px 16px; border-radius: 12px; background: var(--surface-2); border: 1px solid var(--border); }
 .cf-after span { color: var(--text-dim); font-weight: 700; font-size: 13.5px; }
 .cf-after b { font-size: 19px; font-weight: 900; color: var(--success); font-variant-numeric: tabular-nums; }
-/* Tajný klas (denní hon) — HARD: malinký, hodně ztlumený 🌾 = těžko najít v 🌾-heavy UI.
-   Hover ho prozradí (rozsvítí + zvětší) = odměna za to, že jsi trefil přesný pixel. */
-.egg-klas { position: fixed; z-index: 40; font-size: 13px; line-height: 1; cursor: pointer; opacity: .16;
-  filter: grayscale(.45); transform: translate(-50%, -50%); user-select: none;
-  transition: opacity .2s, transform .2s, filter .2s; animation: eggbob 3.6s ease-in-out infinite; }
-.egg-klas:hover { opacity: 1; filter: none; transform: translate(-50%, -50%) scale(1.7); text-shadow: 0 0 14px var(--accent-glow); }
-@keyframes eggbob { 0%, 100% { margin-top: 0; } 50% { margin-top: -2px; } }
-@media (prefers-reduced-motion: reduce) { .egg-klas { animation: none; } }
 /* Web Push tlačítko/banner v zahrádce (upozornění na chrobáky na mobil) */
 .gpush, .gpush-hint { margin: 0 0 14px; padding: 11px 14px; border-radius: var(--r-sm); font-size: 13px; }
 .gpush.on { display: flex; align-items: center; gap: 8px; background: rgba(70, 224, 138, .1); border: 1px solid rgba(70, 224, 138, .35); color: var(--success); font-weight: 700; }
@@ -871,8 +863,25 @@ footer.site-footer { border-top: 1px solid var(--border); padding: 22px 0; color
 .bj-seats { position: relative; display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; }
 .bj-spot { background: rgba(6, 22, 40, .55); border: 1px solid rgba(255,211,77,.30); border-radius: 12px; padding: 10px; box-shadow: inset 0 1px 0 rgba(255,255,255,.06), 0 4px 14px rgba(0,0,0,.25); }
 .bj-spot.you { border-color: var(--accent); }
-.bj-spot.turn { border-color: var(--gold); box-shadow: 0 0 0 2px var(--gold), 0 0 18px rgba(255,211,77,.42); }
-@media (prefers-reduced-motion: reduce) { .news-panel { animation: none; } }
+.bj-spot.turn { border-color: var(--gold); animation: bj-turn-pulse 1.6s ease-in-out infinite; }
+/* 🃏 BlackJack „juice" — rozdání karet, flip revealu dealera, výhra/bust (Tier 1) */
+.bjc { will-change: transform; }
+.bj-cards-row, .bj-spot { perspective: 760px; }
+@keyframes bj-deal { from { opacity: 0; transform: translate(-30px,-94px) rotate(-14deg) scale(.7); } to { opacity: 1; transform: none; } }
+.bj-deal { animation: bj-deal .34s cubic-bezier(.2,.8,.25,1) backwards; animation-delay: calc(var(--i,0) * 90ms); }
+@keyframes bj-flip { from { opacity: .15; transform: rotateY(-88deg) scale(.96); } to { opacity: 1; transform: none; } }
+.bj-flip { animation: bj-flip .42s ease-out backwards; }
+@keyframes bj-turn-pulse { 0%,100% { box-shadow: 0 0 0 2px var(--gold), 0 0 12px rgba(255,211,77,.3); } 50% { box-shadow: 0 0 0 2px var(--gold), 0 0 22px rgba(255,211,77,.62); } }
+@keyframes bj-win { 0%,100% { box-shadow: inset 0 1px 0 rgba(255,255,255,.06), 0 4px 14px rgba(0,0,0,.25); } 50% { box-shadow: 0 0 0 3px #39d98a, 0 0 26px rgba(57,217,138,.6); } }
+.bj-spot.win { animation: bj-win .9s ease 2; border-color: #39d98a !important; }
+@keyframes bj-bust { 0%,100% { transform: translateX(0); } 20% { transform: translateX(-6px); } 40% { transform: translateX(6px); } 60% { transform: translateX(-4px); } 80% { transform: translateX(4px); } }
+.bj-spot.bust { animation: bj-bust .42s ease; border-color: #ff6b6b !important; }
+/* auto-flow odpočet (Tier 2): pill nad dealerem */
+.bj-countdown { position: relative; text-align: center; margin: -8px 0 14px; color: #ffe08a; font-weight: 800; font-size: 14px; letter-spacing: .03em; text-shadow: 0 1px 4px rgba(0,0,0,.4); }
+.bj-countdown b { color: #fff; font-variant-numeric: tabular-nums; }
+@media (prefers-reduced-motion: reduce) {
+  .news-panel, .bj-deal, .bj-flip, .bj-spot.turn, .bj-spot.win, .bj-spot.bust { animation: none; }
+}
 
 /* ============ Responsive ============ */
 .kick-short { display: none; }   /* zkrácený label Kick tlačítka – jen na mobilu */
@@ -1659,7 +1668,3 @@ body::before { display: none !important; }
 .prof-level .pl-bar i { display: block; height: 100%; background: var(--accent-grad, var(--accent)); border-radius: 5px; }
 .prof-level .pl-xp { font-size: 11.5px; white-space: nowrap; }
 
-/* rohová tečka (dekorace) */
-.ft-spk { position: fixed; left: 7px; bottom: 7px; width: 24px; height: 24px; padding: 0; font-size: 15px; line-height: 24px; text-align: center; background: none; border: none; cursor: default; opacity: .1; z-index: 6; transition: opacity .25s; }
-.ft-spk::before { content: "\1F33E"; }
-.ft-spk:hover { opacity: .55; }

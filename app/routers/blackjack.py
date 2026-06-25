@@ -68,6 +68,15 @@ def room_stand(room_id: int, user: sqlite3.Row = Depends(require_user),
     return _do(bj_room.stand, conn, user["id"], room_id)
 
 
+@router.post("/room/{room_id}/double")
+def room_double(room_id: int, user: sqlite3.Row = Depends(require_user),
+                conn: sqlite3.Connection = Depends(db_dep)):
+    require_can_gamble(user)                # sebevyloučení ze sázek
+    s = bj_room._seat(conn, room_id, user["id"])
+    check_wager_limit(conn, user, s["bet"] if s else 0)   # zdvojení přidá další sázku do denního limitu
+    return _do(bj_room.double, conn, user["id"], room_id)
+
+
 @router.post("/room/{room_id}/next")
 def room_next(room_id: int, user: sqlite3.Row = Depends(require_user),
               conn: sqlite3.Connection = Depends(db_dep)):

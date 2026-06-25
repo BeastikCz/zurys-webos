@@ -1,10 +1,33 @@
 """Pydantic schémata pro vstupní data (request body)."""
+import ipaddress
 import re
 from typing import List, Optional
+from urllib.parse import urlparse
 
 from pydantic import BaseModel, Field, field_validator
 
 _EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+_B64URL_RE = re.compile(r"^[A-Za-z0-9_\-]+=*$")
+
+
+def _validate_push_endpoint(v: str) -> str:
+    """SSRF guard: https:// only, no private/loopback IP literals."""
+    parsed = urlparse(v)
+    if parsed.scheme != "https":
+        raise ValueError("endpoint must use https://")
+    host = parsed.hostname or ""
+    if not host:
+        raise ValueError("endpoint has no host")
+    if host.lower() in ("localhost",) or host.lower().endswith(".local"):
+        raise ValueError("endpoint: private host not allowed")
+    try:
+        addr = ipaddress.ip_address(host)
+    except ValueError:
+        pass  # hostname, not an IP literal — accept
+    else:
+        if not addr.is_global:
+            raise ValueError("endpoint: private/loopback IP not allowed")
+    return v
 
 
 def _normalize_email(value: str) -> str:
@@ -440,14 +463,26 @@ class BroadcastIn(BaseModel):
 
 
 class PushKeys(BaseModel):
-    p256dh: str = Field(max_length=200)
-    auth: str = Field(max_length=100)
+    p256dh: str = Field(min_length=40, max_length=200)
+    auth: str = Field(min_length=16, max_length=100)
+
+    @field_validator("p256dh", "auth")
+    @classmethod
+    def _b64url(cls, v: str) -> str:
+        if not _B64URL_RE.match(v):
+            raise ValueError("must be base64url")
+        return v
 
 
 class PushSubIn(BaseModel):
     """Web Push subscription z prohlížeče (PushSubscription.toJSON())."""
-    endpoint: str = Field(min_length=10, max_length=600)
+    endpoint: str = Field(min_length=20, max_length=600)
     keys: PushKeys
+
+    @field_validator("endpoint")
+    @classmethod
+    def _endpoint(cls, v: str) -> str:
+        return _validate_push_endpoint(v)
 
 
 class ManualOrderIn(BaseModel):
