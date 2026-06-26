@@ -1051,13 +1051,55 @@ async function loadRaffleBox(id) {
   const box = $("#raffleBox"); if (!box) return;
   try {
     const d = await api(`/shop/raffle/${id}/entries`);
-    let html = `<div class="section-title">🎟️ Kdo nakoupil tikety <span class="faint">(${d.total_tickets} tiketů celkem)</span></div>`;
-    if (d.winner) html += `<div class="panel gold" style="margin-bottom:12px">🏆 Výherce: <b>${esc(d.winner.username)}</b></div>`;
+    const meName = state.user && state.user.username ? state.user.username.toLowerCase() : null;
+    const mine = meName ? d.participants.find((p) => (p.username || "").toLowerCase() === meName) : null;
+    const myT = mine ? mine.tickets : 0;
+    const odds = d.total_tickets > 0 ? (myT / d.total_tickets * 100) : 0;
+    let html = "";
+    if (state.user) {
+      html += myT > 0
+        ? `<div class="raffle-odds"><span>🎯 Tvoje šance</span><b>${myT} z ${d.total_tickets} = ${odds.toFixed(1)} %</b></div>`
+        : `<div class="raffle-odds faint">🎟️ Zatím nemáš tiket — kup si šanci na výhru.</div>`;
+    }
+    html += `<div class="section-title">🎟️ Kdo nakoupil tikety <span class="faint">(${d.total_tickets} celkem)</span></div>`;
+    if (d.winner) html += `<div class="panel gold" id="raffleWinner" style="margin-bottom:12px">🏆 Výherce: <b>${esc(d.winner.username)}</b></div>`;
     if (!d.participants.length) html += `<div class="faint">Zatím nikdo. Buď první! 🎯</div>`;
     else html += d.participants.map((u) => `
       <div class="raffle-row">${avatarHTML(u.username, u.avatar_url)}<span>${esc(u.username)}</span><span class="tickets">${u.tickets}× 🎟️</span></div>`).join("");
     box.innerHTML = html;
+    // živý reveal: jen když je výherce, jsi účastník a tenhle los jsi ještě neviděl
+    if (d.winner && mine) {
+      const seenKey = "raffle_seen_" + id + "_" + (d.winner.created_at || "");
+      if (!localStorage.getItem(seenKey)) { localStorage.setItem(seenKey, "1"); raffleReveal(d); }
+    }
   } catch (e) { box.innerHTML = `<div class="faint">Nepodařilo se načíst účastníky.</div>`; }
+}
+function raffleReveal(d) {
+  const names = (d.participants || []).map((p) => p.username).filter(Boolean);
+  if (!names.length || !d.winner) return;
+  const ov = document.createElement("div");
+  ov.className = "raffle-reveal";
+  ov.innerHTML = `<div class="rr-card"><div class="rr-title" id="rrTitle">🎲 Losování…</div><div class="rr-name" id="rrName">—</div></div>`;
+  document.body.appendChild(ov);
+  ov.addEventListener("click", () => ov.remove());
+  const nameEl = ov.querySelector("#rrName"), titleEl = ov.querySelector("#rrTitle");
+  const reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const won = state.user && d.winner.username.toLowerCase() === state.user.username.toLowerCase();
+  const finish = () => {
+    nameEl.textContent = d.winner.username;
+    ov.querySelector(".rr-card").classList.add("rr-done");
+    titleEl.textContent = won ? "🎉 VYHRÁL JSI!" : "🏆 Výherce!";
+    if (won) { try { confettiBurst(); } catch (e) {} }
+    setTimeout(() => ov.classList.add("rr-fade"), won ? 2800 : 1700);
+    setTimeout(() => ov.remove(), won ? 3400 : 2300);
+  };
+  if (reduce) { finish(); return; }
+  let i = 0, ticks = 0;
+  const total = 26 + Math.floor(Math.random() * 8);
+  const iv = setInterval(() => {
+    nameEl.textContent = names[i % names.length]; i++; ticks++;
+    if (ticks >= total) { clearInterval(iv); finish(); }
+  }, 75);
 }
 
 async function buyProduct(id) {
@@ -1921,12 +1963,39 @@ async function selfExclude(dur) {
   } catch (e) { toast(e.message, "error"); }
 }
 
+async function showWrapped() {
+  if (!state.user) return;
+  let d;
+  try { d = await api("/profile/public?nick=" + encodeURIComponent(state.user.username)); }
+  catch (e) { toast(e.message, "error"); return; }
+  const wr = d.win_rate != null ? Math.round(d.win_rate * 100) : 0;
+  const stat = (icon, label, val) => `<div class="wr-stat"><div class="wr-ic">${icon}</div><div class="wr-v">${val}</div><div class="wr-l">${label}</div></div>`;
+  const ov = document.createElement("div");
+  ov.className = "raffle-reveal";       // sdílí ztmavené pozadí
+  ov.innerHTML = `<div class="wr-card">
+    <div class="wr-head">🎁 Moje čísla na Zurys</div>
+    <div class="wr-sub">${esc(d.username)} · v komunitě ${memberSince(d.created_at)}</div>
+    <div class="wr-grid">
+      ${stat("⭐", "úroveň", "Lvl " + d.level)}
+      ${stat("🌾", "nafarmeno", fmtPts(d.earned_total))}
+      ${stat("💰", "největší výhra", fmtPts(d.biggest_win))}
+      ${stat("🎮", "her odehráno", d.games_played)}
+      ${stat("🎯", "win-rate", wr + " %")}
+      ${stat("🔪", "vyhrané tomboly", d.raffle_wins)}
+      ${stat("🔥", "denní série", d.daily_streak + " dní")}
+      ${stat("🏆", "pozice", "#" + d.rank)}
+    </div>
+    <div class="wr-foot">📸 Screenshot a flexni · zurys.live</div>
+  </div>`;
+  ov.addEventListener("click", () => ov.remove());
+  document.body.appendChild(ov);
+}
 function pageProfile() {
   if (!state.user) { navigate("connect"); return; }
   const u = state.user;
   const view = $("#view");
   view.innerHTML = `
-    <div class="page-head"><h1>👤 Můj profil</h1></div>
+    <div class="page-head" style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap"><h1>👤 Můj profil</h1><button class="btn btn-accent btn-sm" data-action="my-wrapped">🎁 Moje čísla</button></div>
     <div class="panel">
       <div class="profile-head">
         ${avatarHTML(u.username, u.avatar_url, "", cosF(u))}
@@ -5580,6 +5649,7 @@ function handleAction(action, el) {
     case "bjr-stand": bjrAct("stand"); break;
     case "bjr-double": bjrAct("double"); break;
     case "bjr-split": bjrAct("split"); break;
+    case "my-wrapped": showWrapped(); break;
     case "bjr-next": bjrAct("next"); break;
     case "bjr-leave": bjrLeave(); break;
     case "bjr-chat": bjrChat(); break;

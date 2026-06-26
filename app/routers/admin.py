@@ -1220,6 +1220,15 @@ def draw_winner(product_id: int, request: Request,
     record_audit(conn, admin, request, "raffle.draw", f"produkt #{product_id}",
                  f"výherce: {entry['username']}")
     conn.commit()
+    # oznámení účastníkům (in-app notif + web push) – mimo request v background threadu
+    prow = conn.execute("SELECT name FROM products WHERE id = ?", (product_id,)).fetchone()
+    pname = prow["name"] if prow and prow["name"] else "tombola"
+    entrant_ids = list({e["user_id"] for e in entries})
+    try:
+        from .. import webpush
+        webpush.notify_raffle_draw(pname, entry["user_id"], entry["username"], entrant_ids)
+    except Exception:
+        pass
     return {
         "ok": True,
         "winner": {"username": entry["username"], "avatar_url": entry["avatar_url"]},

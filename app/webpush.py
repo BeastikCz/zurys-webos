@@ -84,3 +84,56 @@ def send(subscription_info: dict, title: str, body: str = "", url: str = "/", ic
     except Exception as e:  # pragma: no cover – push nikdy nesmí shodit caller
         print("[webpush] send chyba:", type(e).__name__, str(e)[:160])
         return False
+
+
+def push_to_user(conn, user_id, title, body="", url="/", icon="/sedlak-cut.png") -> None:
+    """Pošle web push na VŠECHNY subscriptions uživatele. Mrtvé smaže. Best-effort (nikdy nehodí)."""
+    if not enabled():
+        return
+    dead = []
+    for s in conn.execute("SELECT id, endpoint, p256dh, auth FROM push_subs WHERE user_id = ?",
+                          (user_id,)).fetchall():
+        info = {"endpoint": s["endpoint"], "keys": {"p256dh": s["p256dh"], "auth": s["auth"]}}
+        try:
+            send(info, title, body, url, icon)
+        except DeadSubscription:
+            dead.append(s["id"])
+        except Exception:
+            pass
+    for d in dead:
+        conn.execute("DELETE FROM push_subs WHERE id = ?", (d,))
+    if dead:
+        conn.commit()
+
+
+def notify_raffle_draw(product_name, winner_id, winner_name, entrant_ids) -> None:
+    """Po vylosování tomboly: in-app notif + web push VŠEM účastníkům. Běží v BACKGROUND threadu
+    (síťové push by jinak blokovaly handler – 1 worker + 1 SQLite writer)."""
+    import threading
+
+    def _run():
+        import traceback
+        from .db import get_conn
+        from .deps import notify
+        try:
+            conn = get_conn()
+            try:
+                for uid in entrant_ids:
+                    if uid == winner_id:
+                        notify(conn, uid, "🏆", "Vyhrál jsi tombolu! 🎉",
+                               f"Vylosován do: {product_name}. Ozvi se majiteli pro převzetí výhry.", "#/shop")
+                    else:
+                        notify(conn, uid, "🎲", "Tombola vylosována",
+                               f"{product_name}: vyhrál {winner_name}. Příště to vyjde! 🍀", "#/shop")
+                conn.commit()                    # write lock pryč PŘED síťovými push
+                for uid in entrant_ids:
+                    if uid == winner_id:
+                        push_to_user(conn, uid, "🏆 Vyhrál jsi!", f"Tombola {product_name} je tvoje! 🎉", "#/shop")
+                    else:
+                        push_to_user(conn, uid, "🎲 Tombola vylosována", f"{product_name}: vyhrál {winner_name}", "#/shop")
+            finally:
+                conn.close()
+        except Exception:
+            traceback.print_exc()
+
+    threading.Thread(target=_run, name="raffle-notify", daemon=True).start()
