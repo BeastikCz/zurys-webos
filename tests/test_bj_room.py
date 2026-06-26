@@ -252,3 +252,63 @@ def test_auto_next_after_done_deadline(client):
     r = _roomrow(rid)
     assert r["status"] == "betting" and json.loads(r["dealer"]) == []
     assert _seatrow(rid, h)["state"] == "idle" and _seatrow(rid, h)["bet"] == 0
+
+
+# ---- Split (druhá ruka) ----
+def test_split_two_hands_resolve(client):
+    h = _mk_user(1000)
+    rid = _mk_room_playing(h, ["TS", "8D"], ["TC", "9H"], 0)  # dealer 18; split dobere TC, 9H
+    _add_seat(rid, h, 100, ["8S", "8H"], "acting")            # pár osmiček
+    bstart = _points(h)
+    _run(bj_room.split, h, rid)
+    s = _seatrow(rid, h)
+    assert _points(h) == bstart - 100                         # split strhl extra sázku
+    assert s["state2"] is not None and s["bet2"] == 100
+    assert json.loads(s["hand"]) == ["8S", "TC"] and json.loads(s["hand2"]) == ["8H", "9H"]   # 18 a 17
+    assert s["state"] == "acting" and s["state2"] == "acting" and s["active_hand"] == 1
+    _run(bj_room.stand, h, rid)                               # h1 stojí → přepne na h2
+    assert _seatrow(rid, h)["active_hand"] == 2
+    _run(bj_room.stand, h, rid)                               # h2 stojí → resolve
+    r = _seatrow(rid, h)
+    assert _roomrow(rid)["status"] == "done"
+    assert r["result"] == "push" and r["result2"] == "lose"   # 18=push, 17<18=lose
+    assert _points(h) == bstart                               # push vrátí 100 (proti split -100)
+
+
+def test_split_aces_one_card_each(client):
+    h = _mk_user(1000)
+    rid = _mk_room_playing(h, ["TS", "7D"], ["5C", "6H"], 0)  # dealer 17; split dobere 5C, 6H
+    _add_seat(rid, h, 100, ["AS", "AD"], "acting")            # pár es
+    _run(bj_room.split, h, rid)
+    s = _seatrow(rid, h)
+    assert json.loads(s["hand"]) == ["AS", "5C"] and json.loads(s["hand2"]) == ["AD", "6H"]
+    assert _roomrow(rid)["status"] == "done"                  # es: 1 karta/ruka, žádný tah → rovnou vyhodnoceno
+    try:
+        _run(bj_room.hit, h, rid)
+        assert False, "po split es nejde dál hrát"
+    except ValueError:
+        pass
+
+
+def test_split_21_pays_1to1_not_blackjack(client):
+    h = _mk_user(1000)
+    rid = _mk_room_playing(h, ["TS", "8D"], ["AC", "AH"], 0)  # dealer 18; split desítek dobere A → 21
+    _add_seat(rid, h, 100, ["TH", "TC"], "acting")            # pár desítek
+    bstart = _points(h)
+    _run(bj_room.split, h, rid)                               # h1=[TH,AC]=21, h2=[TC,AH]=21
+    s = _seatrow(rid, h)
+    assert _roomrow(rid)["status"] == "done"
+    assert s["result"] == "win" and s["result2"] == "win"     # NE "blackjack"
+    assert s["payout"] == 200 and s["payout2"] == 200         # 1:1 (bet*2), NE 250 (3:2)
+    assert _points(h) == bstart - 100 + 400                   # -100 split, +200 +200
+
+
+def test_cannot_split_nonpair(client):
+    h = _mk_user(1000)
+    rid = _mk_room_playing(h, ["TS", "7D"], ["2C"], 0)
+    _add_seat(rid, h, 100, ["8S", "9D"], "acting")            # ne pár
+    try:
+        _run(bj_room.split, h, rid)
+        assert False, "nepár nejde splitnout"
+    except ValueError as e:
+        assert "stejn" in str(e).lower()

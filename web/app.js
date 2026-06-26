@@ -5579,6 +5579,7 @@ function handleAction(action, el) {
     case "bjr-hit": bjrAct("hit"); break;
     case "bjr-stand": bjrAct("stand"); break;
     case "bjr-double": bjrAct("double"); break;
+    case "bjr-split": bjrAct("split"); break;
     case "bjr-next": bjrAct("next"); break;
     case "bjr-leave": bjrLeave(); break;
     case "bjr-chat": bjrChat(); break;
@@ -5872,24 +5873,43 @@ async function bjPollRoom() {
   }
   _bjSchedule();   // adaptivně: tvůj tah → 900 ms, jinak 2200 ms
 }
+function _bjHandStatus(state, result, payout, bet, g) {
+  if (g.status === "betting") return state === "ready" ? `vsadil ${fmtPts(bet)} ✔` : '<span class="faint">čeká na sázku…</span>';
+  if (state === "resolved" || g.status === "done") {
+    const rmap = { blackjack: "🃏 BLACKJACK!", win: "✅ výhra", push: "🤝 remíza", lose: "❌ prohra", bust: "💥 přebral" };
+    const col = (result === "win" || result === "blackjack") ? "#39d98a" : (result === "push" ? "var(--text)" : "#ff6b6b");
+    const net = (payout || 0) - (bet || 0);
+    return result ? `<span style="color:${col};font-weight:600">${rmap[result] || result} ${net >= 0 ? "+" : ""}${fmtPts(net)}</span>` : '<span class="faint">—</span>';
+  }
+  return state === "acting" ? "🎴 hraje…" : (state === "stood" ? "✋ stojí" : (state === "bust" ? "💥 přebral" : '<span class="faint">sedí</span>'));
+}
+function _bjHandBlock(cards, value, state, result, payout, bet, g, active, animFrom) {
+  const ring = active ? "box-shadow:0 0 0 2px var(--gold);border-radius:9px;padding:5px" : "";
+  return `<div style="${ring}">
+    <div style="display:flex;gap:5px;flex-wrap:wrap;margin:6px 0;min-height:34px">${_bjHand(cards, animFrom, null)}</div>
+    <div style="font-size:12.5px">${cards && cards.length ? "<b>" + value + "</b> · " : ""}${_bjHandStatus(state, result, payout, bet, g)}</div>
+  </div>`;
+}
 function _bjSeat(s, g, hint) {
   const crown = s.is_host ? "👑 " : "";
   const tag = s.is_you ? ' · <span style="color:var(--accent)">TY</span>' : "";
-  let line;
-  if (g.status === "betting") line = s.state === "ready" ? `vsadil ${fmtPts(s.bet)} ✔` : '<span class="faint">čeká na sázku…</span>';
-  else if (s.state === "resolved" || g.status === "done") {
-    const rmap = { blackjack: "🃏 BLACKJACK!", win: "✅ výhra", push: "🤝 remíza", lose: "❌ prohra", bust: "💥 přebral" };
-    const col = (s.result === "win" || s.result === "blackjack") ? "#39d98a" : (s.result === "push" ? "var(--text)" : "#ff6b6b");
-    const net = s.payout - s.bet;
-    line = s.result ? `<span style="color:${col};font-weight:600">${rmap[s.result] || s.result} ${net >= 0 ? "+" : ""}${fmtPts(net)}</span>` : '<span class="faint">—</span>';
-  } else line = s.state === "acting" ? "🎴 hraje…" : (s.state === "stood" ? "✋ stojí" : (s.state === "bust" ? "💥 přebral" : '<span class="faint">sedí</span>'));
-  const cards = _bjHand(s.hand, hint && hint.animFrom != null ? hint.animFrom : null, null);
-  const onTurn = s.state === "acting" && g.status === "playing";
+  const onTurn = (s.state === "acting" || s.state2 === "acting") && g.status === "playing";
   const cls = "bj-spot" + (onTurn ? " turn" : (s.is_you ? " you" : "")) + (hint && hint.justWin ? " win" : "") + (hint && hint.justBust ? " bust" : "");
+  const animFrom = hint && hint.animFrom != null ? hint.animFrom : null;
+  let body;
+  if (s.split) {
+    const a1 = s.active_hand === 1 && s.state === "acting" && g.status === "playing";
+    const a2 = s.active_hand === 2 && s.state2 === "acting" && g.status === "playing";
+    body = `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px">
+      <div style="flex:1;min-width:96px">${_bjHandBlock(s.hand, s.value, s.state, s.result, s.payout, s.bet, g, a1, animFrom)}</div>
+      <div style="flex:1;min-width:96px">${_bjHandBlock(s.hand2, s.value2, s.state2, s.result2, s.payout2, s.bet2, g, a2, null)}</div>
+    </div>`;
+  } else {
+    body = _bjHandBlock(s.hand, s.value, s.state, s.result, s.payout, s.bet, g, false, animFrom);
+  }
   return `<div class="${cls}">
-    <div style="font-weight:700;font-size:13px">${crown}${esc(s.username)}${tag} <span class="faint" style="font-weight:400">${s.bet ? "· " + fmtPts(s.bet) : ""}</span></div>
-    <div style="display:flex;gap:5px;flex-wrap:wrap;margin:8px 0 6px;min-height:34px">${cards}</div>
-    <div style="font-size:12.5px">${s.hand && s.hand.length ? "<b>" + s.value + "</b> · " : ""}${line}</div>
+    <div style="font-weight:700;font-size:13px">${crown}${esc(s.username)}${tag} <span class="faint" style="font-weight:400">${s.bet ? "· " + fmtPts(s.bet) + (s.split ? " ×2" : "") : ""}</span></div>
+    ${body}
   </div>`;
 }
 function renderBjRoom() {
@@ -6003,7 +6023,7 @@ function updateBjRoom(g) {
   let controls = "";
   if (!g.can_bet && g.status === "betting" && g.you && g.you.state === "ready") controls = '<div class="faint">Vsazeno ✔ — kolo se rozdá po odpočtu (nebo dřív, když host klikne).</div>';
   if (g.can_deal) controls += `<button class="btn btn-success btn-block" data-action="bjr-deal"${controls ? ' style="margin-top:8px"' : ""}>🃏 Rozdat hned</button>`;
-  if (g.can_act) controls = `<div class="toolbar" style="gap:8px"><button class="btn btn-success" data-action="bjr-hit">Hit 🎴</button><button class="btn btn-primary" data-action="bjr-stand">Stand ✋</button>${g.can_double ? '<button class="btn btn-accent" data-action="bjr-double">Double ✖2</button>' : ""}</div>`;
+  if (g.can_act) controls = `<div class="toolbar" style="gap:8px"><button class="btn btn-success" data-action="bjr-hit">Hit 🎴</button><button class="btn btn-primary" data-action="bjr-stand">Stand ✋</button>${g.can_double ? '<button class="btn btn-accent" data-action="bjr-double">Double ✖2</button>' : ""}${g.can_split ? '<button class="btn btn-ghost" data-action="bjr-split">Split ✂️</button>' : ""}</div>`;
   else if (g.status === "playing" && g.you && g.you.state !== "acting") controls = controls || '<div class="faint">Čeká se na ostatní hráče… 🃏</div>';
   if (g.can_next) controls += `<button class="btn btn-accent btn-block" data-action="bjr-next" style="margin-top:8px">🔄 Nové kolo</button>`;
   const ab = document.getElementById("bjActions");

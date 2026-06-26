@@ -591,6 +591,12 @@ CREATE TABLE IF NOT EXISTS bj_seats (
     state       TEXT NOT NULL DEFAULT 'idle',     -- idle | ready | acting | stood | bust | resolved
     result      TEXT,
     payout      INTEGER NOT NULL DEFAULT 0,
+    hand2       TEXT NOT NULL DEFAULT '[]',       -- split: druhá ruka (JSON karty)
+    bet2        INTEGER NOT NULL DEFAULT 0,       -- split: sázka 2. ruky
+    state2      TEXT,                             -- split: stav 2. ruky (NULL = bez splitu)
+    result2     TEXT,
+    payout2     INTEGER NOT NULL DEFAULT 0,
+    active_hand INTEGER NOT NULL DEFAULT 1,       -- split: která ruka je na tahu (1 / 2)
     acted_at    TEXT,                             -- pro AFK auto-stand
     seen_at     TEXT,
     joined_at   TEXT NOT NULL,
@@ -745,6 +751,13 @@ _MIGRATIONS = [
     ("gift_requests", "note", "TEXT"),
     # BJ auto-flow: deadline fáze (betting → auto-rozdání, done → auto-nové kolo). NULL = bez odpočtu.
     ("bj_rooms", "phase_until", "TEXT"),
+    # BJ split: druhá ruka (rozdělení páru). state2 NULL = seat bez splitu.
+    ("bj_seats", "hand2", "TEXT NOT NULL DEFAULT '[]'"),
+    ("bj_seats", "bet2", "INTEGER NOT NULL DEFAULT 0"),
+    ("bj_seats", "state2", "TEXT"),
+    ("bj_seats", "result2", "TEXT"),
+    ("bj_seats", "payout2", "INTEGER NOT NULL DEFAULT 0"),
+    ("bj_seats", "active_hand", "INTEGER NOT NULL DEFAULT 1"),
 ]
 
 

@@ -61,6 +61,36 @@ def _seat(conn, room_id, uid):
     return conn.execute("SELECT * FROM bj_seats WHERE room_id=? AND user_id=?", (room_id, uid)).fetchone()
 
 
+# ---------------- split helpery (druhá ruka) ----------------
+def _rank(card):
+    return card[0]
+
+
+def _active(s):
+    """Aktivní ruka seatu → (karty, stav, sázka, číslo_ruky 1/2)."""
+    if s["active_hand"] == 2:
+        return json.loads(s["hand2"]), s["state2"], s["bet2"], 2
+    return json.loads(s["hand"]), s["state"], s["bet"], 1
+
+
+def _write_hand(conn, seat_id, which, cards, state, bet=None):
+    """Zapíše karty/stav (a volitelně sázku) konkrétní ruky (1/2)."""
+    col_h, col_s, col_b = ("hand2", "state2", "bet2") if which == 2 else ("hand", "state", "bet")
+    if bet is None:
+        conn.execute(f"UPDATE bj_seats SET {col_h}=?, {col_s}=?, acted_at=? WHERE id=?",
+                     (json.dumps(cards), state, now_iso(), seat_id))
+    else:
+        conn.execute(f"UPDATE bj_seats SET {col_h}=?, {col_s}=?, {col_b}=?, acted_at=? WHERE id=?",
+                     (json.dumps(cards), state, bet, now_iso(), seat_id))
+
+
+def _advance_seat(conn, seat_id):
+    """Po dohrání aktivní ruky: u splitu přepni na 2. ruku (když ještě čeká na tah)."""
+    r = conn.execute("SELECT active_hand, state2 FROM bj_seats WHERE id=?", (seat_id,)).fetchone()
+    if r and r["active_hand"] == 1 and r["state2"] == "acting":
+        conn.execute("UPDATE bj_seats SET active_hand=2, acted_at=? WHERE id=?", (now_iso(), seat_id))
+
+
 # ---------------- akce ----------------
 def create(conn, uid, username):
     code = None
@@ -185,15 +215,18 @@ def hit(conn, uid, room_id):
     if not room or room["status"] != "playing":
         raise ValueError("Teď není možné hrát.")
     s = _seat(conn, room_id, uid)
-    if not s or s["state"] != "acting":
+    if not s:
+        raise ValueError("U tohoto stolu nesedíš.")
+    cards, st, bet, which = _active(s)
+    if st != "acting":
         raise ValueError("Teď nejsi na tahu.")
     deck = json.loads(room["deck"])
-    hand = json.loads(s["hand"])
-    hand.append(_draw(conn, room_id, deck))
-    v = hand_value(hand)
-    st = "bust" if v > 21 else ("stood" if v >= 21 else "acting")
-    conn.execute("UPDATE bj_seats SET hand=?, state=?, acted_at=? WHERE id=?",
-                 (json.dumps(hand), st, now_iso(), s["id"]))
+    cards.append(_draw(conn, room_id, deck))
+    v = hand_value(cards)
+    newst = "bust" if v > 21 else ("stood" if v >= 21 else "acting")
+    _write_hand(conn, s["id"], which, cards, newst)
+    if newst != "acting":
+        _advance_seat(conn, s["id"])             # ruka hotová → u splitu přepni na 2.
     conn.commit()
     _maybe_resolve(conn, room_id)
     return _public(conn, _room(conn, room_id), uid)
@@ -204,34 +237,71 @@ def stand(conn, uid, room_id):
     if not room or room["status"] != "playing":
         raise ValueError("Teď není možné hrát.")
     s = _seat(conn, room_id, uid)
-    if not s or s["state"] != "acting":
+    if not s:
+        raise ValueError("U tohoto stolu nesedíš.")
+    cards, st, bet, which = _active(s)
+    if st != "acting":
         raise ValueError("Teď nejsi na tahu.")
-    conn.execute("UPDATE bj_seats SET state='stood', acted_at=? WHERE id=?", (now_iso(), s["id"]))
+    _write_hand(conn, s["id"], which, cards, "stood")
+    _advance_seat(conn, s["id"])
     conn.commit()
     _maybe_resolve(conn, room_id)
     return _public(conn, _room(conn, room_id), uid)
 
 
 def double(conn, uid, room_id):
-    """Double down: zdvojí sázku, vezme PŘESNĚ jednu kartu, pak automaticky stojí. Jen na první 2 karty."""
+    """Double down: zdvojí sázku AKTIVNÍ ruky, vezme PŘESNĚ jednu kartu, pak konec tahu. Jen na první 2 karty ruky."""
     room = _room(conn, room_id)
     if not room or room["status"] != "playing":
         raise ValueError("Teď není možné hrát.")
     s = _seat(conn, room_id, uid)
-    if not s or s["state"] != "acting":
+    if not s:
+        raise ValueError("U tohoto stolu nesedíš.")
+    cards, st, bet, which = _active(s)
+    if st != "acting":
         raise ValueError("Teď nejsi na tahu.")
-    hand = json.loads(s["hand"])
-    if len(hand) != 2:
+    if len(cards) != 2:
         raise ValueError("Zdvojit (double) jde jen na první dvě karty.")
-    bet = s["bet"]
     if not try_debit(conn, uid, bet, "Blackjack stůl – zdvojení (double) 🃏"):
         raise ValueError("Nemáš dost sedláků na zdvojení.")
     deck = json.loads(room["deck"])
-    hand.append(_draw(conn, room_id, deck))
-    v = hand_value(hand)
-    st = "bust" if v > 21 else "stood"           # double = přesně 1 karta, pak konec tahu
-    conn.execute("UPDATE bj_seats SET hand=?, bet=?, state=?, acted_at=? WHERE id=?",
-                 (json.dumps(hand), bet * 2, st, now_iso(), s["id"]))
+    cards.append(_draw(conn, room_id, deck))
+    v = hand_value(cards)
+    newst = "bust" if v > 21 else "stood"        # double = přesně 1 karta, pak konec tahu
+    _write_hand(conn, s["id"], which, cards, newst, bet * 2)
+    _advance_seat(conn, s["id"])
+    conn.commit()
+    _maybe_resolve(conn, room_id)
+    return _public(conn, _room(conn, room_id), uid)
+
+
+def split(conn, uid, room_id):
+    """Rozdělí pár na dvě ruky (extra sázka = původní). Každá ruka dostane 1 novou kartu. Split es = 1 karta
+    na ruku, pak stojí. Bez re-splitu (max 2 ruky). 21 po splitu = běžná výhra (NE natural blackjack 3:2)."""
+    room = _room(conn, room_id)
+    if not room or room["status"] != "playing":
+        raise ValueError("Teď není možné hrát.")
+    s = _seat(conn, room_id, uid)
+    if not s or s["state"] != "acting" or s["active_hand"] != 1:
+        raise ValueError("Teď nejsi na tahu.")
+    if s["state2"] is not None:
+        raise ValueError("Rozdělit (split) jde jen jednou.")
+    hand = json.loads(s["hand"])
+    if len(hand) != 2 or _rank(hand[0]) != _rank(hand[1]):
+        raise ValueError("Rozdělit jde jen dvě stejné karty.")
+    bet = s["bet"]
+    if not try_debit(conn, uid, bet, "Blackjack stůl – rozdělení (split) 🃏"):
+        raise ValueError("Nemáš dost sedláků na split.")
+    deck = json.loads(room["deck"])
+    h1 = [hand[0], _draw(conn, room_id, deck)]
+    h2 = [hand[1], _draw(conn, room_id, deck)]
+    aces = _rank(hand[0]) == "A"                 # split es: jen 1 karta každá, pak stojí
+    st1 = "stood" if (aces or hand_value(h1) >= 21) else "acting"
+    st2 = "stood" if (aces or hand_value(h2) >= 21) else "acting"
+    active = 1 if st1 == "acting" else (2 if st2 == "acting" else 1)
+    conn.execute(
+        "UPDATE bj_seats SET hand=?, state=?, hand2=?, state2=?, bet2=?, active_hand=?, acted_at=? WHERE id=?",
+        (json.dumps(h1), st1, json.dumps(h2), st2, bet, active, now_iso(), s["id"]))
     conn.commit()
     _maybe_resolve(conn, room_id)
     return _public(conn, _room(conn, room_id), uid)
@@ -247,7 +317,8 @@ def _do_next(conn, room_id):
             return False                          # někdo jiný už spustil nové kolo (souběh)
     elif room["status"] != "betting":
         return False
-    conn.execute("UPDATE bj_seats SET bet=0, hand='[]', state='idle', result=NULL, payout=0, acted_at=NULL WHERE room_id=?",
+    conn.execute("UPDATE bj_seats SET bet=0, hand='[]', state='idle', result=NULL, payout=0, acted_at=NULL, "
+                 "hand2='[]', bet2=0, state2=NULL, result2=NULL, payout2=0, active_hand=1 WHERE room_id=?",
                  (room_id,))
     conn.execute("UPDATE bj_rooms SET dealer='[]', deck='[]', deck_pos=0, phase_until=NULL, updated_at=? WHERE id=?",
                  (now_iso(), room_id))
@@ -303,10 +374,16 @@ def _maybe_resolve(conn, room_id):
     if not room or room["status"] != "playing":
         return
     cutoff = (datetime.now(timezone.utc) - timedelta(seconds=ACT_TIMEOUT_S)).isoformat()
-    conn.execute("UPDATE bj_seats SET state='stood' WHERE room_id=? AND state='acting' AND (acted_at IS NULL OR acted_at < ?)",
-                 (room_id, cutoff))
+    # AFK: postav VŠECHNY hrající ruky seatu (i obě u splitu) po vypršení limitu
+    conn.execute(
+        "UPDATE bj_seats SET "
+        "state = CASE WHEN state='acting' THEN 'stood' ELSE state END, "
+        "state2 = CASE WHEN state2='acting' THEN 'stood' ELSE state2 END "
+        "WHERE room_id=? AND (state='acting' OR state2='acting') AND (acted_at IS NULL OR acted_at < ?)",
+        (room_id, cutoff))
     conn.commit()
-    if conn.execute("SELECT 1 FROM bj_seats WHERE room_id=? AND state='acting' LIMIT 1", (room_id,)).fetchone():
+    if conn.execute("SELECT 1 FROM bj_seats WHERE room_id=? AND (state='acting' OR state2='acting') LIMIT 1",
+                    (room_id,)).fetchone():
         return
     if conn.execute("UPDATE bj_rooms SET status='done' WHERE id=? AND status='playing'", (room_id,)).rowcount == 0:
         return                                # někdo už claimnul vyhodnocení (souběh)
@@ -321,19 +398,27 @@ def _resolve(conn, room_id):
     room = _room(conn, room_id)
     deck = json.loads(room["deck"])
     dealer = json.loads(room["dealer"])
-    seats = [s for s in _seats(conn, room_id) if s["state"] in ("stood", "bust")]
-    if any(hand_value(json.loads(s["hand"])) <= 21 for s in seats):
+    # všechny dohrané ruky (u splitu obě): (karty, sázka, číslo_ruky, seat)
+    played = []
+    for s in _seats(conn, room_id):
+        hands = [(json.loads(s["hand"]), s["state"], s["bet"], 1)]
+        if s["state2"] is not None:
+            hands.append((json.loads(s["hand2"]), s["state2"], s["bet2"], 2))
+        for cards, st, bet, which in hands:
+            if st in ("stood", "bust") and cards:
+                played.append((cards, bet, which, s))
+    # dealer dobírá jen pokud aspoň jedna ruka nepřebrala
+    if any(hand_value(c) <= 21 for (c, bet, which, s) in played):
         while hand_value(dealer) < 17:
             dealer.append(_draw(conn, room_id, deck))
     dv = hand_value(dealer)
     dbj = _is_bj(dealer)
-    for s in seats:
-        hand = json.loads(s["hand"])
-        pv = hand_value(hand)
-        bet = s["bet"]
+    for cards, bet, which, s in played:
+        pv = hand_value(cards)
+        is_split = s["state2"] is not None
         if pv > 21:
             res, pay = "bust", 0
-        elif _is_bj(hand):
+        elif (not is_split) and _is_bj(cards):     # natural blackjack 3:2 JEN bez splitu
             res, pay = ("push", bet) if dbj else ("blackjack", bet + (bet * 3) // 2)
         elif dbj:
             res, pay = "lose", 0
@@ -345,7 +430,10 @@ def _resolve(conn, room_id):
             res, pay = "push", bet
         if pay > 0:
             add_points(conn, s["user_id"], pay, f"Blackjack stůl – {res} 🃏")
-        conn.execute("UPDATE bj_seats SET state='resolved', result=?, payout=? WHERE id=?", (res, pay, s["id"]))
+        if which == 2:
+            conn.execute("UPDATE bj_seats SET state2='resolved', result2=?, payout2=? WHERE id=?", (res, pay, s["id"]))
+        else:
+            conn.execute("UPDATE bj_seats SET state='resolved', result=?, payout=? WHERE id=?", (res, pay, s["id"]))
     conn.execute("UPDATE bj_rooms SET dealer=?, updated_at=? WHERE id=?", (json.dumps(dealer), now_iso(), room_id))
     conn.commit()
 
@@ -385,9 +473,12 @@ def _public(conn, room, viewer_uid):
     seats_out = []
     for s in _seats(conn, room_id):
         hand = json.loads(s["hand"])
+        split = s["state2"] is not None
+        hand2 = json.loads(s["hand2"]) if split else []
         u = conn.execute("SELECT username, avatar_url FROM users WHERE id=?", (s["user_id"],)).fetchone()
+        acting_now = s["state"] == "acting" or s["state2"] == "acting"
         turn_until = None
-        if s["state"] == "acting" and s["acted_at"]:
+        if acting_now and s["acted_at"]:
             try:
                 turn_until = (datetime.fromisoformat(s["acted_at"]) + timedelta(seconds=ACT_TIMEOUT_S)).isoformat()
             except ValueError:
@@ -397,10 +488,18 @@ def _public(conn, room, viewer_uid):
             "avatar_url": (u["avatar_url"] if u else "") or "",
             "bet": s["bet"], "hand": hand, "value": hand_value(hand) if hand else 0,
             "state": s["state"], "result": s["result"], "payout": s["payout"],
+            "split": split, "active_hand": s["active_hand"],
+            "hand2": hand2, "value2": hand_value(hand2) if hand2 else 0,
+            "bet2": s["bet2"], "state2": s["state2"], "result2": s["result2"], "payout2": s["payout2"],
             "is_you": s["user_id"] == viewer_uid, "is_host": s["user_id"] == room["host_id"],
             "turn_until": turn_until,
         })
     you = next((x for x in seats_out if x["is_you"]), None)
+    # aktivní ruka „tebe" (u splitu může být 2.) → can_act/double/split počítáme z ní
+    you_state = you_cards = None
+    if you:
+        you_state, you_cards = (you["state2"], you["hand2"]) if you["active_hand"] == 2 else (you["state"], you["hand"])
+    you_can_act = status == "playing" and you is not None and you_state == "acting"
     chat = [dict(r) for r in conn.execute(
         "SELECT username, msg, created_at FROM bj_chat WHERE room_id=? ORDER BY id DESC LIMIT ?",
         (room_id, CHAT_TAIL)).fetchall()][::-1]
@@ -418,8 +517,10 @@ def _public(conn, room, viewer_uid):
         "seats": seats_out, "you": you,
         "can_bet": status == "betting" and you is not None and you["state"] == "idle",
         "can_deal": status == "betting" and room["host_id"] == viewer_uid and any(s["state"] == "ready" for s in seats_out),
-        "can_act": status == "playing" and you is not None and you["state"] == "acting",
-        "can_double": status == "playing" and you is not None and you["state"] == "acting" and len(you["hand"]) == 2,
+        "can_act": you_can_act,
+        "can_double": you_can_act and len(you_cards) == 2,
+        "can_split": you_can_act and you["active_hand"] == 1 and not you["split"]
+                     and len(you["hand"]) == 2 and _rank(you["hand"][0]) == _rank(you["hand"][1]),
         "can_next": status == "done" and room["host_id"] == viewer_uid,
         "phase_until": room["phase_until"], "server_now": now_iso(),
         "chat": chat, "min_bet": MIN_BET, "max_bet": MAX_BET,
