@@ -563,6 +563,40 @@ class RoomChatIn(BaseModel):
     msg: str = Field(min_length=1, max_length=200)
 
 
+class CrewCreateIn(BaseModel):
+    name: str = Field(min_length=3, max_length=32)
+    tag: str = Field(min_length=2, max_length=4)
+
+
+class CrewJoinIn(BaseModel):
+    code: str = Field(min_length=1, max_length=24)
+
+
+class CrewChatIn(BaseModel):
+    msg: str = Field(min_length=1, max_length=200)
+
+
+class CrewMemberIn(BaseModel):
+    user_id: int
+
+
+class CrewRoleIn(BaseModel):
+    user_id: int
+    role: str = Field(pattern="^(officer|member)$")
+
+
+class CrewEmblemIn(BaseModel):
+    emblem: str = Field(min_length=1, max_length=8)
+
+
+class CrewMotdIn(BaseModel):
+    text: str = Field(default="", max_length=200)
+
+
+class CrewPrivateIn(BaseModel):
+    private: bool
+
+
 class GamesRakeIn(BaseModel):
     """Rake (% z banku pro house) na hrách/duelech. 0 = férové bez poplatku."""
     rake_pct: int = Field(ge=0, le=50)

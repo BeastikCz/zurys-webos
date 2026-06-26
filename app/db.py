@@ -613,6 +613,50 @@ CREATE TABLE IF NOT EXISTS bj_chat (
 );
 CREATE INDEX IF NOT EXISTS idx_bjchat_room ON bj_chat(room_id, id);
 
+-- Crew / Parta (klany): 1 hráč = 1 parta (UNIQUE user_id). week_xp = příspěvek za ISO týden (lazy reset).
+CREATE TABLE IF NOT EXISTS crews (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    name        TEXT NOT NULL UNIQUE,
+    tag         TEXT NOT NULL UNIQUE,             -- [TAG] u nicku, 2-4 znaky
+    emblem      TEXT NOT NULL DEFAULT '🌾',
+    leader_id   INTEGER NOT NULL,
+    member_cap  INTEGER NOT NULL DEFAULT 25,
+    xp          INTEGER NOT NULL DEFAULT 0,        -- all-time crew XP (pro level v P2)
+    code        TEXT NOT NULL UNIQUE,              -- join kód (do pozvánky)
+    created_at  TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS crew_members (
+    crew_id     INTEGER NOT NULL REFERENCES crews(id) ON DELETE CASCADE,
+    user_id     INTEGER NOT NULL UNIQUE,
+    role        TEXT NOT NULL DEFAULT 'member',    -- leader | officer | member
+    week_xp     INTEGER NOT NULL DEFAULT 0,        -- týdenní crew XP do žebříčku = farm(capnutý) + suby(uncapped)
+    week_farm   INTEGER NOT NULL DEFAULT 0,        -- týdenní FARM akumulátor (jen pro cap; suby cap obcházejí)
+    contributed INTEGER NOT NULL DEFAULT 0,         -- all-time CELKEM přispěno (farm + sub), UNcapped
+    sub_xp      INTEGER NOT NULL DEFAULT 0,         -- all-time SUB/resub/gift XP, UNcapped (supporter contribution – ten cenný)
+    week        TEXT,                              -- ISO týden, ke kterému week_xp/week_farm platí
+    claimed_week TEXT,                             -- ISO týden, ve kterém člen vyzvedl odměnu za crew cíl
+    joined_at   TEXT NOT NULL,
+    PRIMARY KEY (crew_id, user_id)
+);
+CREATE INDEX IF NOT EXISTS idx_crewmem_crew ON crew_members(crew_id);
+CREATE TABLE IF NOT EXISTS crew_chat (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    crew_id     INTEGER NOT NULL REFERENCES crews(id) ON DELETE CASCADE,
+    user_id     INTEGER NOT NULL,
+    username    TEXT NOT NULL,
+    msg         TEXT NOT NULL,
+    created_at  TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_crewchat_crew ON crew_chat(crew_id, id);
+-- Žádosti o vstup do PRIVÁTNÍ party (vůdce schvaluje). PK brání duplicitní žádosti.
+CREATE TABLE IF NOT EXISTS crew_requests (
+    crew_id     INTEGER NOT NULL REFERENCES crews(id) ON DELETE CASCADE,
+    user_id     INTEGER NOT NULL,
+    username    TEXT NOT NULL,
+    created_at  TEXT NOT NULL,
+    PRIMARY KEY (crew_id, user_id)
+);
+
 -- Mines (single-player provably-fair): 1 aktivní hra na uživatele. layout = JSON pozic bomb,
 -- revealed = JSON odkrytých bezpečných polí. Bomby se hráči NEposílají, dokud hra běží.
 CREATE TABLE IF NOT EXISTS mines_games (
@@ -751,6 +795,26 @@ _MIGRATIONS = [
     ("gift_requests", "note", "TEXT"),
     # BJ auto-flow: deadline fáze (betting → auto-rozdání, done → auto-nové kolo). NULL = bez odpočtu.
     ("bj_rooms", "phase_until", "TEXT"),
+    # Crew týdenní cíl: člen vyzvedl odměnu v daném ISO týdnu (gate proti dvojímu výběru).
+    ("crew_members", "claimed_week", "TEXT"),
+    # Crew contribution: all-time XP, které člen přispěl (UNcapped, vč. subů/giftů) – „kolik kdo přispěl".
+    ("crew_members", "contributed", "INTEGER NOT NULL DEFAULT 0"),
+    # Crew supporter split: sub/resub/gift XP zvlášť (uncapped) + týdenní farm akumulátor (cap jen na farm).
+    ("crew_members", "sub_xp", "INTEGER NOT NULL DEFAULT 0"),
+    ("crew_members", "week_farm", "INTEGER NOT NULL DEFAULT 0"),
+    # Crew týdenní odměna evidovaná na USERA (hop-proof: leave+rejoin neobejde, member řádek se maže).
+    ("users", "crew_goal_week", "TEXT"),
+    # Crew streak: týdny v řadě se splněným cílem (retence „nepřeruš streak"); streak_week = naposled započtený ISO týden.
+    ("crews", "streak", "INTEGER NOT NULL DEFAULT 0"),
+    ("crews", "streak_week", "TEXT"),
+    ("crews", "best_streak", "INTEGER NOT NULL DEFAULT 0"),
+    # Parta měsíce: měsíční sub contribution party (YYYY-MM lazy reset) → měsíční supporter race + koruna.
+    ("crews", "month_sub_xp", "INTEGER NOT NULL DEFAULT 0"),
+    ("crews", "month", "TEXT"),
+    # Crew popis/MOTD (vůdce) + private flag (join přes schválení) + cooldown po odchodu (anti-churn/hop).
+    ("crews", "motd", "TEXT"),
+    ("crews", "private", "INTEGER NOT NULL DEFAULT 0"),
+    ("users", "crew_left_at", "TEXT"),
     # BJ split: druhá ruka (rozdělení páru). state2 NULL = seat bez splitu.
     ("bj_seats", "hand2", "TEXT NOT NULL DEFAULT '[]'"),
     ("bj_seats", "bet2", "INTEGER NOT NULL DEFAULT 0"),

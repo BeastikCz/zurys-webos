@@ -29,7 +29,11 @@ from .. import kickbot
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
-OAUTH_ENABLED = bool(KICK_CLIENT_ID and KICK_CLIENT_SECRET)
+# Reálný Kick OAuth jen na PRODUKCI (Fly nastavuje FLY_APP_NAME). Lokálně (bez FLY_APP_NAME)
+# je OAUTH_ENABLED vždy False → běží DEMO login (přihlášení jen nickem, pro vývoj). Demo endpoint
+# /kick/connect je navíc gated `if OAUTH_ENABLED` níž, takže na produkci (kde je FLY_APP_NAME +
+# KICK_CLIENT_ID v env) zůstává zablokovaný. Prod login se NEMĚNÍ.
+OAUTH_ENABLED = bool(KICK_CLIENT_ID and KICK_CLIENT_SECRET and os.environ.get("FLY_APP_NAME"))
 
 
 # ---------------- Session ----------------

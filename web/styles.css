@@ -896,6 +896,71 @@ footer.site-footer { border-top: 1px solid var(--border); padding: 22px 0; color
 @keyframes rr-pop { 0% { transform: scale(.82); } 60% { transform: scale(1.12); } 100% { transform: scale(1); } }
 @media (prefers-reduced-motion: reduce) { .rr-card.rr-done { animation: none; } }
 
+/* 🤝 Parta / Crew (klany) */
+.crew-row { display: flex; align-items: center; gap: 10px; padding: 9px 12px; border-radius: 10px; background: var(--surface-2); border: 1px solid var(--border); margin-bottom: 6px; text-decoration: none; color: var(--text); transition: border-color .15s; }
+.crew-row:hover { border-color: var(--accent); }
+.crew-rank { font-weight: 800; color: var(--text-dim); min-width: 30px; }
+.crew-emblem { font-size: 20px; }
+.crew-name { flex: 1; min-width: 0; }
+.crew-tag { color: var(--gold); font-weight: 800; font-size: 12.5px; }
+.crew-meta { font-size: 12.5px; color: var(--text-dim); white-space: nowrap; }
+.crew-meta b, .crew-mxp b { color: var(--accent); }
+.crew-hero { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.crew-hero-l { display: flex; align-items: center; gap: 12px; }
+.crew-hero-emblem { font-size: 40px; }
+.crew-hero-name { font-size: 19px; font-weight: 800; }
+.crew-mrow { display: flex; align-items: center; gap: 9px; padding: 7px 4px; border-bottom: 1px solid var(--border); }
+.crew-mrow:last-child { border-bottom: none; }
+.crew-mrow.you { background: rgba(255,211,77,.06); border-radius: 8px; }
+.crew-mname { flex: 1; min-width: 0; font-weight: 700; font-size: 13.5px; }
+.crew-mxp { font-size: 12.5px; color: var(--text-dim); white-space: nowrap; }
+.crew-sub { color: var(--gold); font-weight: 700; }
+.crew-sub.faint { opacity: .7; font-weight: 600; }
+.crew-bonus-line { font-size: 12px; font-weight: 700; color: var(--gold); margin-top: 3px; }
+
+/* 🤝 „Proč být v partě?" box v lobby (self-explanatory) */
+.crew-why { background: linear-gradient(180deg, rgba(255,211,77,.07), transparent); border-color: rgba(255,211,77,.25); }
+.crew-why-head { font-size: 15px; font-weight: 800; margin-bottom: 11px; }
+.crew-why-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 11px; }
+.crew-why-item { display: flex; gap: 9px; align-items: flex-start; }
+.crew-why-item > span { font-size: 20px; line-height: 1.1; flex-shrink: 0; }
+.crew-why-item b { font-size: 13px; }
+.crew-why-item p { font-size: 12px; color: var(--text-dim); margin: 2px 0 0; line-height: 1.4; }
+@media (max-width: 560px) { .crew-why-grid { grid-template-columns: 1fr; } }
+
+/* 🎯 Crew týdenní cíl → odměna všem */
+.crew-goal-panel { background: linear-gradient(180deg, rgba(255,211,77,.06), transparent); }
+.crew-goal-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 13.5px; margin-bottom: 8px; }
+.crew-goal-top b { color: var(--accent); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.crew-goal-done { color: #46d369; font-weight: 800; font-size: 12px; margin-left: 4px; }
+.crew-goal-bar { height: 12px; border-radius: 8px; background: rgba(255,255,255,.08); overflow: hidden; }
+.crew-goal-fill { height: 100%; border-radius: 8px; background: linear-gradient(90deg, var(--accent), #ffd34d); transition: width .5s ease; }
+.crew-goal-fill.done { background: linear-gradient(90deg, #46d369, #7be0a0); }
+.crew-goal-claim { margin-top: 10px; width: 100%; }
+.crew-goal-hint { margin-top: 9px; font-size: 12.5px; color: var(--text-dim); }
+.crew-goal-hint b { color: var(--accent); }
+.crew-subgoal { margin-top: 13px; padding-top: 12px; border-top: 1px solid var(--border); }
+.crew-goal-fill.sub { background: linear-gradient(90deg, var(--gold), #ffe08a); }
+.crew-supporter-badge { color: #1a1200; background: var(--gold); font-weight: 800; font-size: 11px; padding: 2px 7px; border-radius: 6px; margin-left: 4px; white-space: nowrap; }
+.crew-mgmt { display: flex; gap: 4px; margin-left: 8px; flex-shrink: 0; }
+.crew-mbtn { background: rgba(255,255,255,.06); border: 1px solid var(--border); border-radius: 6px; cursor: pointer; font-size: 12px; line-height: 1; padding: 4px 7px; color: var(--text); }
+.crew-mbtn:hover { border-color: var(--accent); }
+.crew-mbtn.danger:hover { border-color: #e24b4a; color: #e24b4a; }
+.crew-streak { color: #ff7a18; font-weight: 800; font-size: 13px; white-space: nowrap; }
+.crew-streak-line { margin-top: 9px; font-size: 12.5px; color: #ff9d4d; font-weight: 700; }
+.crew-streak-line b { color: #ff7a18; }
+.crew-crown { font-size: 14px; }
+.crew-champ { border: 1px solid var(--gold) !important; }
+.crew-em-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; margin-top: 12px; }
+.crew-em-pick { font-size: 24px; padding: 8px 0; background: rgba(255,255,255,.05); border: 1px solid var(--border); border-radius: 10px; cursor: pointer; line-height: 1; }
+.crew-em-pick:hover { border-color: var(--gold); background: rgba(255,211,77,.12); }
+.crew-info { display: flex; flex-direction: column; gap: 10px; }
+.crew-motd { font-size: 13.5px; font-style: italic; color: var(--text); }
+.crew-achs { display: flex; flex-wrap: wrap; gap: 6px; }
+.crew-ach { font-size: 11.5px; font-weight: 700; background: rgba(255,211,77,.12); border: 1px solid rgba(255,211,77,.3); color: var(--gold); border-radius: 20px; padding: 3px 9px; white-space: nowrap; }
+.crew-req { display: flex; align-items: center; justify-content: space-between; padding: 6px 4px; border-bottom: 1px solid var(--border); }
+.crew-req:last-child { border-bottom: none; }
+
 /* 🎁 Wrapped „Moje čísla" karta (screenshot-friendly) */
 .wr-card { width: min(440px, 92vw); text-align: center; padding: 26px 24px 18px; border-radius: 20px; cursor: default;
   background: radial-gradient(130% 100% at 50% 0, #2a2350, #15112e 70%); border: 2px solid var(--gold); box-shadow: 0 0 60px rgba(255,211,77,.35); }

@@ -66,7 +66,7 @@ def verify(message_id: str, timestamp: str, body_bytes: bytes, signature_b64: st
         return False
 
 
-def _award_kick_user(conn, kick_username, points, reason, set_sub=None, sub_expires_at=None, log_event=False):
+def _award_kick_user(conn, kick_username, points, reason, set_sub=None, sub_expires_at=None, log_event=False, crew_bonus=False):
     """Najde uživatele podle Kick nicku (nebo založí ghost účet) a přičte body.
 
     Ghost účet = aby se body uložily, i když ten člověk ještě není na webu;
@@ -86,6 +86,12 @@ def _award_kick_user(conn, kick_username, points, reason, set_sub=None, sub_expi
         )
         uid = cur.lastrowid
     if points:
+        if crew_bonus:                      # crew level → bonus na sedláky ze subu/resubu/giftu (žene subbing = $ pro streamera)
+            try:
+                from . import crews
+                points = int(round(int(points) * crews.earn_bonus(conn, uid, "sub")))
+            except Exception:
+                pass
         add_points(conn, uid, int(points), reason)
     elif log_event:
         # Záznam do historie i bez bodů (příjemce gift subu dostává 0 bodů, ale chceme vidět,
@@ -152,7 +158,7 @@ def handle_event(conn, event_type: str, payload: dict) -> dict:
         pts = (eco["eco_sub_pts"] if is_new else eco["eco_resub_pts"]) * mult
         exp = payload.get("expires_at")
         label = ("Kick sub 🟣" if is_new else "Kick resub 🔁") + (" (happy 2×)" if mult > 1 else "")
-        _award_kick_user(conn, uname, pts, label, set_sub=True, sub_expires_at=exp, log_event=True)
+        _award_kick_user(conn, uname, pts, label, set_sub=True, sub_expires_at=exp, log_event=True, crew_bonus=True)
         subgoal.tick(conn, 1)                    # komunitní sub cíl: +1
         return {"ok": True, "type": event_type, "user": uname, "pts": pts, "mult": mult}
 
@@ -168,7 +174,7 @@ def handle_event(conn, event_type: str, payload: dict) -> dict:
             gifter_uid = _award_kick_user(
                 conn, gifter, total,
                 f"Kick gift sub 🎁 ×{n}" + (" (happy 2×)" if mult > 1 else ""),
-                log_event=(total == 0))
+                log_event=(total == 0), crew_bonus=True)
         if gifter_uid:
             # komunitní SUB cíl: zapiš giftera (PŘED tick → je v outpayu, i když cíl naplní jeho gift)
             subgoal.record_gifter(conn, gifter_uid, n, in_hh=(mult > 1))

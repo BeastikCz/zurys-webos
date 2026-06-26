@@ -140,13 +140,19 @@ def award_earned(conn: sqlite3.Connection, user, base: int, reason: str, kind: s
             want = int(round(want * _hm))
     except Exception:
         pass
+    # Crew level bonus (malý, faucet-safe – jen členové party; motivace se přidat a levelovat partu)
+    try:
+        from . import crews
+        want = int(round(want * crews.earn_bonus(conn, user["id"], "farm")))
+    except Exception:
+        pass
     st = _state(conn, user["id"])
     remaining = max(0, eco["eco_daily_cap"] - st["earned_today"])
     amount = min(want, remaining)
     if amount <= 0:
         return {"awarded": 0, "mult": mult, "capped": True, "earned_today": st["earned_today"],
                 "daily_cap": eco["eco_daily_cap"]}
-    add_points(conn, user["id"], amount, reason)
+    add_points(conn, user["id"], amount, reason)            # crew XP řeší add_points (sjednoceně farm+sub dle earn)
     col = "watch_today" if kind == "watch" else ("chat_today" if kind == "chat" else "earned_today")
     conn.execute(
         f"UPDATE activity_state SET earned_today = earned_today + ?, {col} = {col} + ? WHERE user_id = ?"
