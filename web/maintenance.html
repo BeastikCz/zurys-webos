@@ -46,31 +46,12 @@
 </style>
 </head>
 <body>
-  <img class="bg" id="bgA" src="/maint-1.jpg" alt="Probíhá údržba — brzy jsme zpátky" style="opacity:1">
-  <img class="bg" id="bgB" alt="" style="opacity:0">
+  <!-- STÁLÝ obrázek údržby (jeden, bez slideshow) -->
+  <img class="bg" src="/maint-static.png" alt="Probíhá údržba — brzy jsme zpátky">
 
   <div class="cd" id="cd" hidden></div>
 
   <script>
-    // ---- Slideshow maintenance fotek (plynulé prolínání každých 8 s) ----
-    (function () {
-      var IMGS = ["/maint-1.jpg", "/maint-2.jpg", "/maint-3.jpg", "/maint-4.jpg", "/maint-5.jpg", "/maint-6.jpg", "/maint-7.jpg", "/maint-8.png", "/maint-9.png", "/maint-10.png", "/maint-11.png"];   // slideshow (prolíná každých 8 s)
-      var a = document.getElementById("bgA"), b = document.getElementById("bgB");
-      if (!a || !b || IMGS.length < 2) return;
-      IMGS.forEach(function (s) { var im = new Image(); im.src = s; });   // přednačtení (žádné blikání)
-      var idx = Math.floor(Math.random() * IMGS.length);                  // náhodný start
-      a.src = IMGS[idx]; a.style.opacity = "1"; b.style.opacity = "0";
-      var showingA = true;
-      setInterval(function () {
-        idx = (idx + 1) % IMGS.length;
-        var front = showingA ? a : b, back = showingA ? b : a;
-        back.src = IMGS[idx];
-        var go = function () { back.style.opacity = "1"; front.style.opacity = "0"; };
-        if (back.complete) go(); else back.onload = go;
-        showingA = !showingA;
-      }, 8000);
-    })();
-
     // Čas konce vkládá server (nahradí __MAINT_UNTIL__ skutečným ISO časem, nebo prázdné).
     window.MAINT_UNTIL = "__MAINT_UNTIL__";
     (function () {
