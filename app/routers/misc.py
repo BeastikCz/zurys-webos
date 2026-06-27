@@ -50,37 +50,40 @@ def egg_window_active(now=None) -> bool:
     return start <= cur < start + EGG_WINDOW_MIN
 
 
-@router.get("/egg/active")
-def egg_active():
-    """Je teď aktivní náhodné okno eggu? Frontend podle toho ukáže/skryje stopu 🥚 (jen v okně)."""
+@router.get("/nx/state")
+def nx_state():
+    """Server řídí, kdy je drobná vrstva aktivní (náhodné okno). Frontend jen poll → ukáže/skryje.
+    Neutrální cesta (ne /egg/*), ať to v Network/konzoli nekřičí „easter egg"."""
     return {"active": egg_window_active()}
 
 
-@router.get("/egg/clue")
-def egg_clue(user: sqlite3.Row = Depends(require_user)):
-    """Hádanka k easter eggu – SERVER-SIDE (ne v JS), aby F12 inspekce JS neprozradila řešení."""
-    return {"riddle": EGG_RIDDLE, "hint": EGG_HINT}
+@router.get("/nx/q")
+def nx_q(user: sqlite3.Row = Depends(require_user)):
+    """Text hádanky – SERVER-SIDE (ne v JS), aby F12 inspekce klienta neprozradila řešení."""
+    return {"title": "🥚 Hádanka", "riddle": EGG_RIDDLE, "hint": EGG_HINT}
 
 
-@router.post("/egg/claim")
-def egg_claim(data: EggClaimIn, user: sqlite3.Row = Depends(require_user),
-              conn: sqlite3.Connection = Depends(db_dep)):
-    """Easter egg: ověří slovo (server-side) + jen v aktivním NÁHODNÉM okně + atomický gate 1×/uživatel."""
+@router.post("/nx/s")
+def nx_s(data: EggClaimIn, user: sqlite3.Row = Depends(require_user),
+         conn: sqlite3.Connection = Depends(db_dep)):
+    """Ověří slovo (server-side) + jen v aktivním NÁHODNÉM okně + atomický gate 1×/uživatel.
+    Hlášky vrací SERVER (ne klient) → v app.js nejsou žádné prozrazující stringy (úspěch se ukáže až po nálezu)."""
     if (data.word or "").strip().upper() != EGG_WORD:
-        raise HTTPException(status_code=400, detail="🥚?")          # vágně, žádná nápověda
+        raise HTTPException(status_code=400, detail="?")            # vágně, žádná nápověda
     row = conn.execute("SELECT egg_found_at FROM users WHERE id = ?", (user["id"],)).fetchone()
     if row and row["egg_found_at"]:
-        return {"already": True}                                    # už našel (vždy řekni, i mimo okno)
+        return {"already": True, "msg": "Tohle už máš ✅"}          # už našel (vždy řekni, i mimo okno)
     if not egg_window_active():
-        return {"locked": True}                                     # mimo okno – „vajíčko zrovna spí"
+        return {"locked": True, "msg": "🥚 Tajný sedlák teď spí… objevuje se náhodně. Sleduj stránku!"}
     cur = conn.execute("UPDATE users SET egg_found_at = ? WHERE id = ? AND egg_found_at IS NULL",
                        (now_iso(), user["id"]))
     if cur.rowcount == 0:
         conn.commit()
-        return {"already": True}
+        return {"already": True, "msg": "Tohle už máš ✅"}
     add_points(conn, user["id"], EGG_REWARD, "🥚 Tajný sedlák (easter egg)", xp=False)
     conn.commit()
-    return {"found": True, "reward": EGG_REWARD}
+    return {"found": True, "reward": EGG_REWARD,
+            "msg": f"🥚 Chytil jsi Tajného sedláka! +{EGG_REWARD} sedláků + odznak 🥚"}
 
 
 @router.post("/me/self-exclude")

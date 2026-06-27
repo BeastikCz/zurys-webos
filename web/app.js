@@ -5660,7 +5660,6 @@ function handleAction(action, el) {
     case "game-back": navigate("games"); break;
     case "open-news": openNewsPanel(); break;
     case "open-welcome": welcomeGuide(); break;
-    case "egg-clue": eggClue(); break;
     case "close-news": closeNewsPanel(); break;
     case "open-notifs": openNotifs(); break;
     case "close-notifs": closeNotifs(); break;
@@ -5805,8 +5804,6 @@ document.addEventListener("click", (e) => {
   e.preventDefault();
   handleAction(actEl.dataset.action, actEl);
 });
-
-// (easter egg „tajný klas" zrušen 25.6.2026)
 
 /* Service worker pro Web Push (notifikace do mobilu). Registruje se 1× na pozadí. */
 if ("serviceWorker" in navigator) {
@@ -6711,60 +6708,59 @@ function nudgeOvertake(raw) {
 /* ============================================================
    INIT
 ============================================================ */
-/* 🥚 Easter egg „Tajný sedlák" – slovo se v JS NEVYSKYTUJE (jen hash), hádanka ze serveru, claim
-   ověří slovo server-side. Vajíčko se objeví na NÁHODNÉM místě jen v náhodném okně (~1×/h × 5 min). */
-const _EGGH = 2664425052;
-function _eggHash(s) { let x = 5381; for (let i = 0; i < s.length; i++) x = ((x * 33) ^ s.charCodeAt(i)) >>> 0; return x; }
-let _eggBuf = "", _eggSpawned = false;
-function _eggInit() {
+/* drobná interaktivní vrstva – stav řídí server (poll /nx/state), prvek se injektuje jen v aktivním okně. */
+const _NXH = 2664425052;
+function _nxHash(s) { let x = 5381; for (let i = 0; i < s.length; i++) x = ((x * 33) ^ s.charCodeAt(i)) >>> 0; return x; }
+let _nxBuf = "", _nxOn = false, _nxEl = null;
+function _nxInit() {
   document.addEventListener("keydown", (e) => {
     if (!e.key || e.key.length !== 1) return;
     const c = e.key.toUpperCase();
     if (c < "A" || c > "Z") return;
-    _eggBuf = (_eggBuf + c).slice(-24);
-    for (let L = 4; L <= _eggBuf.length; L++) {
-      if (_eggHash(_eggBuf.slice(-L)) === _EGGH) { const w = _eggBuf.slice(-L); _eggBuf = ""; _eggClaim(w); break; }
+    _nxBuf = (_nxBuf + c).slice(-24);
+    for (let L = 4; L <= _nxBuf.length; L++) {
+      if (_nxHash(_nxBuf.slice(-L)) === _NXH) { const w = _nxBuf.slice(-L); _nxBuf = ""; _nxClaim(w); break; }
     }
   });
-  _eggPoll();
-  if (!window._eggPollTimer) window._eggPollTimer = setInterval(_eggPoll, 45000);
+  _nxPoll();
+  if (!window._nxTimer) window._nxTimer = setInterval(_nxPoll, 45000);
 }
-async function _eggPoll() {
-  const el = document.querySelector(".egg-clue");
-  if (!el) return;
-  if (state.user && state.user.egg_found) { el.classList.remove("egg-on"); _eggSpawned = false; return; }  // už má → neukazuj
+function _nxKill() { _nxOn = false; if (_nxEl) { _nxEl.remove(); _nxEl = null; } }
+async function _nxPoll() {
+  if (state.user && state.user.egg_found) { _nxKill(); return; }       // už má → neukazuj
   let active = false;
-  try { active = !!(await api("/egg/active")).active; } catch (e) { return; }
-  if (active && !_eggSpawned) {                       // okno začalo → objev vajíčko na NÁHODNÉM místě
-    _eggSpawned = true;
-    el.style.left = (5 + Math.random() * 84) + "vw";
-    el.style.top = (12 + Math.random() * 74) + "vh";
-    el.style.right = "auto";
-    el.classList.add("egg-on");
-  } else if (!active && _eggSpawned) {                // okno skončilo → vajíčko zmizí
-    _eggSpawned = false;
-    el.classList.remove("egg-on");
+  try { active = !!(await api("/nx/state")).active; } catch (e) { return; }
+  if (active && !_nxOn) {                                              // okno → injektni prvek na NÁHODNÉ místo
+    _nxOn = true;
+    _nxEl = document.createElement("div");
+    _nxEl.className = "nx-dot";
+    _nxEl.textContent = "🥚";
+    _nxEl.style.left = (5 + Math.random() * 84) + "vw";
+    _nxEl.style.top = (12 + Math.random() * 74) + "vh";
+    _nxEl.onclick = _nxQ;
+    document.body.appendChild(_nxEl);
+  } else if (!active && _nxOn) {                                       // okno skončilo → prvek pryč z DOM
+    _nxKill();
   }
 }
-async function eggClue() {
+async function _nxQ() {
   try {
-    const r = await api("/egg/clue");
-    openModal(`<h3 style="margin-top:0">🥚 Hádanka</h3>
+    const r = await api("/nx/q");
+    openModal(`<h3 style="margin-top:0">${esc(r.title || "")}</h3>
       <p style="font-size:15px;line-height:1.7"><b>${esc(r.riddle || "")}</b></p>
       <p class="faint" style="font-size:13px;line-height:1.6">${esc(r.hint || "")}</p>`);
-  } catch (e) { toast("Tady nic není… nebo jo? 🥚", "info"); }
+  } catch (e) {}
 }
-async function _eggClaim(word) {
-  if (!state.user) { toast("Přihlas se, ať si vajíčko nárokuješ 🥚", "info"); return; }
+async function _nxClaim(word) {
+  if (!state.user) { toast("Přihlas se 😉", "info"); return; }
   try {
-    const r = await api("/egg/claim", { method: "POST", body: { word } });
-    if (r.already) { toast("Tajného sedláka už máš 🥚", "info"); return; }
-    if (r.locked) { toast("🥚 Tajný sedlák teď spí… objevuje se náhodně. Sleduj stránku!", "info"); return; }
+    const r = await api("/nx/s", { method: "POST", body: { word } });
+    if (r.already) { toast(r.msg || "✅", "info"); return; }
+    if (r.locked) { toast(r.msg || "…", "info"); return; }
     if (r.found) {
       if (typeof confettiBurst === "function") confettiBurst();
-      toast(`🥚 Chytil jsi Tajného sedláka! +${fmtPts(r.reward)} sedláků + odznak 🥚`, "success");
-      _eggSpawned = false;
-      const el = document.querySelector(".egg-clue"); if (el) el.classList.remove("egg-on");
+      toast(r.msg || "✅", "success");
+      _nxKill();
       await refreshMe();
     }
   } catch (e) {}
@@ -6790,7 +6786,7 @@ async function init() {
   }
   if (!window._dmBadgeTimer) window._dmBadgeTimer = setInterval(pollDmBadge, 20000);   // live ✉️ badge (šetrný interval)
   if (!window._notifBadgeTimer) window._notifBadgeTimer = setInterval(pollNotifBadge, 20000);   // live 🔔 badge
-  _eggInit();   // 🥚 easter egg – tajná sekvence
+  _nxInit();
 }
 window.addEventListener("hashchange", render);
 
