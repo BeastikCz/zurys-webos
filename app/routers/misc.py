@@ -29,11 +29,11 @@ router = APIRouter(tags=["misc"])
 EGG_WORD = "ZLATEVEJCE"
 EGG_REWARD = 1500            # jednorázová malá odměna (ne ekonomika), gate 1×/uživatel
 EGG_RIDDLE = "Co snese zlatá slepice?"
-EGG_HINT = "Odpověď napiš jedním slovem — bez mezer a háčků — kdekoliv na webu (jen piš písmena). Pak koukni do rohu. 🌾"
-# Easter egg NENÍ nafurt – platí jen v náhodných oknech (server rozhoduje). Stopa/hádanka jsou pořád
-# dostupné (slovo se naučíš kdykoliv), ale CLAIM projde jen když je zrovna okno aktivní. Tunable.
-EGG_WINDOWS_PER_HOUR = 2     # kolik oken za hodinu
-EGG_WINDOW_MIN = 8          # délka okna v minutách
+EGG_HINT = "Odpověď napiš jedním slovem — bez mezer a háčků — kdekoliv na webu (jen piš písmena). Tím chytíš Tajného sedláka. 🌾"
+# Easter egg NENÍ nafurt – objeví se na náhodném místě jen v náhodných oknech (server rozhoduje).
+# Vajíčko se ukáže ~EGG_WINDOWS_PER_HOUR×/h na EGG_WINDOW_MIN min, pak zmizí; mimo okno claim → {locked}. Tunable.
+EGG_WINDOWS_PER_HOUR = 1     # kolikrát za hodinu se vajíčko objeví
+EGG_WINDOW_MIN = 5          # jak dlouho je vidět (min), pak zmizí (~1h pauza, náhodná minuta)
 
 
 def egg_window_active(now=None) -> bool:

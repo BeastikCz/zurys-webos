@@ -6711,11 +6711,11 @@ function nudgeOvertake(raw) {
 /* ============================================================
    INIT
 ============================================================ */
-/* 🥚 Easter egg „Tajný sedlák" – slovo se v JS NEVYSKYTUJE (jen hash pro detekci), hádanka jde
-   ze serveru, claim ověří slovo server-side → F12 inspekce JS nic neprozradí (slovo ani hádanku). */
+/* 🥚 Easter egg „Tajný sedlák" – slovo se v JS NEVYSKYTUJE (jen hash), hádanka ze serveru, claim
+   ověří slovo server-side. Vajíčko se objeví na NÁHODNÉM místě jen v náhodném okně (~1×/h × 5 min). */
 const _EGGH = 2664425052;
 function _eggHash(s) { let x = 5381; for (let i = 0; i < s.length; i++) x = ((x * 33) ^ s.charCodeAt(i)) >>> 0; return x; }
-let _eggBuf = "", _eggLive = false;
+let _eggBuf = "", _eggSpawned = false;
 function _eggInit() {
   document.addEventListener("keydown", (e) => {
     if (!e.key || e.key.length !== 1) return;
@@ -6723,17 +6723,28 @@ function _eggInit() {
     if (c < "A" || c > "Z") return;
     _eggBuf = (_eggBuf + c).slice(-24);
     for (let L = 4; L <= _eggBuf.length; L++) {
-      const suf = _eggBuf.slice(-L);
-      if (_eggHash(suf) === _EGGH) { _eggBuf = ""; _eggShow(suf); break; }
+      if (_eggHash(_eggBuf.slice(-L)) === _EGGH) { const w = _eggBuf.slice(-L); _eggBuf = ""; _eggClaim(w); break; }
     }
   });
   _eggPoll();
-  if (!window._eggPollTimer) window._eggPollTimer = setInterval(_eggPoll, 60000);   // stopa jen v okně
+  if (!window._eggPollTimer) window._eggPollTimer = setInterval(_eggPoll, 45000);
 }
 async function _eggPoll() {
   const el = document.querySelector(".egg-clue");
   if (!el) return;
-  try { const r = await api("/egg/active"); el.classList.toggle("egg-on", !!r.active); } catch (e) {}
+  if (state.user && state.user.egg_found) { el.classList.remove("egg-on"); _eggSpawned = false; return; }  // už má → neukazuj
+  let active = false;
+  try { active = !!(await api("/egg/active")).active; } catch (e) { return; }
+  if (active && !_eggSpawned) {                       // okno začalo → objev vajíčko na NÁHODNÉM místě
+    _eggSpawned = true;
+    el.style.left = (5 + Math.random() * 84) + "vw";
+    el.style.top = (12 + Math.random() * 74) + "vh";
+    el.style.right = "auto";
+    el.classList.add("egg-on");
+  } else if (!active && _eggSpawned) {                // okno skončilo → vajíčko zmizí
+    _eggSpawned = false;
+    el.classList.remove("egg-on");
+  }
 }
 async function eggClue() {
   try {
@@ -6743,24 +6754,17 @@ async function eggClue() {
       <p class="faint" style="font-size:13px;line-height:1.6">${esc(r.hint || "")}</p>`);
   } catch (e) { toast("Tady nic není… nebo jo? 🥚", "info"); }
 }
-function _eggShow(word) {
-  if (_eggLive) return;
-  _eggLive = true;
-  const el = document.createElement("div");
-  el.className = "egg-pop"; el.textContent = "🥚"; el.title = "Klikni rychle!";
-  el.onclick = () => { el.remove(); _eggLive = false; _eggClaim(word); };
-  document.body.appendChild(el);
-  setTimeout(() => { if (el.parentNode) { el.remove(); _eggLive = false; } }, 8000);
-}
 async function _eggClaim(word) {
   if (!state.user) { toast("Přihlas se, ať si vajíčko nárokuješ 🥚", "info"); return; }
   try {
     const r = await api("/egg/claim", { method: "POST", body: { word } });
     if (r.already) { toast("Tajného sedláka už máš 🥚", "info"); return; }
-    if (r.locked) { toast("🥚 Tajný sedlák teď spí… objevuje se jen občas. Zkus to za chvíli!", "info"); return; }
+    if (r.locked) { toast("🥚 Tajný sedlák teď spí… objevuje se náhodně. Sleduj stránku!", "info"); return; }
     if (r.found) {
       if (typeof confettiBurst === "function") confettiBurst();
-      toast(`🥚 Našel jsi Tajného sedláka! +${fmtPts(r.reward)} sedláků + odznak 🥚`, "success");
+      toast(`🥚 Chytil jsi Tajného sedláka! +${fmtPts(r.reward)} sedláků + odznak 🥚`, "success");
+      _eggSpawned = false;
+      const el = document.querySelector(".egg-clue"); if (el) el.classList.remove("egg-on");
       await refreshMe();
     }
   } catch (e) {}

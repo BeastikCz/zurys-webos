@@ -1647,10 +1647,10 @@ body::before { display: none !important; }
 .wg-reopen { background: none; border: none; color: var(--accent); font: inherit; cursor: pointer; padding: 0; }
 .wg-reopen:hover { text-decoration: underline; }
 /* 🥚 jemná stopa k easter eggu – fixní roh, skoro neviditelná (0.06), prozradí se až při najetí myší */
-.egg-clue { position: fixed; top: 62px; right: 12px; z-index: 70; opacity: .5; cursor: pointer; font-size: 15px;
-  user-select: none; line-height: 1; display: none; transition: opacity .25s, transform .25s; }
-.egg-clue.egg-on { display: block; }   /* stopa se ukáže JEN když je aktivní okno (poll /egg/active) */
-.egg-clue:hover, .egg-clue:focus { opacity: 1; transform: scale(1.4); outline: none; }
+.egg-clue { position: fixed; top: 62px; right: 12px; z-index: 70; opacity: .92; cursor: pointer; font-size: 26px;
+  user-select: none; line-height: 1; display: none; filter: drop-shadow(0 0 10px rgba(255,211,77,.7)); transition: transform .2s; }
+.egg-clue.egg-on { display: block; animation: eggWob 1.2s ease-in-out infinite; }   /* objeví se JEN v okně, na náhodné pozici (JS) */
+.egg-clue:hover, .egg-clue:focus { transform: scale(1.3); outline: none; }
 @media (max-width: 560px) { .modal.modal-wg { max-width: 100%; } .wg-mascot { width: 56px; height: 56px; } .wg-title { font-size: 18px; } }
 
 /* Battle Pass – prémiová (sub-only) řada */
