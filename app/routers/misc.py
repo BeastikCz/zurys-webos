@@ -30,24 +30,24 @@ EGG_WORD = "ZLATEVEJCE"
 EGG_REWARD = 1500            # jednorázová malá odměna (ne ekonomika), gate 1×/uživatel
 EGG_RIDDLE = "Co snese zlatá slepice?"
 EGG_HINT = "Odpověď napiš jedním slovem — bez mezer a háčků — kdekoliv na webu (jen piš písmena). Tím chytíš Tajného sedláka. 🌾"
-# Easter egg NENÍ nafurt – objeví se na náhodném místě jen v náhodných oknech (server rozhoduje).
-# Vajíčko se ukáže ~EGG_WINDOWS_PER_HOUR×/h na EGG_WINDOW_MIN min, pak zmizí; mimo okno claim → {locked}. Tunable.
-EGG_WINDOWS_PER_HOUR = 1     # kolikrát za hodinu se vajíčko objeví
-EGG_WINDOW_MIN = 5          # jak dlouho je vidět (min), pak zmizí (~1h pauza, náhodná minuta)
+# Easter egg NENÍ nafurt – objeví se na náhodném místě jen v náhodném okně (server rozhoduje).
+# Vajíčko se ukáže ~1× za EGG_EVERY_HOURS hodin na EGG_WINDOW_MIN min, pak zmizí úplně. Tunable (vzácnost).
+EGG_EVERY_HOURS = 2         # vajíčko se objeví ~1× za tolik hodin (1 = každou hodinu, 3 = každé 3 h…)
+EGG_WINDOW_MIN = 5          # jak dlouho je vidět (min), pak zmizí
 
 
 def egg_window_active(now=None) -> bool:
-    """Je teď aktivní náhodné okno pro easter egg? Start-minuty oken se deterministicky odvozují
-    z hodiny (md5) → nepredikovatelné časy, ale stabilní (server i klient dají stejnou odpověď)."""
+    """Je teď aktivní okno (vajíčko viditelné)? ~1 okno za EGG_EVERY_HOURS hodin × EGG_WINDOW_MIN min,
+    na náhodné minutě (md5 z hodiny → nepředvídatelné, deterministické: server i klient dají stejnou odpověď)."""
     now = now or datetime.now(timezone.utc)
     hkey = now.strftime("%Y%m%d%H")
+    # má tahle hodina vůbec okno? (1 z EGG_EVERY_HOURS hodin, deterministicky podle hashe)
+    if EGG_EVERY_HOURS > 1 and int.from_bytes(hashlib.md5(("egg-hr:" + hkey).encode()).digest()[:4], "big") % EGG_EVERY_HOURS != 0:
+        return False
     span = max(1, 60 - EGG_WINDOW_MIN)
+    start = int.from_bytes(hashlib.md5(("egg-win:" + hkey).encode()).digest()[:4], "big") % span
     cur = now.minute + now.second / 60.0
-    for i in range(EGG_WINDOWS_PER_HOUR):
-        start = int.from_bytes(hashlib.md5(f"egg-win:{hkey}:{i}".encode()).digest()[:4], "big") % span
-        if start <= cur < start + EGG_WINDOW_MIN:
-            return True
-    return False
+    return start <= cur < start + EGG_WINDOW_MIN
 
 
 @router.get("/egg/active")
