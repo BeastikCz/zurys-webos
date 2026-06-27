@@ -6750,6 +6750,7 @@ async function _eggClaim(word) {
   try {
     const r = await api("/egg/claim", { method: "POST", body: { word } });
     if (r.already) { toast("Tajného sedláka už máš 🥚", "info"); return; }
+    if (r.locked) { toast("🥚 Tajný sedlák teď spí… objevuje se jen občas. Zkus to za chvíli!", "info"); return; }
     if (r.found) {
       if (typeof confettiBurst === "function") confettiBurst();
       toast(`🥚 Našel jsi Tajného sedláka! +${fmtPts(r.reward)} sedláků + odznak 🥚`, "success");

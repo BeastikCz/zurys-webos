@@ -1,4 +1,5 @@
 """Leaderboard, redeem kódů a profil (objednávky + historie bodů)."""
+import hashlib
 import json
 import re
 import sqlite3
@@ -29,6 +30,24 @@ EGG_WORD = "ZLATEVEJCE"
 EGG_REWARD = 1500            # jednorázová malá odměna (ne ekonomika), gate 1×/uživatel
 EGG_RIDDLE = "Co snese zlatá slepice?"
 EGG_HINT = "Odpověď napiš jedním slovem — bez mezer a háčků — kdekoliv na webu (jen piš písmena). Pak koukni do rohu. 🌾"
+# Easter egg NENÍ nafurt – platí jen v náhodných oknech (server rozhoduje). Stopa/hádanka jsou pořád
+# dostupné (slovo se naučíš kdykoliv), ale CLAIM projde jen když je zrovna okno aktivní. Tunable.
+EGG_WINDOWS_PER_HOUR = 2     # kolik oken za hodinu
+EGG_WINDOW_MIN = 8          # délka okna v minutách
+
+
+def egg_window_active(now=None) -> bool:
+    """Je teď aktivní náhodné okno pro easter egg? Start-minuty oken se deterministicky odvozují
+    z hodiny (md5) → nepredikovatelné časy, ale stabilní (server i klient dají stejnou odpověď)."""
+    now = now or datetime.now(timezone.utc)
+    hkey = now.strftime("%Y%m%d%H")
+    span = max(1, 60 - EGG_WINDOW_MIN)
+    cur = now.minute + now.second / 60.0
+    for i in range(EGG_WINDOWS_PER_HOUR):
+        start = int.from_bytes(hashlib.md5(f"egg-win:{hkey}:{i}".encode()).digest()[:4], "big") % span
+        if start <= cur < start + EGG_WINDOW_MIN:
+            return True
+    return False
 
 
 @router.get("/egg/clue")
@@ -40,9 +59,14 @@ def egg_clue(user: sqlite3.Row = Depends(require_user)):
 @router.post("/egg/claim")
 def egg_claim(data: EggClaimIn, user: sqlite3.Row = Depends(require_user),
               conn: sqlite3.Connection = Depends(db_dep)):
-    """Easter egg: ověří tajné slovo (server-side) + atomický gate 1×/uživatel → malá odměna + 🥚 odznak."""
+    """Easter egg: ověří slovo (server-side) + jen v aktivním NÁHODNÉM okně + atomický gate 1×/uživatel."""
     if (data.word or "").strip().upper() != EGG_WORD:
         raise HTTPException(status_code=400, detail="🥚?")          # vágně, žádná nápověda
+    row = conn.execute("SELECT egg_found_at FROM users WHERE id = ?", (user["id"],)).fetchone()
+    if row and row["egg_found_at"]:
+        return {"already": True}                                    # už našel (vždy řekni, i mimo okno)
+    if not egg_window_active():
+        return {"locked": True}                                     # mimo okno – „vajíčko zrovna spí"
     cur = conn.execute("UPDATE users SET egg_found_at = ? WHERE id = ? AND egg_found_at IS NULL",
                        (now_iso(), user["id"]))
     if cur.rowcount == 0:
