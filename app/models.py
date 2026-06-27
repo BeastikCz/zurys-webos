@@ -225,6 +225,11 @@ class LevelPassClaimIn(BaseModel):
     level: int = Field(..., ge=1, le=100)
 
 
+class EggClaimIn(BaseModel):
+    """Easter egg – tajné slovo (ověřuje se server-side)."""
+    word: str = Field(..., min_length=1, max_length=40)
+
+
 class LoginCalClaimIn(BaseModel):
     """Vyzvednutí milníkového bonusu z login kalendáře (počet aktivních dní)."""
     milestone: int = Field(..., ge=1, le=31)

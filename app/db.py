@@ -731,6 +731,7 @@ _MIGRATIONS = [
     ("users", "cos_banner", "TEXT"),     # nasazený profil banner
     ("users", "gamble_block_until", "TEXT"),  # sebevyloučení ze sázek: ISO konec / "permanent" / NULL
     ("users", "timeout_until", "TEXT"),       # timeout (dočasný blok webu): ISO konec / NULL. Zrcadlí Kick timeout.
+    ("users", "egg_found_at", "TEXT"),        # easter egg „Tajný sedlák": kdy našel (1×/uživatel gate + 🥚 odznak)
     ("subgoal_gifters", "paid", "INTEGER NOT NULL DEFAULT 0"),  # SUB cíl: (legacy) gifter už dostal odměnu (1× model)
     ("subgoal_gifters", "paid_tier", "INTEGER NOT NULL DEFAULT 0"),  # SUB cíl: nejvyšší vyplacený tier (kumulativní model)
     ("users", "earned_today", "INTEGER NOT NULL DEFAULT 0"),  # XP z FARMENÍ nasbírané dnes (denní strop XP)

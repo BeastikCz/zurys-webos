@@ -14,13 +14,43 @@ from ..deps import (db_dep, require_user, add_points, try_debit, record_audit, c
                     user_rank, tier_for_rank, self_excluded_until, level_info)
 from ..models import (RedeemIn, TradeUrlIn, GiftIn, QuestClaimIn, CosmeticIn, FairSeedIn, SelfExcludeIn,
                       ProfileBioIn, WagerLimitIn, ModApplyIn, BattlePassClaimIn, LoginCalClaimIn,
-                      GardenPlantIn, GardenPlantAllIn, GardenHarvestIn, DecorBuyIn, LevelPassClaimIn)
+                      GardenPlantIn, GardenPlantAllIn, GardenHarvestIn, DecorBuyIn, LevelPassClaimIn,
+                      EggClaimIn)
 from ..services import product_public, role_allows
 from ..ratelimit import rate_limit
 from ..security import secure_weighted_choice
 from .. import economy, live, partners, cosmetics, fairness
 
 router = APIRouter(tags=["misc"])
+
+# Easter egg „Tajný sedlák" – tajné slovo se ověřuje SERVER-SIDE (na frontu je jen obfuskovaný hash
+# pro detekci, ne plaintext). Změna slova = uprav EGG_WORD + char-codes _EGG na frontu (app.js).
+EGG_WORD = "ZLATEVEJCE"
+EGG_REWARD = 1500            # jednorázová malá odměna (ne ekonomika), gate 1×/uživatel
+EGG_RIDDLE = "Co snese zlatá slepice?"
+EGG_HINT = "Odpověď napiš jedním slovem — bez mezer a háčků — kdekoliv na webu (jen piš písmena). Pak koukni do rohu. 🌾"
+
+
+@router.get("/egg/clue")
+def egg_clue(user: sqlite3.Row = Depends(require_user)):
+    """Hádanka k easter eggu – SERVER-SIDE (ne v JS), aby F12 inspekce JS neprozradila řešení."""
+    return {"riddle": EGG_RIDDLE, "hint": EGG_HINT}
+
+
+@router.post("/egg/claim")
+def egg_claim(data: EggClaimIn, user: sqlite3.Row = Depends(require_user),
+              conn: sqlite3.Connection = Depends(db_dep)):
+    """Easter egg: ověří tajné slovo (server-side) + atomický gate 1×/uživatel → malá odměna + 🥚 odznak."""
+    if (data.word or "").strip().upper() != EGG_WORD:
+        raise HTTPException(status_code=400, detail="🥚?")          # vágně, žádná nápověda
+    cur = conn.execute("UPDATE users SET egg_found_at = ? WHERE id = ? AND egg_found_at IS NULL",
+                       (now_iso(), user["id"]))
+    if cur.rowcount == 0:
+        conn.commit()
+        return {"already": True}
+    add_points(conn, user["id"], EGG_REWARD, "🥚 Tajný sedlák (easter egg)", xp=False)
+    conn.commit()
+    return {"found": True, "reward": EGG_REWARD}
 
 
 @router.post("/me/self-exclude")
@@ -65,7 +95,7 @@ def stream_status(conn: sqlite3.Connection = Depends(db_dep)):
 def leaderboard(limit: int = Query(50, ge=1, le=200),
                 conn: sqlite3.Connection = Depends(db_dep)):
     rows = conn.execute(
-        "SELECT id, username, avatar_url, points, role, is_sub, is_vip, is_og, earned_total, "
+        "SELECT id, username, avatar_url, points, role, is_sub, is_vip, is_og, egg_found_at, earned_total, "
         "cos_name, cos_frame, cos_banner, prestige FROM users "
         "ORDER BY points DESC, username ASC LIMIT ?",
         (limit,),
@@ -97,6 +127,7 @@ def leaderboard(limit: int = Query(50, ge=1, le=200),
             "is_sub": bool(r["is_sub"]),
             "is_vip": bool(r["is_vip"]),
             "is_og": bool(r["is_og"]),
+            "egg_found": bool(r["egg_found_at"] if "egg_found_at" in r.keys() else None),
             "cos": cosmetics.resolve(r),
             "delta": delta,
             "climber": False,

@@ -123,6 +123,7 @@ function roleBadge(role) {
 function subVipBadges(u) {
   let s = "";
   if (u && u.is_og) s += `<span class="badge badge-role badge-emote badge-admin" data-tip="OG" aria-label="OG">🏅</span> `;
+  if (u && u.egg_found) s += `<span class="badge badge-role badge-emote" data-tip="Našel Tajného sedláka 🥚" aria-label="Egg" style="background:rgba(255,211,77,.18)">🥚</span> `;
   if (u && u.is_sub) s += `<span class="badge badge-role badge-emote badge-sub-role" data-tip="Sub" aria-label="Sub">💜</span> `;
   if (u && u.is_vip) s += `<span class="badge badge-role badge-emote badge-vip-role" data-tip="VIP" aria-label="VIP">💎</span> `;
   return s;
@@ -5659,6 +5660,7 @@ function handleAction(action, el) {
     case "game-back": navigate("games"); break;
     case "open-news": openNewsPanel(); break;
     case "open-welcome": welcomeGuide(); break;
+    case "egg-clue": eggClue(); break;
     case "close-news": closeNewsPanel(); break;
     case "open-notifs": openNotifs(); break;
     case "close-notifs": closeNotifs(); break;
@@ -6709,6 +6711,52 @@ function nudgeOvertake(raw) {
 /* ============================================================
    INIT
 ============================================================ */
+/* 🥚 Easter egg „Tajný sedlák" – slovo se v JS NEVYSKYTUJE (jen hash pro detekci), hádanka jde
+   ze serveru, claim ověří slovo server-side → F12 inspekce JS nic neprozradí (slovo ani hádanku). */
+const _EGGH = 2664425052;
+function _eggHash(s) { let x = 5381; for (let i = 0; i < s.length; i++) x = ((x * 33) ^ s.charCodeAt(i)) >>> 0; return x; }
+let _eggBuf = "", _eggLive = false;
+function _eggInit() {
+  document.addEventListener("keydown", (e) => {
+    if (!e.key || e.key.length !== 1) return;
+    const c = e.key.toUpperCase();
+    if (c < "A" || c > "Z") return;
+    _eggBuf = (_eggBuf + c).slice(-24);
+    for (let L = 4; L <= _eggBuf.length; L++) {
+      const suf = _eggBuf.slice(-L);
+      if (_eggHash(suf) === _EGGH) { _eggBuf = ""; _eggShow(suf); break; }
+    }
+  });
+}
+async function eggClue() {
+  try {
+    const r = await api("/egg/clue");
+    openModal(`<h3 style="margin-top:0">🥚 Hádanka</h3>
+      <p style="font-size:15px;line-height:1.7"><b>${esc(r.riddle || "")}</b></p>
+      <p class="faint" style="font-size:13px;line-height:1.6">${esc(r.hint || "")}</p>`);
+  } catch (e) { toast("Tady nic není… nebo jo? 🥚", "info"); }
+}
+function _eggShow(word) {
+  if (_eggLive) return;
+  _eggLive = true;
+  const el = document.createElement("div");
+  el.className = "egg-pop"; el.textContent = "🥚"; el.title = "Klikni rychle!";
+  el.onclick = () => { el.remove(); _eggLive = false; _eggClaim(word); };
+  document.body.appendChild(el);
+  setTimeout(() => { if (el.parentNode) { el.remove(); _eggLive = false; } }, 8000);
+}
+async function _eggClaim(word) {
+  if (!state.user) { toast("Přihlas se, ať si vajíčko nárokuješ 🥚", "info"); return; }
+  try {
+    const r = await api("/egg/claim", { method: "POST", body: { word } });
+    if (r.already) { toast("Tajného sedláka už máš 🥚", "info"); return; }
+    if (r.found) {
+      if (typeof confettiBurst === "function") confettiBurst();
+      toast(`🥚 Našel jsi Tajného sedláka! +${fmtPts(r.reward)} sedláků + odznak 🥚`, "success");
+      await refreshMe();
+    }
+  } catch (e) {}
+}
 async function init() {
   try { const r = await api("/auth/me"); state.user = r.user; } catch (e) { state.user = null; }
   if (state.user && state.user.pending_rankup) setTimeout(() => celebrateRankup(state.user.pending_rankup), 600);
@@ -6730,6 +6778,7 @@ async function init() {
   }
   if (!window._dmBadgeTimer) window._dmBadgeTimer = setInterval(pollDmBadge, 20000);   // live ✉️ badge (šetrný interval)
   if (!window._notifBadgeTimer) window._notifBadgeTimer = setInterval(pollNotifBadge, 20000);   // live 🔔 badge
+  _eggInit();   // 🥚 easter egg – tajná sekvence
 }
 window.addEventListener("hashchange", render);
 

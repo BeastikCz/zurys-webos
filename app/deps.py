@@ -245,6 +245,7 @@ def to_public(row: sqlite3.Row, include_email: bool = False) -> dict:
         "is_sub": bool(row["is_sub"]) if "is_sub" in row.keys() else False,
         "is_vip": bool(row["is_vip"]) if "is_vip" in row.keys() else False,
         "is_og": bool(row["is_og"]) if "is_og" in row.keys() else False,
+        "egg_found": bool(row["egg_found_at"]) if "egg_found_at" in row.keys() else False,
     }
     _et = row["earned_total"] if "earned_total" in row.keys() else 0
     _li = level_info(_et)

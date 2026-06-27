@@ -771,6 +771,15 @@ footer.site-footer { border-top: 1px solid var(--border); padding: 22px 0; color
 .news-tag.nt-fix { background: rgba(255,194,61,.1); }
 
 /* plovoucí tlačítko „Novinky" (decentní, vpravo dole) + boční panel */
+/* 🥚 Easter egg vajíčko (objeví se na 5 s po tajné sekvenci) */
+.egg-pop { position: fixed; left: 18px; bottom: 92px; z-index: 95; width: 58px; height: 58px; display: flex;
+  align-items: center; justify-content: center; font-size: 36px; line-height: 1; cursor: pointer; user-select: none;
+  border-radius: 50%; background: rgba(255,211,77,.16); border: 2px solid #ffd34d; box-shadow: 0 0 22px rgba(255,211,77,.8);
+  animation: eggIn .35s ease, eggWob 1.1s ease-in-out infinite .35s; }
+.egg-pop:hover { transform: scale(1.12); }
+@keyframes eggIn { from { transform: scale(0) rotate(-40deg); opacity: 0; } to { transform: scale(1) rotate(0); opacity: 1; } }
+@keyframes eggWob { 0%,100% { transform: rotate(-9deg); } 50% { transform: rotate(9deg); } }
+
 .news-fab { position: fixed; right: 16px; bottom: 16px; z-index: 80; display: inline-flex; align-items: center; gap: 8px;
   height: 42px; padding: 0 15px; border-radius: 999px; background: var(--surface-2); border: 1px solid var(--border);
   color: var(--text-dim); font-weight: 800; font-size: 13px; box-shadow: var(--shadow); opacity: .9; transition: .15s; }
@@ -1637,6 +1646,10 @@ body::before { display: none !important; }
 .wg-d { font-size: 12.5px; color: var(--text-dim); margin-top: 2px; line-height: 1.45; }
 .wg-reopen { background: none; border: none; color: var(--accent); font: inherit; cursor: pointer; padding: 0; }
 .wg-reopen:hover { text-decoration: underline; }
+/* 🥚 jemná stopa k easter eggu – fixní roh, skoro neviditelná (0.06), prozradí se až při najetí myší */
+.egg-clue { position: fixed; top: 62px; right: 12px; z-index: 70; opacity: .06; cursor: pointer; font-size: 13px;
+  user-select: none; line-height: 1; transition: opacity .25s, transform .25s; }
+.egg-clue:hover, .egg-clue:focus { opacity: 1; transform: scale(1.4); outline: none; }
 @media (max-width: 560px) { .modal.modal-wg { max-width: 100%; } .wg-mascot { width: 56px; height: 56px; } .wg-title { font-size: 18px; } }
 
 /* Battle Pass – prémiová (sub-only) řada */
