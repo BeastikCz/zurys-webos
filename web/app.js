@@ -6727,6 +6727,13 @@ function _eggInit() {
       if (_eggHash(suf) === _EGGH) { _eggBuf = ""; _eggShow(suf); break; }
     }
   });
+  _eggPoll();
+  if (!window._eggPollTimer) window._eggPollTimer = setInterval(_eggPoll, 60000);   // stopa jen v okně
+}
+async function _eggPoll() {
+  const el = document.querySelector(".egg-clue");
+  if (!el) return;
+  try { const r = await api("/egg/active"); el.classList.toggle("egg-on", !!r.active); } catch (e) {}
 }
 async function eggClue() {
   try {

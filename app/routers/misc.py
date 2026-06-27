@@ -50,6 +50,12 @@ def egg_window_active(now=None) -> bool:
     return False
 
 
+@router.get("/egg/active")
+def egg_active():
+    """Je teď aktivní náhodné okno eggu? Frontend podle toho ukáže/skryje stopu 🥚 (jen v okně)."""
+    return {"active": egg_window_active()}
+
+
 @router.get("/egg/clue")
 def egg_clue(user: sqlite3.Row = Depends(require_user)):
     """Hádanka k easter eggu – SERVER-SIDE (ne v JS), aby F12 inspekce JS neprozradila řešení."""

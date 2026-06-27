@@ -1647,8 +1647,9 @@ body::before { display: none !important; }
 .wg-reopen { background: none; border: none; color: var(--accent); font: inherit; cursor: pointer; padding: 0; }
 .wg-reopen:hover { text-decoration: underline; }
 /* 🥚 jemná stopa k easter eggu – fixní roh, skoro neviditelná (0.06), prozradí se až při najetí myší */
-.egg-clue { position: fixed; top: 62px; right: 12px; z-index: 70; opacity: .06; cursor: pointer; font-size: 13px;
-  user-select: none; line-height: 1; transition: opacity .25s, transform .25s; }
+.egg-clue { position: fixed; top: 62px; right: 12px; z-index: 70; opacity: .5; cursor: pointer; font-size: 15px;
+  user-select: none; line-height: 1; display: none; transition: opacity .25s, transform .25s; }
+.egg-clue.egg-on { display: block; }   /* stopa se ukáže JEN když je aktivní okno (poll /egg/active) */
 .egg-clue:hover, .egg-clue:focus { opacity: 1; transform: scale(1.4); outline: none; }
 @media (max-width: 560px) { .modal.modal-wg { max-width: 100%; } .wg-mascot { width: 56px; height: 56px; } .wg-title { font-size: 18px; } }
 
