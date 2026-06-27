@@ -255,12 +255,13 @@ def record_block(conn, user, request: Request, score: int, reasons: list, contex
             now_iso(),
         ),
     )
+    ip = client_ip(request)
     alerts.send(
         "Anticheat zablokoval akci",
-        detail=f"{context} #{user['id']} {user['username']}\nskore={score}\n{', '.join(reasons[:5])}\nip={client_ip(request)}",
-        key=f"ac-block:{context}:{user['id']}",
-        cooldown=180,
-        ping=True,
+        detail=f"{context} #{user['id']} {user['username']}\nskore={score}\n{', '.join(reasons[:5])}\nip={ip}",
+        key=f"ac-block:{context}:{ip}",      # dedup per IP (ne user_id) → alt rotace = jeden alert/IP, ne záplava
+        cooldown=900,                         # 15 min (bylo 180s) – tlumí opakované pokusy z téže IP
+        ping=False,                           # bez @everyone (rutinní auto-blok, anticheat to řeší sám)
     )
 
 
