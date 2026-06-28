@@ -24,7 +24,7 @@ from ..models import (ProductIn, SkinLookupIn, SkinSearchIn, ImageUploadIn, User
                       BanIn, DropCreateIn, AutoDropIn, RuleIn, EconomyIn, IpBanIn, IpUnbanIn, BotToggleIn,
                       LiveModeIn, LegacyImportIn, PatchNoteIn, CommunityGoalIn, SubGoalIn, ModAppDecideIn, ManualOrderIn, ManualOrderBulkIn,
                       PointsLogPurgeIn, PartnerLinkIn, PartnerFlashConfigIn, GamesRakeIn, LiveHappyIn,
-                      SelfExcludeIn, TimeoutIn, ShopDiscountIn, BanClusterIn, MinesBanIn, BroadcastIn)
+                      SelfExcludeIn, TimeoutIn, ShopDiscountIn, BanClusterIn, MinesBanIn, BroadcastIn, EggArmIn)
 from ..services import product_public, shop_discount_pct
 from ..security import new_code, secure_choice
 
@@ -2505,6 +2505,46 @@ def live_happy_stop(request: Request,
     record_audit(conn, admin, request, "livehappy.stop", "", "")
     conn.commit()
     return {"ok": True, **res}
+
+
+@router.get("/egg")
+def get_egg(conn: sqlite3.Connection = Depends(db_dep)):
+    """Stav Tajného sedláka (admin): aktuální slovo, dokdy je vyhlášené, kolik lidí ho už našlo.
+    Slovo je vidět jen tady (admin-only) – do veřejných /nx/* endpointů NIKDY nejde."""
+    from .misc import egg_window_active, EGG_REWARD
+    found = conn.execute("SELECT COUNT(*) c FROM users WHERE egg_found_at IS NOT NULL").fetchone()["c"]
+    return {"word": get_setting(conn, "egg_word", ""),
+            "armed_until": get_setting(conn, "egg_armed_until", ""),
+            "active": egg_window_active(conn), "found_count": found, "reward": EGG_REWARD}
+
+
+@router.post("/egg/arm")
+def arm_egg(data: EggArmIn, request: Request,
+            conn: sqlite3.Connection = Depends(db_dep),
+            admin: sqlite3.Row = Depends(require_user)):
+    """Vyhlásí tajné slovo na N minut. Slovo se uloží do app_settings (nikdy nejde na frontend);
+    streamer ho řekne na streamu. Slovo se ZÁMĚRNĚ NEpíše do auditu (ať neunikne)."""
+    from datetime import datetime, timezone, timedelta
+    word = (data.word or "").strip()
+    if not word:
+        raise HTTPException(status_code=400, detail="Zadej slovo.")
+    until = (datetime.now(timezone.utc) + timedelta(minutes=data.minutes)).isoformat()
+    set_setting(conn, "egg_word", word)
+    set_setting(conn, "egg_armed_until", until)
+    record_audit(conn, admin, request, "egg.arm", "", f"{data.minutes} min")
+    conn.commit()
+    return {"ok": True, "armed_until": until, "minutes": data.minutes}
+
+
+@router.post("/egg/disarm")
+def disarm_egg(request: Request,
+               conn: sqlite3.Connection = Depends(db_dep),
+               admin: sqlite3.Row = Depends(require_user)):
+    """Okamžitě stáhne okno – egg přestane jít chytit (slovo zůstane uložené, jen okno skončí)."""
+    set_setting(conn, "egg_armed_until", "")
+    record_audit(conn, admin, request, "egg.disarm", "", "")
+    conn.commit()
+    return {"ok": True}
 
 
 @router.post("/drops/auto")

@@ -3,6 +3,7 @@ import hashlib
 import json
 import re
 import sqlite3
+import unicodedata
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -24,57 +25,61 @@ from .. import economy, live, partners, cosmetics, fairness
 
 router = APIRouter(tags=["misc"])
 
-# Easter egg „Tajný sedlák" – tajné slovo se ověřuje SERVER-SIDE (na frontu je jen obfuskovaný hash
-# pro detekci, ne plaintext). Změna slova = uprav EGG_WORD + char-codes _EGG na frontu (app.js).
-EGG_WORD = "ZLATEVEJCE"
+# Easter egg „Tajný sedlák" – tajné slovo nastavuje ADMIN per stream (app_settings 'egg_word') a
+# vyhlásí ho NA STREAMU (ústně/overlay). Slovo NIKDY nejde na frontend ani do žádného veřejného API
+# → F12 inspekce klienta nic neprozradí (odpověď zná jen ten, kdo kouká živě). Admin „vyhlásí" okno
+# na N minut ('egg_armed_until'); mimo okno se nedá chytit. Tím je celý F12-abuse k ničemu.
 EGG_REWARD = 1500            # jednorázová malá odměna (ne ekonomika), gate 1×/uživatel
-EGG_RIDDLE = "Co snese zlatá slepice?"
-EGG_HINT = "Odpověď napiš jedním slovem — bez mezer a háčků — kdekoliv na webu (jen piš písmena). Tím chytíš Tajného sedláka. 🌾"
-# Easter egg NENÍ nafurt – objeví se na náhodném místě jen v náhodném okně (server rozhoduje).
-# Vajíčko se ukáže ~1× za EGG_EVERY_HOURS hodin na EGG_WINDOW_MIN min, pak zmizí úplně. Tunable (vzácnost).
-EGG_EVERY_HOURS = 6         # vajíčko se objeví ~1× za tolik hodin (1 = každou hodinu, 3 = každé 3 h…)
-EGG_WINDOW_MIN = 5          # jak dlouho je vidět (min), pak zmizí
 
 
-def egg_window_active(now=None) -> bool:
-    """Je teď aktivní okno (vajíčko viditelné)? ~1 okno za EGG_EVERY_HOURS hodin × EGG_WINDOW_MIN min,
-    na náhodné minutě (md5 z hodiny → nepředvídatelné, deterministické: server i klient dají stejnou odpověď)."""
-    now = now or datetime.now(timezone.utc)
-    hkey = now.strftime("%Y%m%d%H")
-    # má tahle hodina vůbec okno? (1 z EGG_EVERY_HOURS hodin, deterministicky podle hashe)
-    if EGG_EVERY_HOURS > 1 and int.from_bytes(hashlib.md5(("egg-hr:" + hkey).encode()).digest()[:4], "big") % EGG_EVERY_HOURS != 0:
+def _egg_norm(s: str) -> str:
+    """Normalizace slova pro porovnání: bez diakritiky, bez mezer, velká písmena (shovívavé k zápisu)."""
+    s = unicodedata.normalize("NFKD", s or "").encode("ascii", "ignore").decode("ascii")
+    return "".join(s.split()).upper()
+
+
+def egg_window_active(conn) -> bool:
+    """Je teď aktivní vyhlášené okno? Jen když admin nastavil slovo A okno ještě běží (egg_armed_until
+    v budoucnu). Slovo i okno řídí admin (app_settings) – žádné předvídatelné časování, žádný leak."""
+    if not get_setting(conn, "egg_word", "").strip():
         return False
-    span = max(1, 60 - EGG_WINDOW_MIN)
-    start = int.from_bytes(hashlib.md5(("egg-win:" + hkey).encode()).digest()[:4], "big") % span
-    cur = now.minute + now.second / 60.0
-    return start <= cur < start + EGG_WINDOW_MIN
+    until = get_setting(conn, "egg_armed_until", "")
+    if not until:
+        return False
+    try:
+        return datetime.fromisoformat(until) > datetime.now(timezone.utc)
+    except ValueError:
+        return False
 
 
 @router.get("/nx/state")
-def nx_state():
-    """Server řídí, kdy je drobná vrstva aktivní (náhodné okno). Frontend jen poll → ukáže/skryje.
+def nx_state(conn: sqlite3.Connection = Depends(db_dep)):
+    """Server řídí, kdy je drobná vrstva aktivní (admin vyhlásil okno). Frontend jen poll → ukáže/skryje.
     Neutrální cesta (ne /egg/*), ať to v Network/konzoli nekřičí „easter egg"."""
-    return {"active": egg_window_active()}
+    return {"active": egg_window_active(conn)}
 
 
 @router.get("/nx/q")
 def nx_q(user: sqlite3.Row = Depends(require_user)):
-    """Text hádanky – SERVER-SIDE (ne v JS), aby F12 inspekce klienta neprozradila řešení."""
-    return {"title": "🥚 Hádanka", "riddle": EGG_RIDDLE, "hint": EGG_HINT}
+    """Jen GENERICKÁ výzva (NE odpověď) – tajné slovo padne na streamu, ne v API. F12 tu nic nenajde."""
+    return {"title": "🥚 Tajný sedlák",
+            "hint": "Napiš tajné slovo, které právě padlo na streamu! 🌾 (bez háčků a mezer)"}
 
 
 @router.post("/nx/s")
 def nx_s(data: EggClaimIn, user: sqlite3.Row = Depends(require_user),
          conn: sqlite3.Connection = Depends(db_dep)):
-    """Ověří slovo (server-side) + jen v aktivním NÁHODNÉM okně + atomický gate 1×/uživatel.
-    Hlášky vrací SERVER (ne klient) → v app.js nejsou žádné prozrazující stringy (úspěch se ukáže až po nálezu)."""
-    if (data.word or "").strip().upper() != EGG_WORD:
-        raise HTTPException(status_code=400, detail="?")            # vágně, žádná nápověda
+    """Ověří slovo (server-side, proti app_settings 'egg_word') jen v aktivním vyhlášeném okně +
+    atomický gate 1×/uživatel. Rate-limit = anti brute-force. Hlášky vrací SERVER (ne klient)."""
+    rate_limit(f"nx:{user['id']}", 5, 60)                          # max 5 pokusů/min → zabije brute-force
     row = conn.execute("SELECT egg_found_at FROM users WHERE id = ?", (user["id"],)).fetchone()
     if row and row["egg_found_at"]:
         return {"already": True, "msg": "Tohle už máš ✅"}          # už našel (vždy řekni, i mimo okno)
-    if not egg_window_active():
-        return {"locked": True, "msg": "🥚 Tajný sedlák teď spí… objevuje se náhodně. Sleduj stránku!"}
+    if not egg_window_active(conn):
+        return {"locked": True, "msg": "🥚 Tajný sedlák teď spí… vyhlásí ho streamer. Sleduj stream! 📺"}
+    secret = _egg_norm(get_setting(conn, "egg_word", ""))
+    if not secret or _egg_norm(data.word or "") != secret:
+        raise HTTPException(status_code=400, detail="?")            # vágně, žádná nápověda
     cur = conn.execute("UPDATE users SET egg_found_at = ? WHERE id = ? AND egg_found_at IS NULL",
                        (now_iso(), user["id"]))
     if cur.rowcount == 0:

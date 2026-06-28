@@ -5381,6 +5381,39 @@ async function stopHappyNow() {
     adminDrops();
   } catch (e) { toast(e.message, "error"); }
 }
+function eggAdminCardHTML(e) {
+  let active = false, left = 0;
+  try { active = e.armed_until && new Date(e.armed_until) > new Date(); } catch (x) {}
+  if (active) { try { left = Math.max(0, Math.round((new Date(e.armed_until) - new Date()) / 60000)); } catch (x) {} }
+  return `<div class="panel" style="margin-bottom:18px;border-color:${active ? "var(--accent-2)" : "var(--border)"}">
+    <div class="row-between"><div class="section-title" style="margin:0">🥚 Tajný sedlák (easter egg)</div>
+      <span class="badge ${active ? "badge-sub" : ""}">${active ? `⚡ VYHLÁŠENO (zbývá ${left} min)` : "⚫ spí"}</span></div>
+    <p class="form-hint" style="margin:8px 0 12px">Nastav <b>tajné slovo</b> a vyhlas ho na <b>X minut</b> — pak ho <b>řekni na streamu</b>. Slovo NEJDE nikam na web (ani do F12), takže ho najde jen kdo kouká živě. Diváci kliknou na 🥚 co se objeví na webu a slovo napíšou. Odměna <b>+${e.reward} 🌾</b>, 1× na osobu. Zatím našlo celkem: <b>${e.found_count}</b> 🥚</p>
+    <div class="field-row">
+      <div class="field"><label>Tajné slovo</label><input class="input" id="egg_word" placeholder="napiš slovo…" value="${esc(e.word || "")}" style="text-transform:uppercase"></div>
+      <div class="field"><label>Na kolik minut</label><input class="input" id="egg_min" type="number" min="1" max="240" value="10"></div>
+    </div>
+    <div class="toolbar" style="margin-top:12px;flex-wrap:wrap">
+      <button class="btn btn-primary" data-action="egg-arm">📣 Vyhlásit TEĎ</button>
+      ${active ? `<button class="btn btn-danger" data-action="egg-disarm">⏹️ Stáhnout</button>` : ""}
+    </div>
+  </div>`;
+}
+async function armEgg() {
+  const word = ($("#egg_word").value || "").trim();
+  const minutes = parseInt($("#egg_min").value || "10", 10);
+  if (!word) { toast("Napiš slovo 🥚", "info"); return; }
+  if (!confirm(`Vyhlásit „${word}" na ${minutes} min? Nezapomeň ho říct na streamu! 📣`)) return;
+  try {
+    await api("/admin/egg/arm", { method: "POST", body: { word, minutes } });
+    toast(`🥚 Vyhlášeno na ${minutes} min! Řekni slovo na streamu.`, "success");
+    adminDrops();
+  } catch (e) { toast(e.message, "error"); }
+}
+async function disarmEgg() {
+  try { await api("/admin/egg/disarm", { method: "POST" }); toast("Egg stažen ⏹️", "info"); adminDrops(); }
+  catch (e) { toast(e.message, "error"); }
+}
 function subGoalCardHTML(g) {
   const on = !!g.enabled;
   const step = g.step != null ? g.step : g.target;
@@ -5474,8 +5507,8 @@ async function saveAutoDrop(enable) {
 async function adminDrops() {
   const box = $("#adminContent");
   try {
-    const [list, auto, happy, sgoal] = await Promise.all([api("/admin/drops"), api("/admin/drops/auto"), api("/admin/live-happy"), api("/sub-goal")]);
-    box.innerHTML = happyHourCardHTML(happy) + subGoalCardHTML(sgoal) + autoDropCardHTML(auto) + `
+    const [list, auto, happy, sgoal, egg] = await Promise.all([api("/admin/drops"), api("/admin/drops/auto"), api("/admin/live-happy"), api("/sub-goal"), api("/admin/egg")]);
+    box.innerHTML = happyHourCardHTML(happy) + eggAdminCardHTML(egg) + subGoalCardHTML(sgoal) + autoDropCardHTML(auto) + `
       <div class="panel" style="margin-bottom:18px">
         <div class="section-title">🎁 Spustit drop (závod o kód)</div>
         <form class="form" data-submit="create-drop">
@@ -5723,6 +5756,8 @@ function handleAction(action, el) {
     case "happy-start": startHappyNow(); break;
     case "happy-stop": stopHappyNow(); break;
     case "happy-toggle": saveHappyHour(el.dataset.on === "1" ? 0 : 1); break;
+    case "egg-arm": armEgg(); break;
+    case "egg-disarm": disarmEgg(); break;
     case "subgoal-save": saveSubGoal(); break;
     case "subgoal-toggle": saveSubGoal(el.dataset.on === "1" ? 0 : 1); break;
     case "news-delete": deleteNote(id); break;
@@ -6708,20 +6743,11 @@ function nudgeOvertake(raw) {
 /* ============================================================
    INIT
 ============================================================ */
-/* drobná interaktivní vrstva – stav řídí server (poll /nx/state), prvek se injektuje jen v aktivním okně. */
-const _NXH = 2664425052;
-function _nxHash(s) { let x = 5381; for (let i = 0; i < s.length; i++) x = ((x * 33) ^ s.charCodeAt(i)) >>> 0; return x; }
-let _nxBuf = "", _nxOn = false, _nxEl = null;
+/* drobná interaktivní vrstva – stav řídí server (poll /nx/state), prvek se injektuje jen v aktivním okně.
+   Tajné slovo se vyhlašuje na streamu a ověřuje SERVER-SIDE – na frontendu (ani v F12) NENÍ. Klik na 🥚
+   otevře input, do kterého divák napíše slovo ze streamu → POST /nx/s (server validuje). */
+let _nxOn = false, _nxEl = null;
 function _nxInit() {
-  document.addEventListener("keydown", (e) => {
-    if (!e.key || e.key.length !== 1) return;
-    const c = e.key.toUpperCase();
-    if (c < "A" || c > "Z") return;
-    _nxBuf = (_nxBuf + c).slice(-24);
-    for (let L = 4; L <= _nxBuf.length; L++) {
-      if (_nxHash(_nxBuf.slice(-L)) === _NXH) { const w = _nxBuf.slice(-L); _nxBuf = ""; _nxClaim(w); break; }
-    }
-  });
   _nxPoll();
   if (!window._nxTimer) window._nxTimer = setInterval(_nxPoll, 45000);
 }
@@ -6744,26 +6770,38 @@ async function _nxPoll() {
   }
 }
 async function _nxQ() {
-  try {
-    const r = await api("/nx/q");
-    openModal(`<h3 style="margin-top:0">${esc(r.title || "")}</h3>
-      <p style="font-size:15px;line-height:1.7"><b>${esc(r.riddle || "")}</b></p>
-      <p class="faint" style="font-size:13px;line-height:1.6">${esc(r.hint || "")}</p>`);
-  } catch (e) {}
+  if (!state.user) { toast("Přihlas se 😉", "info"); return; }
+  let hint = "Napiš tajné slovo, které právě padlo na streamu! 🌾 (bez háčků a mezer)";
+  try { const r = await api("/nx/q"); if (r && r.hint) hint = r.hint; } catch (e) {}
+  openModal(`<h3 style="margin-top:0">🥚 Tajný sedlák</h3>
+    <p class="faint" style="font-size:13px;line-height:1.6">${esc(hint)}</p>
+    <input id="nxWord" class="input" type="text" autocomplete="off" placeholder="tajné slovo…" style="margin-top:6px">
+    <button id="nxGo" class="btn btn-primary" style="margin-top:10px;width:100%">Chytit 🥚</button>`);
+  setTimeout(() => {                                                   // handlery JS-em (ne inline → CSP OK)
+    const inp = document.getElementById("nxWord"), go = document.getElementById("nxGo");
+    if (inp) { inp.focus(); inp.onkeydown = (ev) => { if (ev.key === "Enter") _nxSubmit(); }; }
+    if (go) go.onclick = _nxSubmit;
+  }, 60);
+}
+function _nxSubmit() {
+  const inp = document.getElementById("nxWord");
+  const w = inp ? inp.value.trim() : "";
+  if (w) _nxClaim(w);
 }
 async function _nxClaim(word) {
   if (!state.user) { toast("Přihlas se 😉", "info"); return; }
   try {
     const r = await api("/nx/s", { method: "POST", body: { word } });
-    if (r.already) { toast(r.msg || "✅", "info"); return; }
+    if (r.already) { closeModal(); toast(r.msg || "✅", "info"); return; }
     if (r.locked) { toast(r.msg || "…", "info"); return; }
     if (r.found) {
+      closeModal();
       if (typeof confettiBurst === "function") confettiBurst();
       toast(r.msg || "✅", "success");
       _nxKill();
       await refreshMe();
     }
-  } catch (e) {}
+  } catch (e) { toast("❌ To nebylo ono. Zkus to znovu. 🥚", "info"); }
 }
 async function init() {
   try { const r = await api("/auth/me"); state.user = r.user; } catch (e) { state.user = null; }

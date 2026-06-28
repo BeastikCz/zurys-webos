@@ -230,6 +230,12 @@ class EggClaimIn(BaseModel):
     word: str = Field(..., min_length=1, max_length=40)
 
 
+class EggArmIn(BaseModel):
+    """Admin: vyhlásí tajné slovo eggu na N minut (slovo se NIKDY neposílá na frontend)."""
+    word: str = Field(..., min_length=1, max_length=40)
+    minutes: int = Field(10, ge=1, le=240)
+
+
 class LoginCalClaimIn(BaseModel):
     """Vyzvednutí milníkového bonusu z login kalendáře (počet aktivních dní)."""
     milestone: int = Field(..., ge=1, le=31)
