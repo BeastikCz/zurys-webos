@@ -1458,38 +1458,42 @@ def set_sub_goal(data: SubGoalIn, request: Request,
 
 
 # ---------------- Nábor moderátorů (přihlášky) ----------------
-def _modapp_stats(conn, uid: int) -> dict:
-    """Reálné staty uchazeče z účtu – aby admin poznal aktivního diváka od náhody."""
-    u = conn.execute(
-        "SELECT points, created_at, is_sub, banned, role, kick_username FROM users WHERE id = ?",
-        (uid,)).fetchone()
-    if not u:
-        return {}
-    chat = conn.execute("SELECT COUNT(*) c FROM points_log WHERE user_id = ? AND reason = 'Aktivita v chatu'",
-                        (uid,)).fetchone()["c"]
-    age_days = None
-    try:
-        t = datetime.fromisoformat(u["created_at"])
-        if t.tzinfo is None:
-            t = t.replace(tzinfo=timezone.utc)
-        age_days = int((datetime.now(timezone.utc) - t).total_seconds() // 86400)
-    except Exception:
-        pass
-    return {"points": u["points"], "age_days": age_days, "is_sub": bool(u["is_sub"]),
-            "banned": bool(u["banned"]), "role": u["role"], "kick": u["kick_username"], "chat_msgs": chat}
-
-
 @router.get("/mod-applications")
 def mod_applications_list(conn: sqlite3.Connection = Depends(db_dep)):
-    """Přihlášky na moderátory: čekající + posledních 20 vyřízených + staty uchazečů."""
+    """Přihlášky na moderátory: čekající + posledních 20 vyřízených + staty uchazečů.
+    Staty se počítají BATCH (2 dotazy místo 2×N), ať admin list nedělá N+1 na points_log."""
+    base = ("SELECT a.*, u.username FROM mod_applications a JOIN users u ON u.id = a.user_id ")
+    pending = conn.execute(base + "WHERE a.status = 'pending' ORDER BY a.id ASC").fetchall()
+    recent = conn.execute(base + "WHERE a.status != 'pending' ORDER BY a.id DESC LIMIT 20").fetchall()
+    uids = list({r["user_id"] for r in pending} | {r["user_id"] for r in recent})
+    stats = {}
+    if uids:
+        ph = ",".join("?" * len(uids))
+        for u in conn.execute(
+            f"SELECT id, points, created_at, is_sub, banned, role, kick_username FROM users WHERE id IN ({ph})",
+            uids):
+            age_days = None
+            try:
+                t = datetime.fromisoformat(u["created_at"])
+                if t.tzinfo is None:
+                    t = t.replace(tzinfo=timezone.utc)
+                age_days = int((datetime.now(timezone.utc) - t).total_seconds() // 86400)
+            except Exception:
+                pass
+            stats[u["id"]] = {"points": u["points"], "age_days": age_days, "is_sub": bool(u["is_sub"]),
+                              "banned": bool(u["banned"]), "role": u["role"], "kick": u["kick_username"],
+                              "chat_msgs": 0}
+        for c in conn.execute(
+            f"SELECT user_id, COUNT(*) c FROM points_log WHERE user_id IN ({ph}) "
+            "AND reason = 'Aktivita v chatu' GROUP BY user_id", uids):
+            if c["user_id"] in stats:
+                stats[c["user_id"]]["chat_msgs"] = c["c"]
+
     def _row(r):
         return {"id": r["id"], "user_id": r["user_id"], "username": r["username"],
                 "answers": json.loads(r["answers"] or "{}"), "status": r["status"],
                 "created_at": r["created_at"], "decided_at": r["decided_at"], "decided_by": r["decided_by"],
-                "stats": _modapp_stats(conn, r["user_id"])}
-    base = ("SELECT a.*, u.username FROM mod_applications a JOIN users u ON u.id = a.user_id ")
-    pending = conn.execute(base + "WHERE a.status = 'pending' ORDER BY a.id ASC").fetchall()
-    recent = conn.execute(base + "WHERE a.status != 'pending' ORDER BY a.id DESC LIMIT 20").fetchall()
+                "stats": stats.get(r["user_id"], {})}
     return {"pending": [_row(r) for r in pending], "recent": [_row(r) for r in recent],
             "pending_count": len(pending), "open": get_setting(conn, "modapp_open", "1") == "1"}
 

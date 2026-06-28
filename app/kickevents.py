@@ -16,8 +16,8 @@ from datetime import datetime, timedelta, timezone
 import rsa
 
 from .db import now_iso
-from .deps import add_points
-from . import economy, kickcommands, services, subgoal
+from .deps import add_points, notify
+from . import economy, kickcommands, services, subgoal, webpush
 
 _KEY_URL = "https://api.kick.com/public/v1/public-key"
 _pub = None
@@ -124,8 +124,14 @@ def _norm_iso(ts):
 
 
 def expire_subs(conn) -> int:
-    """Sundá SUB flag (a roli 'sub') těm, kterým sub vypršel. Legacy/migrace (bez expirace) zůstává."""
+    """Sundá SUB flag (a roli 'sub') těm, kterým sub vypršel. Legacy/migrace (bez expirace) zůstává.
+    Navíc pošle comeback signál (in-app notif + best-effort push), ať se lapsed sub vrátí (re-engagement).
+    Běží v daemonu (autodrop) → síťový push tu neblokuje request handler."""
     now = now_iso()
+    # kdo právě teď vyprší (před UPDATE) → comeback nudge; každý dostane notif jen 1× (příští cyklus už is_sub=0)
+    lapsed = [r["id"] for r in conn.execute(
+        "SELECT id FROM users WHERE is_sub = 1 AND sub_expires_at IS NOT NULL AND sub_expires_at < ?",
+        (now,)).fetchall()]
     cur = conn.execute(
         "UPDATE users SET is_sub = 0 WHERE is_sub = 1 AND sub_expires_at IS NOT NULL AND sub_expires_at < ?",
         (now,),
@@ -136,7 +142,12 @@ def expire_subs(conn) -> int:
         "AND sub_expires_at IS NOT NULL AND sub_expires_at < ?",
         (now,),
     )
+    for uid in lapsed:
+        notify(conn, uid, "💜", "Sub vypršel 💜",
+               "Obnov sub na Kicku a vrať se farmit sedláky! 🌾", "/")
     conn.commit()
+    for uid in lapsed:                      # best-effort web push (po commitu; push_to_user nikdy nehodí)
+        webpush.push_to_user(conn, uid, "Sub vypršel 💜", "Statek tě čeká – obnov sub a vrať se! 🌾", "/")
     return cur.rowcount
 
 
