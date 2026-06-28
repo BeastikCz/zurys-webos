@@ -32,7 +32,7 @@ EGG_RIDDLE = "Co snese zlatá slepice?"
 EGG_HINT = "Odpověď napiš jedním slovem — bez mezer a háčků — kdekoliv na webu (jen piš písmena). Tím chytíš Tajného sedláka. 🌾"
 # Easter egg NENÍ nafurt – objeví se na náhodném místě jen v náhodném okně (server rozhoduje).
 # Vajíčko se ukáže ~1× za EGG_EVERY_HOURS hodin na EGG_WINDOW_MIN min, pak zmizí úplně. Tunable (vzácnost).
-EGG_EVERY_HOURS = 2         # vajíčko se objeví ~1× za tolik hodin (1 = každou hodinu, 3 = každé 3 h…)
+EGG_EVERY_HOURS = 1         # vajíčko se objeví ~1× za tolik hodin (1 = každou hodinu, 3 = každé 3 h…)
 EGG_WINDOW_MIN = 5          # jak dlouho je vidět (min), pak zmizí
 
 
