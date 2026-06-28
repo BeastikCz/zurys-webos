@@ -1271,7 +1271,7 @@ async function loadWeeklyEarners() {
     const rows = (d && d.rows) || [];
     if (!rows.length) { box.innerHTML = ""; return; }
     const myName = state.user && state.user.username;
-    box.innerHTML = `<div class="section-title" style="margin-top:28px">📅 Tento týden — nejvíc nasbíráno <span class="faint" style="font-weight:400;font-size:13px">— kdo tento týden vydělal nejvíc sedláků (zůstatky se NEresetují) 🌾</span></div>
+    box.innerHTML = `<div class="section-title" style="margin-top:28px">📅 Tento týden — nejvíc nasbíráno <span class="faint" style="font-weight:400;font-size:13px">— kdo tento týden vydělal nejvíc sedláků farmením a podporou (sázky/hry se nepočítají · zůstatky se NEresetují) 🌾</span></div>
       <div class="lb-list">${rows.slice(0, 15).map((r, i) => {
         const rk = i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : (i + 1);
         const mine = !!myName && r.username === myName;
@@ -1287,7 +1287,7 @@ async function loadSeasonEarners() {
     const rows = (d && d.rows) || [];
     if (!rows.length) { box.innerHTML = ""; return; }
     const myName = state.user && state.user.username;
-    box.innerHTML = `<div class="section-title" style="margin-top:28px">🏆 Sezóna ${esc(d.season || "")} — TOP sběrači <span class="faint" style="font-weight:400;font-size:13px">— kdo tento měsíc vydělal nejvíc sedláků · reset 1. dne 🌾</span></div>
+    box.innerHTML = `<div class="section-title" style="margin-top:28px">🏆 Sezóna ${esc(d.season || "")} — TOP sběrači <span class="faint" style="font-weight:400;font-size:13px">— kdo tento měsíc vydělal nejvíc sedláků farmením a podporou (sázky/hry se nepočítají · reset 1. dne) 🌾</span></div>
       <div class="lb-list">${rows.slice(0, 15).map((r, i) => {
         const rk = i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : (i + 1);
         const mine = !!myName && r.username === myName;

@@ -12,7 +12,7 @@ from ..anticheat import (check_or_block, is_new_account, new_account_redeem_pts,
 from ..config import ORDER_PENDING, UNLIMITED_STOCK, ROLE_ADMIN
 from ..db import now_iso, get_setting
 from ..deps import (db_dep, require_user, add_points, try_debit, record_audit, client_ip,
-                    user_rank, tier_for_rank, self_excluded_until, level_info)
+                    user_rank, tier_for_rank, self_excluded_until, level_info, classify_xp)
 from ..models import (RedeemIn, TradeUrlIn, GiftIn, QuestClaimIn, CosmeticIn, FairSeedIn, SelfExcludeIn,
                       ProfileBioIn, WagerLimitIn, ModApplyIn, BattlePassClaimIn, LoginCalClaimIn,
                       GardenPlantIn, GardenPlantAllIn, GardenHarvestIn, DecorBuyIn, LevelPassClaimIn,
@@ -178,10 +178,55 @@ _weekly_cache = {"at": 0.0, "data": None}
 _WEEKLY_TTL = 60   # s – board se nemusí počítat při každém pollu (jen scan na čtení)
 
 
+def _earned_board(conn: sqlite3.Connection, start: str, limit: int = 50):
+    """Žebříček „nejvíc nasbíráno" od `start` (ISO). Sčítá JEN legitimně vydělané sedláky –
+    vyloučí gambling/admin granty/transfery (reason klasifikovaný jako 'zero' v classify_xp,
+    STEJNÁ hranice jako XP/levely → board je konzistentní s tím, co dává level). Tím board
+    neodměňuje protáčení bodů přes Mines/duely/predikce (hráč v čisté ztrátě byl jinak #1).
+    Read-only z points_log – NEsahá na users.points, NIC neresetuje.
+
+    Implementace: GROUP BY user_id, reason (ne jen user_id), ať lze každý reason klasifikovat
+    přes classify_xp v Pythonu (= 1 zdroj pravdy, žádný duplikát keywordů v SQL). zero_cache
+    klasifikuje každý distinct reason jen 1×."""
+    agg: dict = {}
+    zero_cache: dict = {}
+    for r in conn.execute(
+        "SELECT l.user_id, l.reason, SUM(l.change) AS gained, "
+        "  u.username, u.avatar_url, u.role, u.is_sub, u.is_vip, u.is_og, "
+        "  u.cos_name, u.cos_frame, u.cos_banner "
+        "FROM points_log l JOIN users u ON u.id = l.user_id "
+        "WHERE l.change > 0 AND l.created_at >= ? "
+        "GROUP BY l.user_id, l.reason",
+        (start,),
+    ):
+        reason = r["reason"]
+        z = zero_cache.get(reason)
+        if z is None:
+            z = classify_xp(reason)[0] == "zero"
+            zero_cache[reason] = z
+        if z:
+            continue                                  # gambling/admin/transfer → nepočítá se
+        e = agg.get(r["user_id"])
+        if e is None:
+            agg[r["user_id"]] = {
+                "username": r["username"], "avatar_url": r["avatar_url"], "role": r["role"],
+                "is_sub": bool(r["is_sub"]), "is_vip": bool(r["is_vip"]), "is_og": bool(r["is_og"]),
+                "cos": cosmetics.resolve(r), "gained": r["gained"],
+            }
+        else:
+            e["gained"] += r["gained"]
+    ranked = sorted(agg.values(), key=lambda d: (-d["gained"], d["username"]))[:limit]
+    return [{
+        "rank": i + 1, "username": d["username"], "avatar_url": d["avatar_url"],
+        "gained": d["gained"], "role": d["role"],
+        "is_sub": d["is_sub"], "is_vip": d["is_vip"], "is_og": d["is_og"], "cos": d["cos"],
+    } for i, d in enumerate(ranked)]
+
+
 @router.get("/leaderboard/weekly")
 def leaderboard_weekly(conn: sqlite3.Connection = Depends(db_dep)):
-    """Žebříček: kdo NASBÍRAL nejvíc sedláků tento týden. ČISTĚ READ-ONLY z points_log –
-    NEsahá na users.points, NIC neresetuje. „Týden" = jen filtr created_at >= pondělí 00:00.
+    """Žebříček: kdo NASBÍRAL nejvíc sedláků tento týden (jen legit – bez gamblingu, viz
+    _earned_board). ČISTĚ READ-ONLY z points_log. „Týden" = filtr created_at >= pondělí 00:00.
     Cache 60 s (čtení nelockuje zápis, ale ať se velký points_log neskenuje pořád)."""
     import time
     from datetime import datetime, timezone, timedelta
@@ -191,23 +236,7 @@ def leaderboard_weekly(conn: sqlite3.Connection = Depends(db_dep)):
     now = datetime.now(timezone.utc)
     monday = (now - timedelta(days=now.weekday())).replace(hour=0, minute=0, second=0, microsecond=0)
     start = monday.isoformat()
-    rows = conn.execute(
-        "SELECT u.id, u.username, u.avatar_url, u.role, u.is_sub, u.is_vip, u.is_og, "
-        "  u.cos_name, u.cos_frame, u.cos_banner, SUM(l.change) AS gained "
-        "FROM points_log l JOIN users u ON u.id = l.user_id "
-        "WHERE l.change > 0 AND l.created_at >= ? "
-        "GROUP BY l.user_id ORDER BY gained DESC, u.username ASC LIMIT 50",
-        (start,),
-    ).fetchall()
-    data = {
-        "week_start": start,
-        "rows": [{
-            "rank": i + 1, "username": r["username"], "avatar_url": r["avatar_url"],
-            "gained": r["gained"], "role": r["role"],
-            "is_sub": bool(r["is_sub"]), "is_vip": bool(r["is_vip"]), "is_og": bool(r["is_og"]),
-            "cos": cosmetics.resolve(r),
-        } for i, r in enumerate(rows)],
-    }
+    data = {"week_start": start, "rows": _earned_board(conn, start)}
     _weekly_cache.update(at=nowm, data=data)
     return data
 
@@ -217,8 +246,9 @@ _season_cache = {"at": 0.0, "data": None}
 
 @router.get("/leaderboard/season")
 def leaderboard_season(conn: sqlite3.Connection = Depends(db_dep)):
-    """Sezónní žebříček: kdo NASBÍRAL nejvíc sedláků tento MĚSÍC (reset 1. dne v měsíci).
-    Read-only z points_log – nic neresetuje, zůstatky zůstávají. Cache 60 s."""
+    """Sezónní žebříček: kdo NASBÍRAL nejvíc sedláků tento MĚSÍC (jen legit – bez gamblingu,
+    viz _earned_board). Reset 1. dne v měsíci. Read-only z points_log – nic neresetuje,
+    zůstatky zůstávají. Cache 60 s."""
     import time
     from datetime import datetime, timezone
     nowm = time.monotonic()
@@ -226,23 +256,7 @@ def leaderboard_season(conn: sqlite3.Connection = Depends(db_dep)):
         return _season_cache["data"]
     now = datetime.now(timezone.utc)
     start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0).isoformat()
-    rows = conn.execute(
-        "SELECT u.id, u.username, u.avatar_url, u.role, u.is_sub, u.is_vip, u.is_og, "
-        "  u.cos_name, u.cos_frame, u.cos_banner, SUM(l.change) AS gained "
-        "FROM points_log l JOIN users u ON u.id = l.user_id "
-        "WHERE l.change > 0 AND l.created_at >= ? "
-        "GROUP BY l.user_id ORDER BY gained DESC, u.username ASC LIMIT 50",
-        (start,),
-    ).fetchall()
-    data = {
-        "season": now.strftime("%Y-%m"),
-        "rows": [{
-            "rank": i + 1, "username": r["username"], "avatar_url": r["avatar_url"],
-            "gained": r["gained"], "role": r["role"],
-            "is_sub": bool(r["is_sub"]), "is_vip": bool(r["is_vip"]), "is_og": bool(r["is_og"]),
-            "cos": cosmetics.resolve(r),
-        } for i, r in enumerate(rows)],
-    }
+    data = {"season": now.strftime("%Y-%m"), "rows": _earned_board(conn, start)}
     _season_cache.update(at=nowm, data=data)
     return data
 
