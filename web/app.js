@@ -1421,12 +1421,14 @@ async function pageUserProfile(nick) {
     const league = userTier(p.rank);
     const wr = p.games_played ? Math.round(p.win_rate * 100) : 0;
     const since = p.created_at ? new Date(p.created_at).toLocaleDateString("cs-CZ") : "—";
+    // ID vidí jen admin (u kohokoliv) nebo člověk u svého vlastního profilu
+    const showId = state.user && (state.user.role === "admin" || p.id === state.user.id);
     $("#up").innerHTML = `
       <div class="profile-hero">
         ${avatarHTML(p.username, p.avatar_url, "prof-av", cosF(p))}
         <div class="ph-info">
           <h1><span class="${cosN(p)}">${esc(p.username)}</span> ${roleBadge(p.role)} ${prestigeBadge(p.prestige)}</h1>
-          <div class="faint">${league ? "★ " + esc(league) + " · " : ""}#${p.rank} v leaderboardu · člen od ${since}</div>
+          <div class="faint">${league ? "★ " + esc(league) + " · " : ""}#${p.rank} v leaderboardu · člen od ${since}${showId ? ` · <span title="ID účtu">🆔 ID ${p.id}</span>` : ""}</div>
           ${profLevelHTML(p)}
           <div class="ph-badges">${subVipBadges(p) || ""}</div>
         </div>
@@ -2003,7 +2005,7 @@ function pageProfile() {
     <div class="panel">
       <div class="profile-head">
         ${avatarHTML(u.username, u.avatar_url, "", cosF(u))}
-        <div><div style="font-size:22px;font-weight:800"><span class="${cosN(u)}">${esc(u.username)}</span> ${roleBadge(u.role)} ${subVipBadges(u)} ${prestigeBadge(u.prestige)}</div><div class="muted">${u.kick_username ? "🟢 " + esc(u.kick_username) : esc(u.email || "")}</div><div class="muted" style="font-size:12.5px;margin-top:3px">🎂 V komunitě <b style="color:var(--text)">${memberSince(u.created_at)}</b>${loyaltyBadge(u.created_at)}</div>${profLevelHTML(u)}</div>
+        <div><div style="font-size:22px;font-weight:800"><span class="${cosN(u)}">${esc(u.username)}</span> ${roleBadge(u.role)} ${subVipBadges(u)} ${prestigeBadge(u.prestige)}</div><div class="muted">${u.kick_username ? "🟢 " + esc(u.kick_username) : esc(u.email || "")} · <span title="Tvoje ID účtu">🆔 ID ${u.id}</span></div><div class="muted" style="font-size:12.5px;margin-top:3px">🎂 V komunitě <b style="color:var(--text)">${memberSince(u.created_at)}</b>${loyaltyBadge(u.created_at)}</div>${profLevelHTML(u)}</div>
         <div class="profile-points"><div class="v">${fmtPts(u.points)}</div><div class="faint">aktuální zůstatek</div></div>
       </div>
       <div class="prof-look-strip">
@@ -3840,7 +3842,7 @@ async function adminUsers() {
       </form>
       <div class="table-wrap"><table class="tbl"><thead><tr><th>Uživatel</th><th>${isAdmin ? "Kick / IP" : "Kick"}</th><th>Role</th><th title="Úroveň z celkem nafarmeného (earned_total). Gambling se nepočítá, placené/gift suby jen z 50 %.">Úroveň</th><th>Body</th><th>Upravit body</th><th>Stav</th></tr></thead><tbody>
       ${list.map((u) => `<tr>
-        <td><div style="display:flex;align-items:center;gap:9px">${avatarHTML(u.username, u.avatar_url)}<b>${esc(u.username)}</b></div>${userAdminTools(u, isAdmin)}</td>
+        <td><div style="display:flex;align-items:center;gap:9px">${avatarHTML(u.username, u.avatar_url)}<b>${esc(u.username)}</b></div>${isAdmin ? `<div class="faint" style="font-size:11px;margin-top:2px" title="ID účtu">🆔 ID ${u.id}</div>` : ""}${userAdminTools(u, isAdmin)}</td>
         <td class="faint" style="font-size:12.5px">${u.kick_username ? "🟢 " + esc(u.kick_username) : (isAdmin ? esc(u.email || "—") : "—")}${isAdmin ? "<br>" + (u.last_ip ? `<span class="code-pill">${esc(u.last_ip)}</span>${u.ip_count > 1 ? ` <span class="faint">(${u.ip_count} IP)</span>` : ""}` : "<span class='faint'>bez IP</span>") : ""}</td>
         <td>${isAdmin ? `<select class="select" style="width:128px;padding:6px 8px" data-action="user-role" data-id="${u.id}">
           ${["user", "sub", "vip", "mod", "broadcaster", "admin"].map((r) => `<option value="${r}" ${u.role === r ? "selected" : ""}>${r}</option>`).join("")}
