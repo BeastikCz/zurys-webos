@@ -106,7 +106,9 @@ def note_game_net(conn: sqlite3.Connection, user_id: int, delta: int) -> None:
 
 
 def games_capped(conn: sqlite3.Connection, user) -> bool:
-    """True když hráč dnes dosáhl denního stropu ČISTÉHO zisku z her (admin nikdy)."""
+    """True když hráč dnes dosáhl denního stropu ČISTÉHO zisku z her. Výjimka: admin NIKDY +
+    ručně whitelistnutá uid (eco_games_exempt_uids = JSON list v app_settings) – cílená výjimka
+    pro konkrétní účet (např. top supporter), stejný pattern jako eco_wager_exempt_uids."""
     try:
         if user["role"] == ROLE_ADMIN:
             return False
@@ -115,6 +117,12 @@ def games_capped(conn: sqlite3.Connection, user) -> bool:
     cap = get_eco(conn).get("eco_games_cap", 0)
     if cap <= 0:
         return False
+    try:
+        import json
+        if user["id"] in set(json.loads(get_setting(conn, "eco_games_exempt_uids", "") or "[]")):
+            return False
+    except (ValueError, TypeError):
+        pass
     return _state(conn, user["id"])["games_net_today"] >= cap
 
 
