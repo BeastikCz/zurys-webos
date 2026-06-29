@@ -845,7 +845,10 @@ function predCardHTML(p) {
     <div class="faint" style="font-size:12.5px;margin-bottom:12px">${esc(p.game)} · celkový bank <b class="pred-bank">${fmtPts(p.total_pool)}</b>${predBy(p)}</div>
     ${!locked && p.lock_at ? `<div class="pred-countdown" data-lockat="${esc(p.lock_at)}" style="font-size:14px;font-weight:800;color:var(--accent-2);margin:-4px 0 12px">⏳ …</div>` : ""}
     ${state.user && !locked
-      ? `<div class="field" style="margin-bottom:12px"><label>Sázka (sedláci) — pak klikni na možnost</label><input class="input" id="predAmt-${p.id}" type="number" min="1" placeholder="např. 100" style="max-width:220px"></div>`
+      ? `<div class="field" style="margin-bottom:12px"><label>Sázka (sedláci) — pak klikni na možnost</label>
+          <input class="input" id="predAmt-${p.id}" type="number" min="1" placeholder="např. 100" style="max-width:220px">
+          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">${[100, 200, 500, 1000].map((a) => `<button class="btn btn-ghost btn-sm" data-action="pred-amt" data-pid="${p.id}" data-amt="${a}">${a}</button>`).join("")}</div>
+        </div>`
       : (!state.user
         ? `<div class="faint" style="margin-bottom:10px">Pro sázení se <a href="#" data-action="connect">připoj přes Kick</a>.</div>`
         : `<div class="faint" style="margin-bottom:10px">🔒 Sázky uzavřené — čeká se na výsledek.</div>`)}
@@ -5740,6 +5743,7 @@ function handleAction(action, el) {
     case "subs-refresh": adminSubs(); break;
     case "raffle-draw": drawRaffle(id); break;
     case "raffle-undo": undoRaffleDraw(id); break;
+    case "pred-amt": { const pa = $("#predAmt-" + el.dataset.pid); if (pa) { pa.value = el.dataset.amt; pa.focus(); } break; }
     case "pred-bet": predBet(parseInt(el.dataset.pid, 10), parseInt(el.dataset.oid, 10)); break;
     case "pred-lock": predLock(parseInt(el.dataset.pid, 10)); break;
     case "pred-unlock": predUnlock(parseInt(el.dataset.pid, 10)); break;
