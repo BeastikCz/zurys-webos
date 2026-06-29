@@ -5675,6 +5675,7 @@ function handleAction(action, el) {
     case "game-cancel": cancelGame(id); break;
     case "game-claim": claimTimeout(id); break;
     case "duel-type": window._duelType = el.dataset.t; renderDuelLobby(); break;
+    case "duel-amt": { const ds = document.getElementById("duelStake"); if (ds) { ds.value = el.dataset.amt; ds.focus(); } break; }
     case "duel-create": createDuel(); break;
     case "duel-join": joinDuel(id); break;
     case "duel-cancel": cancelDuel(id); break;
@@ -6379,6 +6380,7 @@ async function renderDuelLobby() {
         <input class="input" id="duelStake" type="number" min="10" step="10" value="100" placeholder="Sázka" style="flex:1">
         <button class="btn btn-accent" data-action="duel-create">Vytvořit výzvu ⚔️</button>
       </div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">${[100, 200, 500, 1000].map((a) => `<button class="btn btn-ghost btn-sm" data-action="duel-amt" data-amt="${a}">${a}</button>`).join("")}</div>
       <div class="faint" style="font-size:12px;margin-top:6px">Zůstatek: <b>${fmtPts(state.user.points)}</b> · soupeř vsadí stejně</div>
     </div>
     ${myOpen.length ? `<div class="section-title">⏳ Tvoje výzvy</div>${myOpen.map(rowMine).join("")}<div style="height:14px"></div>` : ""}
