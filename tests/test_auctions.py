@@ -80,6 +80,42 @@ def test_cancel_refunds_leader():
         conn.close()
 
 
+def test_buy_now_instant_win():
+    from app.db import get_conn
+    from app import auctions
+    conn = get_conn()
+    try:
+        aid = auctions.create(conn, "BuyNowSkin", "", 100, 50, 10, buy_now=5000)["id"]
+        u1, u2 = _user(conn), _user(conn); conn.commit()
+        auctions.bid(conn, _row(conn, u1), aid, 200)            # u1 vede na 200
+        assert _pts(conn, u1) == 100000 - 200
+        r = auctions.buy_now(conn, _row(conn, u2), aid)         # u2 vykoupí
+        assert r["ok"] and r["price"] == 5000
+        assert _pts(conn, u2) == 100000 - 5000
+        assert _pts(conn, u1) == 100000, "vykoupený vůdce dostal 100 % zpět"
+        a = conn.execute("SELECT status, winner_id FROM auctions WHERE id=?", (aid,)).fetchone()
+        assert a["status"] == "ended" and a["winner_id"] == u2
+        assert not auctions.buy_now(conn, _row(conn, _user(conn)), aid).get("ok"), "po skončení už ne"
+    finally:
+        conn.close()
+
+
+def test_sub_only_gate():
+    from app.db import get_conn, now_iso
+    from app import auctions
+    conn = get_conn()
+    try:
+        aid = auctions.create(conn, "SubSkin", "", 100, 50, 10, sub_only=1)["id"]
+        free = _user(conn)
+        sub = conn.execute("INSERT INTO users (kick_username, username, role, points, is_sub, created_at) "
+                           "VALUES (?,?,?,?,1,?)", (f"sb_{secrets.token_hex(3)}", "sb", "user", 100000, now_iso())).lastrowid
+        conn.commit()
+        assert not auctions.bid(conn, _row(conn, free), aid, 200).get("ok"), "non-sub nesmí na sub-only"
+        assert auctions.bid(conn, _row(conn, sub), aid, 200)["ok"], "sub smí"
+    finally:
+        conn.close()
+
+
 def test_antisnipe_extends():
     from app.db import get_conn
     from app import auctions

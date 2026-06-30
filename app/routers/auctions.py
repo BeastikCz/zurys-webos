@@ -26,3 +26,14 @@ def bid_auction(auction_id: int, data: AuctionBidIn, user: sqlite3.Row = Depends
     if not r.get("ok"):
         raise HTTPException(status_code=400, detail=r.get("error", "Příhoz se teď nepodařil."))
     return r
+
+
+@router.post("/{auction_id}/buynow")
+def buynow_auction(auction_id: int, user: sqlite3.Row = Depends(require_user),
+                   conn: sqlite3.Connection = Depends(db_dep)):
+    """Kup teď: zaplať buy_now cenu → okamžitá výhra + konec aukce."""
+    rate_limit(f"auctionbuy:{user['id']}", 4, 20)
+    r = auctions.buy_now(conn, user, auction_id)
+    if not r.get("ok"):
+        raise HTTPException(status_code=400, detail=r.get("error", "Kup teď se teď nepodařil."))
+    return r

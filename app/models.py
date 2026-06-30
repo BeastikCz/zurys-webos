@@ -242,12 +242,15 @@ class AuctionBidIn(BaseModel):
 
 
 class AuctionCreateIn(BaseModel):
-    """Admin: vystavení aukce o skin."""
+    """Admin: vystavení aukce o skin (vše nastavitelné)."""
     title: str = Field(..., min_length=1, max_length=120)
     image_url: str = Field(default="", max_length=500)
     start_bid: int = Field(default=100, ge=1, le=1_000_000_000)
     min_increment: int = Field(default=50, ge=1, le=1_000_000_000)
     minutes: int = Field(default=10, ge=1, le=10080)   # max 7 dní
+    buy_now: int = Field(default=0, ge=0, le=1_000_000_000)   # 0 = bez kup-teď
+    sub_only: bool = False
+    chat_announce: bool = True
 
 
 class LoginCalClaimIn(BaseModel):

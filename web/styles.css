@@ -1613,6 +1613,12 @@ body::before { display: none !important; }
 .auc-bids { margin-top: 12px; border-top: 1px solid var(--border); padding-top: 8px; display: flex; flex-direction: column; gap: 3px; }
 .auc-bid { display: flex; justify-content: space-between; font-size: 12.5px; color: var(--text-dim); }
 .auc-bid b { color: var(--text); }
+.auc-card.auc-sub { border-color: #a855f7; box-shadow: 0 0 24px -10px rgba(168,85,247,.5); }
+.auc-banner { display: block; margin: 10px 0 0; padding: 9px 16px; border-radius: 12px; text-align: center;
+  background: linear-gradient(135deg, rgba(255,180,35,.16), rgba(176,122,217,.16)); border: 1px solid var(--accent-2, var(--border));
+  color: var(--text); font-size: 13.5px; font-weight: 600; text-decoration: none; animation: bpPulse 2.4s ease-in-out infinite; }
+.auc-banner:hover { filter: brightness(1.08); }
+.auc-banner b { color: var(--accent); }
 
 /* denní bonus folded v Battle Passu */
 .bp-daily-done { font-size: 12.5px; font-weight: 700; color: var(--farm-green); background: rgba(126,217,87,.08); border: 1px solid rgba(126,217,87,.28); border-radius: 12px; padding: 9px 12px; margin: 0 0 14px; text-align: center; }

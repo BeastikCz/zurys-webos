@@ -30,6 +30,9 @@ def _finalize_expired(conn) -> None:
         if a["current_bidder_id"]:
             notify(conn, a["current_bidder_id"], "🏆", "Vyhrál jsi aukci! 🔨",
                    f"Vyhrál jsi „{a['title']}\" za {a['current_bid']} sedláků! Admin ti pošle skin. 🎉", "#/shop")
+            if a["chat_announce"]:
+                _announce_async(f"🏆 AUKCE SKONČILA! „{a['title']}\" vydražil {_username(conn, a['current_bidder_id'])} "
+                                f"za {a['current_bid']} sedláků! 🔨🌾")
 
 
 def _public(a, viewer_id=None) -> dict:
@@ -48,6 +51,32 @@ def _username(conn, uid):
     return r["username"] if r else None
 
 
+def _is_sub(user) -> bool:
+    try:
+        return bool(user["is_sub"]) or user["role"] in ("admin", "broadcaster", "mod")
+    except (KeyError, IndexError, TypeError):
+        return False
+
+
+def _announce_async(text: str) -> None:
+    """Hláška do Kick chatu v BACKGROUND threadu (Kick API je synchronní HTTP → nesmí blokovat
+    request handler / 1 SQLite writer). Vlastní conn. Stejný pattern jako subgoal._announce_async."""
+    import threading
+
+    def _bg():
+        try:
+            from .db import get_conn
+            from . import kickbot
+            c = get_conn()
+            try:
+                kickbot.send_message(c, text, kind="system")
+            finally:
+                c.close()
+        except Exception:
+            pass
+    threading.Thread(target=_bg, daemon=True).start()
+
+
 def list_public(conn) -> dict:
     """Aktivní aukce (s odpočtem, min příhozem, vůdcem) + nedávno skončené (vítězové). Lazy finalizace."""
     _finalize_expired(conn)
@@ -62,7 +91,8 @@ def list_public(conn) -> dict:
         active.append({"id": a["id"], "title": a["title"], "image_url": a["image_url"] or "",
                        "current_bid": a["current_bid"], "leader": _username(conn, a["current_bidder_id"]),
                        "min_next": _min_next(a), "min_increment": a["min_increment"], "start_bid": a["start_bid"],
-                       "bids_count": a["bids_count"], "seconds_left": secs, "ends_at": a["ends_at"], "recent": bids})
+                       "bids_count": a["bids_count"], "seconds_left": secs, "ends_at": a["ends_at"], "recent": bids,
+                       "buy_now": a["buy_now"] or 0, "sub_only": bool(a["sub_only"])})
     ended = []
     for a in conn.execute("SELECT * FROM auctions WHERE status = 'ended' AND winner_id IS NOT NULL "
                           "ORDER BY id DESC LIMIT 6"):
@@ -81,6 +111,8 @@ def bid(conn, user, auction_id: int, amount: int) -> dict:
     if a["status"] != "active" or a["ends_at"] <= now_iso():
         conn.commit()
         return {"ok": False, "error": "Aukce už skončila."}
+    if a["sub_only"] and not _is_sub(user):
+        return {"ok": False, "error": "Tahle aukce je jen pro suby. 💜"}
     if a["current_bidder_id"] == user["id"]:
         return {"ok": False, "error": "Už vedeš tuhle aukci. 😎"}
     min_next = _min_next(a)
@@ -112,24 +144,67 @@ def bid(conn, user, auction_id: int, amount: int) -> dict:
     conn.execute("INSERT INTO auction_bids (auction_id, user_id, amount, created_at) VALUES (?,?,?,?)",
                  (auction_id, user["id"], amount, now_iso()))
     conn.commit()
+    if a["chat_announce"]:                            # hype do Kick chatu (background thread)
+        _announce_async(f"🔨 {user['username']} přihodil {amount} na „{a['title']}\"! Kdo dá víc? 💰")
     bal = conn.execute("SELECT points FROM users WHERE id = ?", (user["id"],)).fetchone()["points"]
     return {"ok": True, "balance": bal, "current_bid": amount, "ends_at": new_ends,
             "extended": new_ends != a["ends_at"]}
 
 
+def buy_now(conn, user, auction_id: int) -> dict:
+    """Kup teď: zaplať buy_now cenu → okamžitá výhra + konec aukce. Předchozímu vůdci se vrátí 100 %."""
+    from .deps import try_debit, add_points, notify
+    _finalize_expired(conn)
+    a = conn.execute("SELECT * FROM auctions WHERE id = ?", (auction_id,)).fetchone()
+    if not a:
+        return {"ok": False, "error": "Aukce nenalezena."}
+    if a["status"] != "active" or a["ends_at"] <= now_iso():
+        conn.commit()
+        return {"ok": False, "error": "Aukce už skončila."}
+    if not a["buy_now"] or a["buy_now"] <= 0:
+        return {"ok": False, "error": "Tahle aukce nemá kup-teď cenu."}
+    if a["sub_only"] and not _is_sub(user):
+        return {"ok": False, "error": "Tahle aukce je jen pro suby. 💜"}
+    price = a["buy_now"]
+    if not try_debit(conn, user["id"], price, f"Aukce #{auction_id} – kup teď 💎"):
+        return {"ok": False, "error": f"Nemáš dost sedláků ({price})."}
+    if conn.execute("UPDATE auctions SET status = 'ended', winner_id = ?, current_bid = ?, current_bidder_id = ? "
+                    "WHERE id = ? AND status = 'active'",
+                    (user["id"], price, user["id"], auction_id)).rowcount != 1:
+        add_points(conn, user["id"], price, f"Aukce #{auction_id} – vrácení (kup teď selhal)", xp=False)
+        conn.commit()
+        return {"ok": False, "error": "Aukce právě skončila jinak."}
+    if a["current_bidder_id"] == user["id"]:          # kupující byl vůdce → vrať mu jeho escrow (neplatí 2×)
+        add_points(conn, user["id"], a["current_bid"], f"Aukce #{auction_id} – vrácení escrow (kup teď)", xp=False)
+    elif a["current_bidder_id"]:                      # jiný vůdce → vrať mu 100 % (vykoupen, ne přehozen)
+        add_points(conn, a["current_bidder_id"], a["current_bid"], f"Aukce #{auction_id} – vrácení (vykoupeno)", xp=False)
+        notify(conn, a["current_bidder_id"], "🔨", "Aukce vykoupena",
+               f"Někdo koupil „{a['title']}\" za kup-teď cenu. Sedláci ({a['current_bid']}) vráceny. 💰", "#/shop")
+    conn.execute("INSERT INTO auction_bids (auction_id, user_id, amount, created_at) VALUES (?,?,?,?)",
+                 (auction_id, user["id"], price, now_iso()))
+    conn.commit()
+    if a["chat_announce"]:
+        _announce_async(f"💎 {user['username']} VYKOUPIL „{a['title']}\" za {price} (kup teď)! Aukce končí. 🏆🔨")
+    bal = conn.execute("SELECT points FROM users WHERE id = ?", (user["id"],)).fetchone()["points"]
+    return {"ok": True, "balance": bal, "price": price, "title": a["title"]}
+
+
 # ---- Admin ----
-def create(conn, title: str, image_url: str, start_bid: int, min_increment: int, minutes: int) -> dict:
+def create(conn, title: str, image_url: str, start_bid: int, min_increment: int, minutes: int,
+           buy_now: int = 0, sub_only: int = 0, chat_announce: int = 1) -> dict:
     title = (title or "").strip()
     if not title:
         return {"ok": False, "error": "Zadej název předmětu."}
     minutes = max(1, min(MAX_MINUTES, int(minutes)))
     start_bid = max(1, int(start_bid))
     min_increment = max(1, int(min_increment))
+    buy_now = max(0, int(buy_now or 0))
     ends = (datetime.now(timezone.utc) + timedelta(minutes=minutes)).isoformat()
     cur = conn.execute(
-        "INSERT INTO auctions (title, image_url, start_bid, min_increment, current_bid, status, ends_at, created_at) "
-        "VALUES (?, ?, ?, ?, 0, 'active', ?, ?)",
-        (title[:120], (image_url or "").strip()[:500], start_bid, min_increment, ends, now_iso()))
+        "INSERT INTO auctions (title, image_url, start_bid, min_increment, current_bid, status, ends_at, "
+        "buy_now, sub_only, chat_announce, created_at) VALUES (?, ?, ?, ?, 0, 'active', ?, ?, ?, ?, ?)",
+        (title[:120], (image_url or "").strip()[:500], start_bid, min_increment, ends,
+         buy_now, 1 if sub_only else 0, 1 if chat_announce else 0, now_iso()))
     conn.commit()
     return {"ok": True, "id": cur.lastrowid, "ends_at": ends}
 
@@ -164,7 +239,8 @@ def admin_list(conn) -> list:
         wrow = conn.execute("SELECT username, kick_username FROM users WHERE id = ?", (win,)).fetchone() if win else None
         out.append({"id": a["id"], "title": a["title"], "image_url": a["image_url"] or "",
                     "status": a["status"], "current_bid": a["current_bid"], "bids_count": a["bids_count"],
-                    "ends_at": a["ends_at"],
+                    "ends_at": a["ends_at"], "buy_now": a["buy_now"] or 0, "sub_only": bool(a["sub_only"]),
+                    "chat_announce": bool(a["chat_announce"]),
                     "who": (wrow["username"] if wrow else None),
                     "who_kick": (wrow["kick_username"] if wrow else None)})
     return out

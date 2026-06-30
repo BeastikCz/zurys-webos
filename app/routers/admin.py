@@ -2562,10 +2562,12 @@ def admin_auction_create(data: AuctionCreateIn, request: Request,
                          admin: sqlite3.Row = Depends(require_user)):
     """Vystaví aukci o skin (název + obrázek + vyvolávací cena + min příhoz + délka v minutách)."""
     from .. import auctions
-    r = auctions.create(conn, data.title, data.image_url, data.start_bid, data.min_increment, data.minutes)
+    r = auctions.create(conn, data.title, data.image_url, data.start_bid, data.min_increment, data.minutes,
+                        data.buy_now, data.sub_only, data.chat_announce)
     if not r.get("ok"):
         raise HTTPException(status_code=400, detail=r.get("error", "Vystavit se to nepodařilo."))
-    record_audit(conn, admin, request, "auction.create", f"#{r['id']} {data.title}", f"start {data.start_bid}, {data.minutes} min")
+    record_audit(conn, admin, request, "auction.create", f"#{r['id']} {data.title}",
+                 f"start {data.start_bid}, {data.minutes} min, buy_now {data.buy_now}, sub_only {data.sub_only}")
     conn.commit()
     return r
 

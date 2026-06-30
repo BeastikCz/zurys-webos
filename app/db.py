@@ -211,6 +211,9 @@ CREATE TABLE IF NOT EXISTS auctions (
     status            TEXT NOT NULL DEFAULT 'active',
     winner_id         INTEGER REFERENCES users(id) ON DELETE SET NULL,
     ends_at           TEXT NOT NULL,
+    buy_now           INTEGER NOT NULL DEFAULT 0,   -- 0 = bez kup-teď; jinak cena instantní výhry
+    sub_only          INTEGER NOT NULL DEFAULT 0,   -- 1 = přihazovat smí jen sub
+    chat_announce     INTEGER NOT NULL DEFAULT 1,   -- 1 = hlásit příhozy/výhru do Kick chatu (hype)
     created_at        TEXT NOT NULL
 );
 
@@ -724,6 +727,9 @@ _MIGRATIONS = [
     ("garden", "pest_at", "TEXT"),                             # KDY se chrobáci objeví (ISO) / NULL = bez chrobáků. Aktivní = pest_at .. pest_at+okno
     ("garden", "notified", "INTEGER NOT NULL DEFAULT 0"),      # bitmask in-app notifikací: 1=úroda dozrála, 2=chrobáci (1× na záhon, brání spamu)
     ("battlepass", "claimed_premium", "TEXT NOT NULL DEFAULT '[]'"),   # prémiová (sub-only) řada Battle Passu – JSON list vyzvednutých tierů
+    ("auctions", "buy_now", "INTEGER NOT NULL DEFAULT 0"),       # aukce: kup-teď cena (0 = bez)
+    ("auctions", "sub_only", "INTEGER NOT NULL DEFAULT 0"),      # aukce: jen sub smí přihazovat
+    ("auctions", "chat_announce", "INTEGER NOT NULL DEFAULT 1"), # aukce: hlásit do Kick chatu
     # Responsible gaming – denní limit sázek (Tipsport-style). 0/NULL = bez limitu.
     ("users", "wager_limit", "INTEGER"),                   # aktuální denní strop sázek
     ("users", "wager_limit_pending", "INTEGER"),           # navýšení čeká na zítřek (snížit jde hned)
