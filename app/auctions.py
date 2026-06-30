@@ -12,6 +12,8 @@ from .db import now_iso
 
 ANTISNIPE_SEC = 30          # příhoz v posledních N s prodlouží konec o N s
 MAX_MINUTES = 7 * 24 * 60   # max délka aukce (7 dní)
+OUTBID_REFUND_PCT = 0.5     # přehozenému se vrátí jen 50 % příhozu (zbytek propadne = sink + napětí).
+                            #   Zrušení aukce vrací 100 % (není to chyba bidera). Souběh-reject vrací 100 %.
 
 
 def _finalize_expired(conn) -> None:
@@ -27,7 +29,7 @@ def _finalize_expired(conn) -> None:
             continue
         if a["current_bidder_id"]:
             notify(conn, a["current_bidder_id"], "🏆", "Vyhrál jsi aukci! 🔨",
-                   f"Vyhrál jsi „{a['title']}\" za {a['current_bid']} sedláků! Admin ti pošle skin. 🎉", "#/aukce")
+                   f"Vyhrál jsi „{a['title']}\" za {a['current_bid']} sedláků! Admin ti pošle skin. 🎉", "#/shop")
 
 
 def _public(a, viewer_id=None) -> dict:
@@ -101,10 +103,12 @@ def bid(conn, user, auction_id: int, amount: int) -> dict:
         add_points(conn, user["id"], amount, f"Aukce #{auction_id} – vrácení (předběhnut)", xp=False)
         conn.commit()
         return {"ok": False, "error": "Někdo přihodil dřív – zkus víc. 🔨"}
-    if prev_bidder:                                   # vrať přehozenému jeho blokaci + notif
-        add_points(conn, prev_bidder, prev_amount, f"Aukce #{auction_id} – vrácení (přehozen)", xp=False)
+    if prev_bidder:                                   # přehozenému se vrátí jen OUTBID_REFUND_PCT (zbytek propadne = sink)
+        refund = int(round(prev_amount * OUTBID_REFUND_PCT))
+        lost = prev_amount - refund
+        add_points(conn, prev_bidder, refund, f"Aukce #{auction_id} – vrácení {int(OUTBID_REFUND_PCT * 100)} % (přehozen)", xp=False)
         notify(conn, prev_bidder, "🔨", "Přehodili tě v aukci!",
-               f"Někdo přihodil víc na „{a['title']}\". Sedláci vráceni – přihoď znova? 💰", "#/aukce")
+               f"Někdo přihodil víc na „{a['title']}\". Vráceno {refund} sedláků (50 %), {lost} propadlo. Přihoď znova? 💰", "#/shop")
     conn.execute("INSERT INTO auction_bids (auction_id, user_id, amount, created_at) VALUES (?,?,?,?)",
                  (auction_id, user["id"], amount, now_iso()))
     conn.commit()
@@ -145,7 +149,7 @@ def cancel(conn, auction_id: int) -> dict:
     if a["current_bidder_id"]:
         add_points(conn, a["current_bidder_id"], a["current_bid"], f"Aukce #{auction_id} – zrušeno (vráceno)", xp=False)
         notify(conn, a["current_bidder_id"], "🔨", "Aukce zrušena",
-               f"Aukce „{a['title']}\" byla zrušena. Sedláci ({a['current_bid']}) vráceny. 💰", "#/aukce")
+               f"Aukce „{a['title']}\" byla zrušena. Sedláci ({a['current_bid']}) vráceny. 💰", "#/shop")
     conn.commit()
     return {"ok": True, "refunded": a["current_bid"] if a["current_bidder_id"] else 0}
 

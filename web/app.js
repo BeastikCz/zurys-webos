@@ -235,7 +235,6 @@ function render() {
     kosmetika: pageCosmetics, bj: pageBjRoom, zpravy: pageMessages, fair: pageFair, mines: pageMines,
     connect: pageConnect, login: pageConnect, register: pageConnect, u: pageUserProfile,
     "mod-nabor": pageModApply, staty: pageGameStats, "sin-slavy": pageHallOfFame, zahrada: pageGarden,
-    aukce: pageAuctions,
   };
   (pages[r.name] || pageShop)(r.param);
   window.scrollTo({ top: 0, behavior: "instant" in window ? "instant" : "auto" });
@@ -295,7 +294,7 @@ function renderHeader() {
   const route = currentRoute();
   const u = state.user;
   document.body.classList.toggle("logged-in", !!u);   /* na mobilu uvolní místo v topbaru (skryje wordmark) */
-  const items = [["shop", "Shop"], ["bonusy", "Bonusy"], ["ukoly", "Úkoly"], ["zahrada", "Zahrádka"], ["aukce", "Aukce"], ["leaderboard", "Žebříček"], ["exchange", "Směnárna"], ["games", "Hry"], ["predikce", "Predikce"]];
+  const items = [["shop", "Shop"], ["bonusy", "Bonusy"], ["ukoly", "Úkoly"], ["zahrada", "Zahrádka"], ["leaderboard", "Žebříček"], ["exchange", "Směnárna"], ["games", "Hry"], ["predikce", "Predikce"]];
   const navDot = (k) => ((k === "bonusy" && u && bonusReady) || (k === "ukoly" && u && questReady)) ? `<span class="nav-dot" title="Máš nevyzvednutou odměnu!"></span>` : "";
   const navLinks = items.map(([k, l]) => `<a href="#/${k}" class="nav-link ${route === k ? "active" : ""}">${l}${navDot(k)}</a>`).join("")
     + (isStaff(u) ? `<a href="#/admin" class="nav-link ${route === "admin" ? "active" : ""}">${u.role === "admin" ? "Admin" : "Panel"}</a>` : "");
@@ -370,6 +369,7 @@ function pageShop() {
       <p>Utrať nasbírané sedláky za prémiové skiny a odměny — instantní odměny, limitky i tomboly. 🌾</p></div></div>
     <div id="happyBanner"></div>
     <div id="soldFeed"></div>
+    <div id="shopAuctions"></div>
     <div id="shopHero"></div>
     <div id="shopMilestone"></div>
     <div class="da-filters" id="filters"></div>
@@ -379,6 +379,7 @@ function pageShop() {
   loadActivity();
   loadDropBanner();
   loadSoldFeed();
+  loadShopAuctions();
   loadMilestone();
   dropTimer = setInterval(() => { if (!document.hidden) { loadDropBanner(); loadSoldFeed(); } }, 10000);
   cardTimer = setInterval(updateCardTimers, 1000);
@@ -2204,23 +2205,18 @@ function pageBonusy() {
 }
 
 /* ---------- Aukce o skiny ---------- */
-let _auctionTimer = null;
-function pageAuctions() {
-  const view = $("#view");
-  view.innerHTML = `<div class="page-head with-mascot"><img class="page-mascot" src="/sedlak-cut.png" alt=""><div class="ph-text"><h1>🔨 Aukce o skiny</h1><p class="muted">Admin vystaví skin → přihazuješ sedláky → kdo dá nejvíc do konce, bere! Přehození ti sedláky <b>vrátí</b>. 💰</p></div></div>
-    <div id="auctionBox">${skeletonCards(1)}</div>`;
-  loadAuctions();
-}
-async function loadAuctions() {
-  const box = document.getElementById("auctionBox"); if (!box) return;
+let _auctionTimer = null, _aucReload = null;
+async function loadShopAuctions() {                         // aukce ŽIJOU v shopu (žádná vlastní záložka)
+  const box = document.getElementById("shopAuctions"); if (!box) return;
+  _aucReload = loadShopAuctions;
   try {
     const d = await api("/auctions");
-    if (!(d.active || []).length && !(d.ended || []).length) { box.innerHTML = `<div class="empty"><div class="big">🔨</div>Zatím žádná aukce. Sleduj stream — admin nějakou brzo vystaví!</div>`; return; }
-    const active = d.active.map(auctionCardHTML).join("");
-    const ended = d.ended.length ? `<div class="section-title" style="margin:24px 0 10px">🏆 Nedávno vydraženo</div>${d.ended.map((a) => `<div class="panel" style="display:flex;align-items:center;gap:12px;margin-bottom:8px;padding:10px 14px">${a.image_url ? `<img src="${esc(a.image_url)}" alt="" style="width:46px;height:46px;object-fit:contain;border-radius:8px">` : `<span style="font-size:30px">🔨</span>`}<div style="flex:1;min-width:0"><b>${esc(a.title)}</b><div class="faint" style="font-size:12.5px">vydražil <b style="color:var(--accent)">${esc(a.winner || "?")}</b> za ${fmtPts(a.final_bid)} 🌾</div></div></div>`).join("")}` : "";
-    box.innerHTML = active + ended;
+    const active = d.active || [];
+    if (!active.length) { box.innerHTML = ""; return; }     // žádná aukce → sekce zmizí
+    box.innerHTML = `<div class="section-title" style="margin:22px 0 10px">🔨 Probíhající aukce <span class="faint" style="font-weight:400;font-size:13px">— přihazuj sedláky, kdo dá nejvíc do konce, bere skin!</span></div>`
+      + active.map(auctionCardHTML).join("");
     _startAuctionTimer();
-  } catch (e) { box.innerHTML = `<div class="empty">${esc(e.message)}</div>`; }
+  } catch (e) { box.innerHTML = ""; }
 }
 function auctionCardHTML(a) {
   const me = state.user && a.leader === state.user.username;
@@ -2240,6 +2236,7 @@ function auctionCardHTML(a) {
       <button class="btn btn-accent" data-action="auction-bid" data-id="${a.id}">🔨 Přihodit</button>
     </div>
     <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">${chips.map((v) => `<button class="btn btn-ghost btn-sm" data-action="auction-amt" data-id="${a.id}" data-amt="${v}">${fmtPts(v)}</button>`).join("")}</div>
+    <div class="faint" style="font-size:11px;margin-top:6px">⚠️ Když tě někdo přehodí, vrátí se ti <b>50 %</b> příhozu (zbytek propadne). Přihazuj s rozmyslem.</div>
     ${recent}
   </div>`;
 }
@@ -2251,9 +2248,12 @@ function _startAuctionTimer() {
       const s = parseInt(el.dataset.aucleft, 10) - 1;
       if (s <= 0) reload = true; else { el.dataset.aucleft = s; el.textContent = "⏳ " + grdDur(s); }
     });
-    if (reload) { clearInterval(_auctionTimer); _auctionTimer = null; loadAuctions(); }
+    if (reload && _aucReload) { clearInterval(_auctionTimer); _auctionTimer = null; _aucReload(); }
   }, 1000);
-  if (!window._aucPoll) window._aucPoll = setInterval(() => { if (location.hash.includes("aukce")) loadAuctions(); else { clearInterval(window._aucPoll); window._aucPoll = null; } }, 5000);
+  if (!window._aucPoll) window._aucPoll = setInterval(() => {
+    if (document.querySelector("[data-aucleft]") && _aucReload) _aucReload();
+    else { clearInterval(window._aucPoll); window._aucPoll = null; }
+  }, 5000);
 }
 function aucSetAmt(id, v) { const el = document.getElementById("aucAmt-" + id); if (el) { el.value = v; el.focus(); } }
 async function bidAuction(id) {
@@ -2266,7 +2266,7 @@ async function bidAuction(id) {
     const r = await api(`/auctions/${id}/bid`, { method: "POST", body: { amount } });
     if (state.user) state.user.points = r.balance;
     toast(`🔨 Přihozeno ${fmtPts(amount)} — vedeš aukci!${r.extended ? " ⏳ +30 s (anti-snipe)" : ""}`, "success");
-    renderHeader(); loadAuctions();
+    renderHeader(); if (_aucReload) _aucReload();
   } catch (e) { toast(e.message, "error"); }
 }
 

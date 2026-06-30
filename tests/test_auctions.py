@@ -33,10 +33,10 @@ def test_escrow_outbid_min_and_self():
         assert _pts(conn, u1) == 100000 - 100, "escrow odečetl příhoz"
         r2 = auctions.bid(conn, _row(conn, u2), aid, 150)            # přehoz
         assert r2["ok"]
-        assert _pts(conn, u1) == 100000, "přehozenému vráceno"
+        assert _pts(conn, u1) == 100000 - 50, "přehozenému vráceno jen 50 % (ztratil 50 ze 100)"
         assert _pts(conn, u2) == 100000 - 150
         assert not auctions.bid(conn, _row(conn, u1), aid, 150).get("ok"), "pod min (200) zamítnuto"
-        assert _pts(conn, u1) == 100000, "zamítnutý příhoz nic neodečte"
+        assert _pts(conn, u1) == 100000 - 50, "zamítnutý příhoz (pod min) nic neodečte"
         assert not auctions.bid(conn, _row(conn, u2), aid, 400).get("ok"), "vedoucí nesmí přehodit sám sebe"
     finally:
         conn.close()
