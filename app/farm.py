@@ -29,12 +29,14 @@ COLLECTION_REWARD = 25000      # jednorázový bonus za kompletní sbírku
 
 # (key, ikona, název, cena; produkční: feed/hours/reward/product/pico; speciální: sub_only / utility+prod_bonus)
 ANIMALS = [
-    {"key": "chicken", "icon": "🐔", "name": "Slepička", "cost": 2000,  "feed": 80,  "hours": 2,  "reward": 130,  "product": "vejce",        "pico": "🥚"},
-    {"key": "goat",    "icon": "🐐", "name": "Koza",     "cost": 6000,  "feed": 150, "hours": 4,  "reward": 300,  "product": "mléko",        "pico": "🥛"},
-    {"key": "sheep",   "icon": "🐑", "name": "Ovce",     "cost": 12000, "feed": 250, "hours": 6,  "reward": 550,  "product": "vlnu",         "pico": "🧶"},
-    {"key": "cow",     "icon": "🐄", "name": "Kravička", "cost": 40000, "feed": 500, "hours": 12, "reward": 1400, "product": "sýr",          "pico": "🧀"},
-    {"key": "unicorn", "icon": "🦄", "name": "Jednorožec", "cost": 80000, "feed": 400, "hours": 8, "reward": 1100, "product": "duhový prach", "pico": "✨", "sub_only": True},
-    {"key": "horse",   "icon": "🐴", "name": "Koníček",  "cost": 150000, "utility": True, "prod_bonus": 0.10},
+    {"key": "chicken", "icon": "🐔", "name": "Slepice",  "cost": 2000,  "feed": 80,  "hours": 2,  "reward": 130,  "product": "vejce", "pico": "🥚"},
+    {"key": "goat",    "icon": "🐐", "name": "Koza",     "cost": 6000,  "feed": 150, "hours": 4,  "reward": 300,  "product": "mléko", "pico": "🥛"},
+    {"key": "sheep",   "icon": "🐑", "name": "Ovce",     "cost": 12000, "feed": 250, "hours": 6,  "reward": 550,  "product": "vlnu",  "pico": "🧶"},
+    {"key": "cow",     "icon": "🐄", "name": "Kráva",    "cost": 40000, "feed": 500, "hours": 12, "reward": 1400, "product": "sýr",   "pico": "🧀"},
+    # klíč "unicorn" zůstává (DB), zobrazení = Kůň (sub-only producent)
+    {"key": "unicorn", "icon": "🐴", "name": "Kůň",      "cost": 80000, "feed": 400, "hours": 8,  "reward": 1100, "product": "hnůj",  "pico": "💩", "sub_only": True},
+    # klíč "horse" zůstává (DB), zobrazení = Pes (utility – hlídá statek, pasivní +%)
+    {"key": "horse",   "icon": "🐕", "name": "Pes",      "cost": 150000, "utility": True, "prod_bonus": 0.10},
 ]
 _BY_KEY = {a["key"]: a for a in ANIMALS}
 
