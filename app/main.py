@@ -23,7 +23,7 @@ from .config import WEB_DIR, UPLOAD_DIR, SESSION_COOKIE, STAFF_ROLES, TRUSTED_IP
 from .db import init_db, get_conn, now_iso, get_setting, set_setting
 from .deps import client_ip
 from .seed import seed_if_empty, sync_changelog
-from .routers import auth, shop, cart, misc, admin, drops, botconsole, games, predictions, kickhook, blackjack, dm, mines, push
+from .routers import auth, shop, cart, misc, admin, drops, botconsole, games, predictions, kickhook, blackjack, dm, mines, push, auctions
 
 # Vypínač HER (piškvorky/duely/blackjack). Mimo provoz, když WEBOS_GAMES_OFF=1 (nastaveno ve fly.toml).
 # Lokálně/testy (bez env) = hry zapnuté, ať projdou herní testy. Zpět do provozu: WEBOS_GAMES_OFF=0 + deploy.
@@ -569,6 +569,7 @@ app.include_router(games.router, prefix="/api", dependencies=[Depends(_games_off
 app.include_router(blackjack.router, prefix="/api", dependencies=[Depends(_games_off_guard)])
 app.include_router(mines.router, prefix="/api", dependencies=[Depends(_games_off_guard)])
 app.include_router(predictions.router, prefix="/api")
+app.include_router(auctions.router, prefix="/api")
 app.include_router(dm.router, prefix="/api")
 app.include_router(kickhook.router, prefix="/api")
 app.include_router(push.router, prefix="/api")

@@ -236,6 +236,20 @@ class EggArmIn(BaseModel):
     minutes: int = Field(10, ge=1, le=240)
 
 
+class AuctionBidIn(BaseModel):
+    """Příhoz na aukci (sedláci)."""
+    amount: int = Field(..., ge=1, le=1_000_000_000)
+
+
+class AuctionCreateIn(BaseModel):
+    """Admin: vystavení aukce o skin."""
+    title: str = Field(..., min_length=1, max_length=120)
+    image_url: str = Field(default="", max_length=500)
+    start_bid: int = Field(default=100, ge=1, le=1_000_000_000)
+    min_increment: int = Field(default=50, ge=1, le=1_000_000_000)
+    minutes: int = Field(default=10, ge=1, le=10080)   # max 7 dní
+
+
 class LoginCalClaimIn(BaseModel):
     """Vyzvednutí milníkového bonusu z login kalendáře (počet aktivních dní)."""
     milestone: int = Field(..., ge=1, le=31)

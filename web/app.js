@@ -137,7 +137,7 @@ function lbBadges(r) {
 // Oprávnění (zrcadlo serverové matice v config.py – server to stejně vynucuje)
 const ADMIN_SECTIONS = {
   overview: [], stats: ["broadcaster"], products: ["mod", "broadcaster"], users: ["mod", "broadcaster"], subs: [], orders: ["mod", "broadcaster"],
-  raffles: ["broadcaster"], codes: ["broadcaster"], drops: ["broadcaster"], games: ["mod", "broadcaster"], bot: ["broadcaster"],
+  raffles: ["broadcaster"], auctions: ["broadcaster"], codes: ["broadcaster"], drops: ["broadcaster"], games: ["mod", "broadcaster"], bot: ["broadcaster"],
   predictions: ["mod", "broadcaster"], economy: ["broadcaster"], news: ["broadcaster"], security: [],
   modnabor: ["broadcaster"], gifts: ["broadcaster"],
 };
@@ -235,6 +235,7 @@ function render() {
     kosmetika: pageCosmetics, bj: pageBjRoom, zpravy: pageMessages, fair: pageFair, mines: pageMines,
     connect: pageConnect, login: pageConnect, register: pageConnect, u: pageUserProfile,
     "mod-nabor": pageModApply, staty: pageGameStats, "sin-slavy": pageHallOfFame, zahrada: pageGarden,
+    aukce: pageAuctions,
   };
   (pages[r.name] || pageShop)(r.param);
   window.scrollTo({ top: 0, behavior: "instant" in window ? "instant" : "auto" });
@@ -294,7 +295,7 @@ function renderHeader() {
   const route = currentRoute();
   const u = state.user;
   document.body.classList.toggle("logged-in", !!u);   /* na mobilu uvolní místo v topbaru (skryje wordmark) */
-  const items = [["shop", "Shop"], ["bonusy", "Bonusy"], ["ukoly", "Úkoly"], ["zahrada", "Zahrádka"], ["leaderboard", "Žebříček"], ["exchange", "Směnárna"], ["games", "Hry"], ["predikce", "Predikce"]];
+  const items = [["shop", "Shop"], ["bonusy", "Bonusy"], ["ukoly", "Úkoly"], ["zahrada", "Zahrádka"], ["aukce", "Aukce"], ["leaderboard", "Žebříček"], ["exchange", "Směnárna"], ["games", "Hry"], ["predikce", "Predikce"]];
   const navDot = (k) => ((k === "bonusy" && u && bonusReady) || (k === "ukoly" && u && questReady)) ? `<span class="nav-dot" title="Máš nevyzvednutou odměnu!"></span>` : "";
   const navLinks = items.map(([k, l]) => `<a href="#/${k}" class="nav-link ${route === k ? "active" : ""}">${l}${navDot(k)}</a>`).join("")
     + (isStaff(u) ? `<a href="#/admin" class="nav-link ${route === "admin" ? "active" : ""}">${u.role === "admin" ? "Admin" : "Panel"}</a>` : "");
@@ -2202,6 +2203,117 @@ function pageBonusy() {
   dropTimer = setInterval(() => { if (!document.hidden) { loadCommunityGoal(); loadSubGoal(); } }, 12000);
 }
 
+/* ---------- Aukce o skiny ---------- */
+let _auctionTimer = null;
+function pageAuctions() {
+  const view = $("#view");
+  view.innerHTML = `<div class="page-head with-mascot"><img class="page-mascot" src="/sedlak-cut.png" alt=""><div class="ph-text"><h1>🔨 Aukce o skiny</h1><p class="muted">Admin vystaví skin → přihazuješ sedláky → kdo dá nejvíc do konce, bere! Přehození ti sedláky <b>vrátí</b>. 💰</p></div></div>
+    <div id="auctionBox">${skeletonCards(1)}</div>`;
+  loadAuctions();
+}
+async function loadAuctions() {
+  const box = document.getElementById("auctionBox"); if (!box) return;
+  try {
+    const d = await api("/auctions");
+    if (!(d.active || []).length && !(d.ended || []).length) { box.innerHTML = `<div class="empty"><div class="big">🔨</div>Zatím žádná aukce. Sleduj stream — admin nějakou brzo vystaví!</div>`; return; }
+    const active = d.active.map(auctionCardHTML).join("");
+    const ended = d.ended.length ? `<div class="section-title" style="margin:24px 0 10px">🏆 Nedávno vydraženo</div>${d.ended.map((a) => `<div class="panel" style="display:flex;align-items:center;gap:12px;margin-bottom:8px;padding:10px 14px">${a.image_url ? `<img src="${esc(a.image_url)}" alt="" style="width:46px;height:46px;object-fit:contain;border-radius:8px">` : `<span style="font-size:30px">🔨</span>`}<div style="flex:1;min-width:0"><b>${esc(a.title)}</b><div class="faint" style="font-size:12.5px">vydražil <b style="color:var(--accent)">${esc(a.winner || "?")}</b> za ${fmtPts(a.final_bid)} 🌾</div></div></div>`).join("")}` : "";
+    box.innerHTML = active + ended;
+    _startAuctionTimer();
+  } catch (e) { box.innerHTML = `<div class="empty">${esc(e.message)}</div>`; }
+}
+function auctionCardHTML(a) {
+  const me = state.user && a.leader === state.user.username;
+  const recent = a.recent && a.recent.length ? `<div class="auc-bids">${a.recent.map((b) => `<div class="auc-bid"><span>${esc(b.username || "?")}</span><b>${fmtPts(b.amount)}</b></div>`).join("")}</div>` : `<div class="faint" style="font-size:12px;margin-top:8px">Zatím bez příhozu — buď první! 🔨</div>`;
+  const chips = [a.min_next, a.min_next + a.min_increment * 4, a.min_next + a.min_increment * 19];
+  return `<div class="panel auc-card" style="margin-bottom:16px">
+    <div class="auc-top">
+      ${a.image_url ? `<img class="auc-img" src="${esc(a.image_url)}" alt="">` : `<div class="auc-img auc-noimg">🔨</div>`}
+      <div class="auc-info">
+        <div class="auc-title">${esc(a.title)}</div>
+        <div class="auc-bid-now">${a.current_bid ? `<span class="faint">aktuálně</span> <b>${fmtPts(a.current_bid)}</b> 🌾 ${a.leader ? `· vede <b style="color:${me ? "var(--farm-green,#46d369)" : "var(--accent)"}">${esc(a.leader)}${me ? " (ty!)" : ""}</b>` : ""}` : `<span class="faint">vyvolávací cena</span> <b>${fmtPts(a.start_bid)}</b> 🌾`}</div>
+        <div class="auc-count" data-aucleft="${a.seconds_left}">⏳ ${grdDur(a.seconds_left)}</div>
+      </div>
+    </div>
+    <div class="auc-bidrow">
+      <input class="input" id="aucAmt-${a.id}" type="number" min="${a.min_next}" placeholder="min. ${a.min_next}" value="${a.min_next}">
+      <button class="btn btn-accent" data-action="auction-bid" data-id="${a.id}">🔨 Přihodit</button>
+    </div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">${chips.map((v) => `<button class="btn btn-ghost btn-sm" data-action="auction-amt" data-id="${a.id}" data-amt="${v}">${fmtPts(v)}</button>`).join("")}</div>
+    ${recent}
+  </div>`;
+}
+function _startAuctionTimer() {
+  if (_auctionTimer) clearInterval(_auctionTimer);
+  _auctionTimer = setInterval(() => {
+    let reload = false;
+    document.querySelectorAll("[data-aucleft]").forEach((el) => {
+      const s = parseInt(el.dataset.aucleft, 10) - 1;
+      if (s <= 0) reload = true; else { el.dataset.aucleft = s; el.textContent = "⏳ " + grdDur(s); }
+    });
+    if (reload) { clearInterval(_auctionTimer); _auctionTimer = null; loadAuctions(); }
+  }, 1000);
+  if (!window._aucPoll) window._aucPoll = setInterval(() => { if (location.hash.includes("aukce")) loadAuctions(); else { clearInterval(window._aucPoll); window._aucPoll = null; } }, 5000);
+}
+function aucSetAmt(id, v) { const el = document.getElementById("aucAmt-" + id); if (el) { el.value = v; el.focus(); } }
+async function bidAuction(id) {
+  if (!state.user) { toast("Přihlas se 😉", "info"); return; }
+  const inp = document.getElementById("aucAmt-" + id);
+  const amount = parseInt(inp && inp.value, 10);
+  if (!amount || amount < 1) { toast("Zadej částku příhozu.", "error"); return; }
+  if (state.user && amount > state.user.points) { toast("Tolik sedláků nemáš.", "error"); return; }
+  try {
+    const r = await api(`/auctions/${id}/bid`, { method: "POST", body: { amount } });
+    if (state.user) state.user.points = r.balance;
+    toast(`🔨 Přihozeno ${fmtPts(amount)} — vedeš aukci!${r.extended ? " ⏳ +30 s (anti-snipe)" : ""}`, "success");
+    renderHeader(); loadAuctions();
+  } catch (e) { toast(e.message, "error"); }
+}
+
+async function adminAuctions() {
+  const box = $("#adminContent");
+  try {
+    const list = await api("/admin/auctions");
+    box.innerHTML = `
+      <div class="panel" style="margin-bottom:18px">
+        <div class="section-title">🔨 Vystavit aukci o skin</div>
+        <div class="field"><label>Název skinu</label><input class="input" id="auc_title" placeholder="např. AK-47 Redline (FT)"></div>
+        <div class="field" style="margin-top:8px"><label>Obrázek (URL, volitelné)</label><input class="input" id="auc_img" placeholder="https://…/skin.png"></div>
+        <div class="field-row" style="margin-top:8px">
+          <div class="field"><label>Vyvolávací cena</label><input class="input" id="auc_start" type="number" min="1" value="100"></div>
+          <div class="field"><label>Min. příhoz</label><input class="input" id="auc_inc" type="number" min="1" value="50"></div>
+          <div class="field"><label>Délka (min)</label><input class="input" id="auc_min" type="number" min="1" value="10"></div>
+        </div>
+        <button class="btn btn-primary" data-action="auction-create" style="margin-top:12px">🔨 Vystavit aukci</button>
+        <p class="form-hint" style="margin-top:8px">Diváci přihazují sedláky (escrow — přehození vrací). Vítěze + jeho Kick nick uvidíš níž; skin pošli ručně. Anti-snipe +30 s, zrušení vrátí vůdci sedláky.</p>
+      </div>
+      <div class="section-title">Aukce (${list.length})</div>
+      ${list.length ? list.map(adminAuctionRow).join("") : `<div class="empty">Zatím žádná aukce.</div>`}`;
+  } catch (e) { box.innerHTML = `<div class="empty">${esc(e.message)}</div>`; }
+}
+function adminAuctionRow(a) {
+  const st = { active: "🟢 běží", ended: "🏆 vydraženo", cancelled: "❌ zrušeno" }[a.status] || a.status;
+  return `<div class="panel" style="margin-bottom:8px;padding:11px 14px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+    ${a.image_url ? `<img src="${esc(a.image_url)}" alt="" style="width:44px;height:44px;object-fit:contain;border-radius:8px">` : `<span style="font-size:26px">🔨</span>`}
+    <div style="flex:1;min-width:140px"><b>${esc(a.title)}</b> <span class="badge">${st}</span>
+      <div class="faint" style="font-size:12.5px">${a.current_bid ? `${fmtPts(a.current_bid)} 🌾 · ${a.bids_count} příhozů · ${a.status === "ended" ? "vítěz" : "vede"}: <b>${esc(a.who || "?")}</b>${a.who_kick ? ` (🟢 ${esc(a.who_kick)})` : ""}` : "zatím bez příhozu"}</div>
+    </div>
+    ${a.status === "active" ? `<button class="btn btn-danger btn-sm" data-action="auction-cancel" data-id="${a.id}">Zrušit</button>` : ""}
+  </div>`;
+}
+async function adminCreateAuction() {
+  const title = ($("#auc_title").value || "").trim();
+  if (!title) { toast("Zadej název skinu.", "error"); return; }
+  const body = { title, image_url: ($("#auc_img").value || "").trim(), start_bid: parseInt($("#auc_start").value || "100", 10), min_increment: parseInt($("#auc_inc").value || "50", 10), minutes: parseInt($("#auc_min").value || "10", 10) };
+  try { await api("/admin/auctions", { method: "POST", body }); toast("🔨 Aukce vystavena!", "success"); adminAuctions(); }
+  catch (e) { toast(e.message, "error"); }
+}
+async function adminCancelAuction(id) {
+  if (!confirm("Zrušit aukci? Vůdci se vrátí zablokované sedláky.")) return;
+  try { const r = await api(`/admin/auctions/${id}/cancel`, { method: "POST" }); toast(`Aukce zrušena${r.refunded ? ` · vráceno ${fmtPts(r.refunded)}` : ""}.`, "info"); adminAuctions(); }
+  catch (e) { toast(e.message, "error"); }
+}
+
 /* ---------- Zahrádka (farm-sim) ---------- */
 let _gardenSel = null, _gardenTimer = null;
 function grdDur(s) { s = Math.max(0, s | 0); const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), ss = s % 60; return h ? `${h}h ${m}m` : (m ? `${m}m ${ss}s` : `${ss}s`); }
@@ -2827,7 +2939,7 @@ async function pageAdmin() {
   }
   const tabs = [
     ["overview", "📊 Přehled"], ["products", "🎁 Odměny"], ["users", "👥 Uživatelé"], ["subs", "💜 Suby"], ["orders", "📦 Objednávky"],
-    ["raffles", "🎟️ Tomboly"], ["predictions", "🎯 Predikce"], ["codes", "🎫 Kódy"], ["drops", "🎁 Dropy"], ["games", "🎮 Hry"],
+    ["raffles", "🎟️ Tomboly"], ["auctions", "🔨 Aukce"], ["predictions", "🎯 Predikce"], ["codes", "🎫 Kódy"], ["drops", "🎁 Dropy"], ["games", "🎮 Hry"],
     ["bot", "🤖 Kick bot"], ["economy", "⚙️ Ekonomika"], ["news", "📣 Novinky"], ["security", "🛡️ Bezpečnost"],
     ["modnabor", "🛡️ Nábor modů"], ["gifts", "💝 Dary"],
   ].filter(([k]) => canSection(state.user, k));
@@ -3105,6 +3217,7 @@ function renderAdminTab(tab) {
   else if (tab === "subs") adminSubs();
   else if (tab === "orders") adminOrders();
   else if (tab === "raffles") adminRaffles();
+  else if (tab === "auctions") adminAuctions();
   else if (tab === "predictions") adminPredictions();
   else if (tab === "codes") adminCodes();
   else if (tab === "drops") adminDrops();
@@ -5749,6 +5862,10 @@ function handleAction(action, el) {
     case "pred-amt": { const pa = $("#predAmt-" + el.dataset.pid); if (pa) { pa.value = el.dataset.amt; pa.focus(); } break; }
     case "pred-bet": predBet(parseInt(el.dataset.pid, 10), parseInt(el.dataset.oid, 10)); break;
     case "pred-lock": predLock(parseInt(el.dataset.pid, 10)); break;
+    case "auction-bid": bidAuction(parseInt(el.dataset.id, 10)); break;
+    case "auction-amt": aucSetAmt(parseInt(el.dataset.id, 10), parseInt(el.dataset.amt, 10)); break;
+    case "auction-create": adminCreateAuction(); break;
+    case "auction-cancel": adminCancelAuction(parseInt(el.dataset.id, 10)); break;
     case "pred-unlock": predUnlock(parseInt(el.dataset.pid, 10)); break;
     case "pred-resolve": predResolve(parseInt(el.dataset.pid, 10), parseInt(el.dataset.oid, 10)); break;
     case "pred-reresolve": predReresolve(parseInt(el.dataset.pid, 10), parseInt(el.dataset.oid, 10)); break;

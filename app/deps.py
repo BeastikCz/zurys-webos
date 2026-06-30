@@ -350,6 +350,7 @@ _SECTION_BY_PREFIX = [
     ("/api/admin/export/audit", "security"),
     ("/api/admin/order", "orders"),          # pokryje /orders i /order-products
     ("/api/admin/raffle", "raffles"),
+    ("/api/admin/auction", "auctions"),
     ("/api/admin/codes", "codes"),
     ("/api/admin/gift-requests", "gifts"),
     ("/api/admin/security", "security"),

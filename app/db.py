@@ -196,6 +196,33 @@ CREATE TABLE IF NOT EXISTS claim_locks (
     PRIMARY KEY (user_id, claim_key)
 );
 
+-- Aukce o skiny: admin vystaví předmět, diváci přihazují sedláky (escrow), nejvyšší na konci vyhrává.
+-- current_bidder má sedláky ZABLOKOVANÉ (odečtené); přehození vrátí předchozímu. Vítěz = current_bidder
+-- při ends_at. Skin doručí admin ručně (jako tomboly). status: active | ended | cancelled.
+CREATE TABLE IF NOT EXISTS auctions (
+    id                INTEGER PRIMARY KEY AUTOINCREMENT,
+    title             TEXT NOT NULL,
+    image_url         TEXT,
+    start_bid         INTEGER NOT NULL DEFAULT 1,
+    min_increment     INTEGER NOT NULL DEFAULT 1,
+    current_bid       INTEGER NOT NULL DEFAULT 0,
+    current_bidder_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    bids_count        INTEGER NOT NULL DEFAULT 0,
+    status            TEXT NOT NULL DEFAULT 'active',
+    winner_id         INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    ends_at           TEXT NOT NULL,
+    created_at        TEXT NOT NULL
+);
+
+-- Historie příhozů aukce (pro zobrazení + transparentnost). Escrow drží jen current_bid na auctions.
+CREATE TABLE IF NOT EXISTS auction_bids (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    auction_id INTEGER NOT NULL REFERENCES auctions(id) ON DELETE CASCADE,
+    user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    amount     INTEGER NOT NULL,
+    created_at TEXT NOT NULL
+);
+
 -- Idempotence Kick webhooku: ID už zpracovaných zpráv. PERZISTENTNÍ (na rozdíl od paměťové
 -- dedup) → přežije restart/deploy, takže Kickův retry ani replay po restartu nepřičte body 2×.
 -- Staré řádky se průběžně mažou (prune), tabulka neroste donekonečna.

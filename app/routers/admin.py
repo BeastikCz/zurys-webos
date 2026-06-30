@@ -24,7 +24,8 @@ from ..models import (ProductIn, SkinLookupIn, SkinSearchIn, ImageUploadIn, User
                       BanIn, DropCreateIn, AutoDropIn, RuleIn, EconomyIn, IpBanIn, IpUnbanIn, BotToggleIn,
                       LiveModeIn, LegacyImportIn, PatchNoteIn, CommunityGoalIn, SubGoalIn, ModAppDecideIn, ManualOrderIn, ManualOrderBulkIn,
                       PointsLogPurgeIn, PartnerLinkIn, PartnerFlashConfigIn, GamesRakeIn, LiveHappyIn,
-                      SelfExcludeIn, TimeoutIn, ShopDiscountIn, BanClusterIn, MinesBanIn, BroadcastIn, EggArmIn)
+                      SelfExcludeIn, TimeoutIn, ShopDiscountIn, BanClusterIn, MinesBanIn, BroadcastIn, EggArmIn,
+                      AuctionCreateIn)
 from ..services import product_public, shop_discount_pct
 from ..security import new_code, secure_choice
 
@@ -2545,6 +2546,42 @@ def disarm_egg(request: Request,
     record_audit(conn, admin, request, "egg.disarm", "", "")
     conn.commit()
     return {"ok": True}
+
+
+# ---------------- Aukce o skiny ----------------
+@router.get("/auctions")
+def admin_auctions(conn: sqlite3.Connection = Depends(db_dep)):
+    """Všechny aukce (vč. vůdce/vítěze + jeho Kick nicku pro doručení skinu)."""
+    from .. import auctions
+    return auctions.admin_list(conn)
+
+
+@router.post("/auctions")
+def admin_auction_create(data: AuctionCreateIn, request: Request,
+                         conn: sqlite3.Connection = Depends(db_dep),
+                         admin: sqlite3.Row = Depends(require_user)):
+    """Vystaví aukci o skin (název + obrázek + vyvolávací cena + min příhoz + délka v minutách)."""
+    from .. import auctions
+    r = auctions.create(conn, data.title, data.image_url, data.start_bid, data.min_increment, data.minutes)
+    if not r.get("ok"):
+        raise HTTPException(status_code=400, detail=r.get("error", "Vystavit se to nepodařilo."))
+    record_audit(conn, admin, request, "auction.create", f"#{r['id']} {data.title}", f"start {data.start_bid}, {data.minutes} min")
+    conn.commit()
+    return r
+
+
+@router.post("/auctions/{auction_id}/cancel")
+def admin_auction_cancel(auction_id: int, request: Request,
+                         conn: sqlite3.Connection = Depends(db_dep),
+                         admin: sqlite3.Row = Depends(require_user)):
+    """Zruší aktivní aukci – vrátí aktuálnímu vůdci jeho zablokované sedláky (escrow)."""
+    from .. import auctions
+    r = auctions.cancel(conn, auction_id)
+    if not r.get("ok"):
+        raise HTTPException(status_code=400, detail=r.get("error", "Zrušit se to nepodařilo."))
+    record_audit(conn, admin, request, "auction.cancel", f"#{auction_id}", f"vráceno {r.get('refunded', 0)}")
+    conn.commit()
+    return r
 
 
 @router.post("/drops/auto")
