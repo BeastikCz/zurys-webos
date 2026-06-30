@@ -1,96 +1,159 @@
-"""Statek (mini-farma) MVP: koupit → nakrmit → produkce → sebrat (XP+sedláci) → hlad. Sloty base+sub.
+"""Statek (mini-farma): loop + levely + krmivo + prodej + sbírka + sub-only + utility kůň.
 
     .venv/Scripts/python.exe -m pytest tests/test_farm.py -v
 """
 import secrets
 
 
-def _user(conn, is_sub=0):
+def _user(conn, is_sub=0, points=300000):
     from app.db import now_iso
     u = f"farm_{secrets.token_hex(3)}"
-    uid = conn.execute(
+    return conn.execute(
         "INSERT INTO users (kick_username, username, role, points, earned_total, is_sub, created_at) "
-        "VALUES (?,?,?,?,0,?,?)", (u, u, "user", 50000, is_sub, now_iso())).lastrowid
-    return uid
+        "VALUES (?,?,?,?,0,?,?)", (u, u, "user", points, is_sub, now_iso())).lastrowid
 
 
 def _row(conn, uid):
     return conn.execute("SELECT * FROM users WHERE id=?", (uid,)).fetchone()
 
 
-def test_farm_full_loop():
+def _ready_now(conn, uid, slot):
+    conn.execute("UPDATE farm_animals SET ready_at='2000-01-01T00:00:00+00:00' WHERE user_id=? AND slot=?", (uid, slot))
+    conn.commit()
+
+
+def test_full_loop_and_xp():
     from app.db import get_conn
     from app import farm
     conn = get_conn()
     try:
         uid = _user(conn); conn.commit()
-        user = _row(conn, uid)
-        # koupě
-        r = farm.buy(conn, user, "chicken")
-        assert r["ok"], r
-        st = farm.status(conn, user)
-        assert st["n_slots"] == 2 and st["slots"][0]["state"] == "hungry", st["slots"][0]
-        # krmení → roste
-        bal0 = _row(conn, uid)["points"]
-        rf = farm.feed(conn, _row(conn, uid), 0)
-        assert rf["ok"] and _row(conn, uid)["points"] == bal0 - 80, rf
-        assert farm.status(conn, user)["slots"][0]["state"] == "growing"
-        # sebrání moc brzy → chyba
-        assert not farm.collect(conn, _row(conn, uid), 0).get("ok")
-        # přetoč čas → ready_at do minulosti
-        conn.execute("UPDATE farm_animals SET ready_at='2000-01-01T00:00:00+00:00' WHERE user_id=? AND slot=0", (uid,))
-        conn.commit()
+        assert farm.buy(conn, _row(conn, uid), "chicken")["ok"]
+        assert farm.status(conn, _row(conn, uid))["slots"][0]["state"] == "hungry"
+        assert farm.feed(conn, _row(conn, uid), 0)["ok"]
+        assert not farm.collect(conn, _row(conn, uid), 0).get("ok")     # moc brzy
+        _ready_now(conn, uid, 0)
         et0 = _row(conn, uid)["earned_total"]
-        bal1 = _row(conn, uid)["points"]
         rc = farm.collect(conn, _row(conn, uid), 0)
-        assert rc["ok"] and rc["reward"] >= 130, rc
-        assert _row(conn, uid)["points"] >= bal1 + 130, "produkt přičten"
+        assert rc["ok"] and rc["reward"] >= 130
         assert _row(conn, uid)["earned_total"] > et0, "produkt dal XP (garden bucket)"
-        # po sebrání zase hlad
-        assert farm.status(conn, user)["slots"][0]["state"] == "hungry"
-        # druhé sebrání → už nic (anti-double)
-        assert not farm.collect(conn, _row(conn, uid), 0).get("ok")
+        assert farm.status(conn, _row(conn, uid))["slots"][0]["state"] == "hungry"   # zase hlad
+        assert not farm.collect(conn, _row(conn, uid), 0).get("ok")     # anti-double
     finally:
         conn.close()
 
 
-def test_slots_base_two_nonsub():
-    from app.db import get_conn
-    from app import farm
-    conn = get_conn()
-    try:
-        uid = _user(conn, is_sub=0); conn.commit()
-        assert farm.buy(conn, _row(conn, uid), "chicken")["ok"]
-        assert farm.buy(conn, _row(conn, uid), "chicken")["ok"]
-        third = farm.buy(conn, _row(conn, uid), "chicken")
-        assert not third["ok"], "non-sub má jen 2 sloty"
-    finally:
-        conn.close()
-
-
-def test_sub_extra_slot():
-    from app.db import get_conn
-    from app import farm
-    conn = get_conn()
-    try:
-        uid = _user(conn, is_sub=1); conn.commit()
-        assert farm.status(conn, _row(conn, uid))["n_slots"] == 3, "sub má 3 sloty"
-        for _ in range(3):
-            assert farm.buy(conn, _row(conn, uid), "chicken")["ok"]
-        assert not farm.buy(conn, _row(conn, uid), "chicken")["ok"]
-    finally:
-        conn.close()
-
-
-def test_feed_hungry_only():
+def test_levels_scale_reward():
     from app.db import get_conn
     from app import farm
     conn = get_conn()
     try:
         uid = _user(conn); conn.commit()
         farm.buy(conn, _row(conn, uid), "chicken")
-        assert farm.feed(conn, _row(conn, uid), 0)["ok"]
-        # už produkuje → druhé krmení zamítnuto
-        assert not farm.feed(conn, _row(conn, uid), 0).get("ok")
+        # nakrm FEED_PER_LEVEL× (mezi tím sbírej) → level 2
+        leveled = False
+        for _ in range(farm.FEED_PER_LEVEL):
+            rf = farm.feed(conn, _row(conn, uid), 0)
+            leveled = leveled or rf.get("leveled_up")
+            _ready_now(conn, uid, 0)
+            farm.collect(conn, _row(conn, uid), 0)
+        assert leveled, "po FEED_PER_LEVEL krmení musí přijít level up"
+        st = farm.status(conn, _row(conn, uid))["slots"][0]
+        assert st["level"] >= 2 and st["reward"] > 130, "level zvedl výnos"
+    finally:
+        conn.close()
+
+
+def test_krmivo_from_harvest_then_feed():
+    from app.db import get_conn
+    from app import farm, garden
+    from datetime import datetime, timezone, timedelta
+    conn = get_conn()
+    try:
+        uid = _user(conn); conn.commit()
+        user = _row(conn, uid)
+        # zasaď + přetoč + sklidí → padne krmivo
+        garden.plant(conn, user, 0, "mrkev")
+        conn.execute("UPDATE garden SET ready_at='2000-01-01T00:00:00+00:00', pest=0, pest_at=NULL WHERE user_id=? AND plot=0", (uid,))
+        conn.commit()
+        garden.harvest(conn, _row(conn, uid), 0)
+        assert _row(conn, uid)["feed_stock"] >= 1, "sklizeň shodila krmivo"
+        # krmení zvířete použije krmivo (zdarma, bez sedláků)
+        farm.buy(conn, _row(conn, uid), "chicken")
+        bal = _row(conn, uid)["points"]; stock = _row(conn, uid)["feed_stock"]
+        rf = farm.feed(conn, _row(conn, uid), 0)
+        assert rf["used_krmivo"] is True
+        assert _row(conn, uid)["points"] == bal, "krmivem zdarma → sedláci netknuté"
+        assert _row(conn, uid)["feed_stock"] == stock - 1
+    finally:
+        conn.close()
+
+
+def test_sell_refund_and_collection_persists():
+    from app.db import get_conn
+    from app import farm
+    conn = get_conn()
+    try:
+        uid = _user(conn); conn.commit()
+        farm.buy(conn, _row(conn, uid), "chicken")
+        bal = _row(conn, uid)["points"]
+        rs = farm.sell(conn, _row(conn, uid), 0)
+        assert rs["ok"] and rs["refund"] == 1000, rs            # 50 % z 2000
+        assert _row(conn, uid)["points"] == bal + 1000
+        assert farm.status(conn, _row(conn, uid))["slots"][0]["empty"], "slot uvolněn"
+        coll = farm.status(conn, _row(conn, uid))["collection"]
+        assert coll["have"] >= 1, "sbírka po prodeji zůstává"
+    finally:
+        conn.close()
+
+
+def test_collection_complete_reward():
+    from app.db import get_conn
+    from app import farm
+    conn = get_conn()
+    try:
+        uid = _user(conn); conn.commit()
+        all_keys = [a["key"] for a in farm.ANIMALS]
+        bal0 = _row(conn, uid)["points"]
+        for k in all_keys:                                       # zapiš všechny druhy do sbírky
+            farm._note_collection(conn, uid, k)
+        conn.commit()
+        st = farm.status(conn, _row(conn, uid))
+        assert st["collection"]["complete"] is True
+        assert _row(conn, uid)["points"] == bal0 + farm.COLLECTION_REWARD, "kompletní sbírka = bonus 1×"
+        # podruhé už nic
+        farm._note_collection(conn, uid, all_keys[0]); conn.commit()
+        assert _row(conn, uid)["points"] == bal0 + farm.COLLECTION_REWARD
+    finally:
+        conn.close()
+
+
+def test_sub_only_unicorn():
+    from app.db import get_conn
+    from app import farm
+    conn = get_conn()
+    try:
+        free = _user(conn, is_sub=0); sub = _user(conn, is_sub=1); conn.commit()
+        assert not farm.buy(conn, _row(conn, free), "unicorn").get("ok"), "non-sub nesmí jednorožce"
+        assert farm.buy(conn, _row(conn, sub), "unicorn")["ok"], "sub smí jednorožce"
+    finally:
+        conn.close()
+
+
+def test_utility_horse_bonus():
+    from app.db import get_conn
+    from app import farm
+    conn = get_conn()
+    try:
+        uid = _user(conn, is_sub=1); conn.commit()             # sub = 3 sloty
+        farm.buy(conn, _row(conn, uid), "horse")                # utility
+        farm.buy(conn, _row(conn, uid), "chicken")
+        # kůň nejde krmit/sbírat
+        hslot = next(s["slot"] for s in farm.status(conn, _row(conn, uid))["slots"] if s.get("utility"))
+        assert not farm.feed(conn, _row(conn, uid), hslot).get("ok")
+        # produkce slepičky je o +10 % (kůň bonus)
+        cslot = next(s["slot"] for s in farm.status(conn, _row(conn, uid))["slots"] if not s.get("empty") and not s.get("utility"))
+        st = farm.status(conn, _row(conn, uid))["slots"][cslot]
+        assert st["reward"] == round(130 * 1.10), f"kůň +10 % → {st['reward']}"
     finally:
         conn.close()

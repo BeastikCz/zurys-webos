@@ -2429,18 +2429,18 @@ async function loadFarm() {
   const box = document.getElementById("farmBox"); if (!box) return;
   try {
     const f = await api("/farm");
-    const slots = f.slots.map((s) => {
-      if (s.empty) return `<div class="grd-plot grd-empty" data-action="farm-buy" data-animal="${f.animals[0] ? f.animals[0].key : "chicken"}"><div class="grd-crop">➕</div><div class="grd-lbl">Koupit zvíře</div></div>`;
-      if (s.state === "ready") return `<div class="grd-plot grd-ready"><div class="grd-crop">${s.icon}</div><div class="grd-lbl">${esc(s.name)}</div><button class="bp-claim" data-action="farm-collect" data-slot="${s.slot}">${s.pico} Sebrat +${fmtPts(s.reward)}</button></div>`;
-      if (s.state === "hungry") return `<div class="grd-plot grd-pestd"><div class="grd-crop">${s.icon}</div><div class="grd-lbl">${esc(s.name)} <span class="faint" style="font-size:11px;color:#ffd25a">má hlad</span></div><button class="grd-rescue-btn" data-action="farm-feed" data-slot="${s.slot}">🌾 Nakrmit ${fmtPts(s.feed)}</button></div>`;
-      return `<div class="grd-plot grd-grow"><div class="grd-crop grd-sprout">${s.icon}</div><div class="grd-lbl">${esc(s.name)}</div><div class="grd-time" data-left="${s.seconds_left}">${grdDur(s.seconds_left)}</div></div>`;
-    }).join("");
+    const slots = f.slots.map((s) => farmSlotHTML(s)).join("");
     const ready = f.slots.filter((s) => !s.empty && s.state === "ready");
     const readySum = ready.reduce((a, s) => a + s.reward, 0);
     const bulk = ready.length ? `<div class="grd-bulk" style="display:flex;gap:8px;flex-wrap:wrap;margin:14px 0 0"><button class="bp-claim" data-action="farm-collect-all">⚡ Sebrat vše (${ready.length}× · +${fmtPts(readySum)})</button></div>` : "";
-    const shop = f.animals.map((a) => `<button class="grd-seed" data-action="farm-buy" data-animal="${a.key}"><span class="grd-si">${a.icon}</span><b>${esc(a.name)}</b><span class="faint">koupě ${fmtPts(a.cost)} · krmivo ${fmtPts(a.feed)} / ${a.hours} h · ${a.pico} <b style="color:var(--farm-green,#46d369)">+${fmtPts(a.reward)} + XP</b></span></button>`).join("");
-    box.innerHTML = `<div class="grd-grid">${slots}</div>${bulk}
-      <p class="muted" style="font-size:12px;margin:16px 0 8px">Sloty: <b>${f.n_slots}</b>${f.sub ? ` (💜 sub +1)` : ` · 💜 sub má +1 slot`}. Produkt dává <b>XP do levelu i Battle Passu</b> (mimo denní strop) + sedláky. Zlatý produkt (${f.golden_pct} %) = ×${f.golden_mult} sedláci. Nenakrmené zvíře neprodukuje 🌾.</p>
+    const col = f.collection;
+    const collBar = `<div class="panel" style="margin:0 0 14px;padding:10px 14px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;font-size:13px">
+      <b>🏆 Sbírka</b><span class="faint">${col.have}/${col.total} druhů${col.complete ? ` · <b style="color:var(--farm-green,#46d369)">✓ KOMPLETNÍ</b>` : ` · kompletní = +${fmtPts(col.reward)} 🎁`}</span>
+      <span style="margin-left:auto" class="faint">🌾 Krmivo <b style="color:var(--accent)">${f.krmivo}</b> <span style="font-size:11px">(ze sklizně)</span></span>
+      ${f.prod_bonus ? `<span class="faint">🐴 +${f.prod_bonus}% produkce</span>` : ""}</div>`;
+    const shop = f.animals.map((a) => farmShopHTML(a)).join("");
+    box.innerHTML = `${collBar}<div class="grd-grid">${slots}</div>${bulk}
+      <p class="muted" style="font-size:12px;margin:16px 0 8px">Sloty: <b>${f.n_slots}</b>${f.sub ? ` (💜 sub +1)` : ` · 💜 sub má +1 slot`}. Krmení bere <b>krmivo</b> (zdarma ze zahrádky), jinak sedláky. Produkt = <b>XP</b> (mimo strop) + sedláci, <b>levelem roste</b> ⭐. Zlatý produkt (${f.golden_pct} %) ×${f.golden_mult}. Nenakrmené neprodukuje 🌾.</p>
       <div class="section-title" style="margin:18px 0 8px">🐾 Zvířata k koupi</div>
       <div class="grd-shop">${shop}</div>`;
     if (window._farmTimer) clearInterval(window._farmTimer);
@@ -2466,7 +2466,32 @@ async function farmFeed(slot) {
   try {
     const r = await api("/farm/feed", { method: "POST", body: { slot: parseInt(slot, 10) } });
     if (state.user) state.user.points = r.balance;
-    toast(`Nakrmeno 🌾 — ${esc(r.name)} produkuje (${r.hours} h)`, "success");
+    if (r.leveled_up) { toast(`⭐ LEVEL UP! ${esc(r.name)} je teď level ${r.level} — větší výnos!`, "success"); try { confettiBurst(); } catch (e) {} }
+    else toast(`Nakrmeno ${r.used_krmivo ? "krmivem 🌾 (zdarma)" : "🌾"} — ${esc(r.name)} produkuje`, "success");
+    renderHeader(); loadFarm();
+  } catch (e) { toast(e.message, "error"); }
+}
+function farmStars(lvl, max) { return `<span class="faint" style="font-size:11px" title="Level ${lvl}/${max} – krmením roste výnos i rychlost">⭐${lvl}</span>`; }
+function farmSlotHTML(s) {
+  if (s.empty) return `<div class="grd-plot grd-empty" style="opacity:.7"><div class="grd-crop">➕</div><div class="grd-lbl">Volný slot<br><span class="faint" style="font-size:11px">kup dole</span></div></div>`;
+  const sell = `<button data-action="farm-sell" data-slot="${s.slot}" title="Prodat (část ceny zpět)" style="position:absolute;top:3px;right:6px;background:none;border:none;color:#ff8a8a;cursor:pointer;font-size:14px;line-height:1">✕</button>`;
+  if (s.utility) return `<div class="grd-plot grd-ready" style="position:relative">${sell}<div class="grd-crop">${s.icon}</div><div class="grd-lbl">${esc(s.name)} ${farmStars(s.level, s.max_level)}<br><span class="faint" style="font-size:11px;color:#7ed957">pasivní +${s.bonus}% produkce</span></div></div>`;
+  if (s.state === "ready") return `<div class="grd-plot grd-ready" style="position:relative">${sell}<div class="grd-crop">${s.icon}</div><div class="grd-lbl">${esc(s.name)} ${farmStars(s.level, s.max_level)}</div><button class="bp-claim" data-action="farm-collect" data-slot="${s.slot}">${s.pico} Sebrat +${fmtPts(s.reward)}</button></div>`;
+  if (s.state === "hungry") return `<div class="grd-plot grd-pestd" style="position:relative">${sell}<div class="grd-crop">${s.icon}</div><div class="grd-lbl">${esc(s.name)} ${farmStars(s.level, s.max_level)} <span class="faint" style="font-size:11px;color:#ffd25a">má hlad</span></div><button class="grd-rescue-btn" data-action="farm-feed" data-slot="${s.slot}">🌾 Nakrmit ${fmtPts(s.feed)}</button></div>`;
+  return `<div class="grd-plot grd-grow" style="position:relative">${sell}<div class="grd-crop grd-sprout">${s.icon}</div><div class="grd-lbl">${esc(s.name)} ${farmStars(s.level, s.max_level)}</div><div class="grd-time" data-left="${s.seconds_left}">${grdDur(s.seconds_left)}</div></div>`;
+}
+function farmShopHTML(a) {
+  const locked = a.locked;
+  const detail = a.utility ? `+${a.prod_bonus}% produkce všech` : `krmivo ${fmtPts(a.feed)}/${a.hours}h · ${a.pico}+${fmtPts(a.reward)}`;
+  const attr = locked ? `disabled style="opacity:.5;cursor:not-allowed"` : `data-action="farm-buy" data-animal="${a.key}"`;
+  return `<button class="grd-seed" ${attr}><span class="grd-si">${a.icon}</span><b>${esc(a.name)}${a.sub_only ? " 💜" : ""}${a.owned ? " ✓" : ""}</b><span class="faint">koupě ${fmtPts(a.cost)} · ${detail}${locked ? " · 🔒 jen sub" : ""}</span></button>`;
+}
+async function farmSell(slot) {
+  if (!confirm("Prodat zvíře? Vrátí se část ceny, slot se uvolní (sbírka zůstane).")) return;
+  try {
+    const r = await api("/farm/sell", { method: "POST", body: { slot: parseInt(slot, 10) } });
+    if (state.user) state.user.points = r.balance;
+    toast(`Prodáno: ${esc(r.name)} +${fmtPts(r.refund)} 💰`, "info");
     renderHeader(); loadFarm();
   } catch (e) { toast(e.message, "error"); }
 }
@@ -5702,6 +5727,7 @@ function handleAction(action, el) {
     case "farm-feed": farmFeed(el.dataset.slot); break;
     case "farm-collect": farmCollect(el.dataset.slot); break;
     case "farm-collect-all": farmCollectAll(); break;
+    case "farm-sell": farmSell(el.dataset.slot); break;
     case "decor-buy": buyDecor(el.dataset.key); break;
     case "claim-partner": claimPartnerLink(el.dataset.id, el.dataset.url); break;
     case "claim-quest": claimQuest(el.dataset.key); break;

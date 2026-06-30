@@ -1418,6 +1418,17 @@ def farm_collect_all(user: sqlite3.Row = Depends(require_user),
     return farm.collect_all(conn, user)
 
 
+@router.post("/farm/sell")
+def farm_sell(data: FarmSlotIn, user: sqlite3.Row = Depends(require_user),
+              conn: sqlite3.Connection = Depends(db_dep)):
+    """Prodá zvíře ze slotu (část ceny zpět, uvolní slot). Sbírka zůstává."""
+    from .. import farm
+    r = farm.sell(conn, user, data.slot)
+    if not r.get("ok"):
+        raise HTTPException(status_code=400, detail=r.get("error", "Prodat se to teď nepodařilo."))
+    return r
+
+
 # ---------------- Kolo štěstí (denní spin) ----------------
 # Políčka kola: (sedláci, váha). Pořadí v seznamu = pořadí na kole (záměrně střídá
 # velké/malé). Váhy = relativní šance; součet 100 → rovnou %. Malé časté, jackpot vzácný.

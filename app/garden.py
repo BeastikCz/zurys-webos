@@ -189,7 +189,8 @@ def _harvest_reward(c: dict, pest: bool):
 
 def _award_harvest(conn, user_id, reward, reason, golden):
     """Připíše sklizeň. ZLATÁ = ×GOLDEN_MULT SEDLÁCI ale XP jen z base (neměň XP na produ):
-    base s XP + zlatý bonus BEZ XP. Necommituje (commituje caller)."""
+    base s XP + zlatý bonus BEZ XP. Navíc shodí KRMIVO na statek (propojení zahrada↔statek).
+    Necommituje (commituje caller)."""
     from .deps import add_points
     if golden and GOLDEN_MULT > 1:
         base = reward // GOLDEN_MULT
@@ -197,6 +198,8 @@ def _award_harvest(conn, user_id, reward, reason, golden):
         add_points(conn, user_id, reward - base, "Zlatý bonus 🌟", xp=False)  # extra sedláci BEZ XP
     else:
         add_points(conn, user_id, reward, reason)
+    from . import farm                                                         # sklizeň krmí statek
+    farm.add_krmivo(conn, user_id)
 
 
 def harvest(conn, user, plot: int) -> dict:

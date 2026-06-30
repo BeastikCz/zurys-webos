@@ -356,6 +356,14 @@ CREATE TABLE IF NOT EXISTS farm_animals (
     PRIMARY KEY (user_id, slot)
 );
 
+-- Statek – sbírka: kdy-koliv vlastněné druhy zvířat (pro odznak „Statkář" za kompletní sbírku).
+CREATE TABLE IF NOT EXISTS farm_collection (
+    user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    animal_key TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    PRIMARY KEY (user_id, animal_key)
+);
+
 -- PvP hry o body: piškvorky (gomoku). 1v1 se sázkou, escrow vkladů, vítěz bere bank.
 CREATE TABLE IF NOT EXISTS games (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -709,6 +717,7 @@ _MIGRATIONS = [
     ("garden", "pest_at", "TEXT"),                             # KDY se chrobáci objeví (ISO) / NULL = bez chrobáků. Aktivní = pest_at .. pest_at+okno
     ("garden", "notified", "INTEGER NOT NULL DEFAULT 0"),      # bitmask in-app notifikací: 1=úroda dozrála, 2=chrobáci (1× na záhon, brání spamu)
     ("battlepass", "claimed_premium", "TEXT NOT NULL DEFAULT '[]'"),   # prémiová (sub-only) řada Battle Passu – JSON list vyzvednutých tierů
+    ("users", "feed_stock", "INTEGER NOT NULL DEFAULT 0"),    # Statek: zásoba krmiva (padá ze sklizně zahrádky) – krmí zvířata zdarma místo sedláků
     # Responsible gaming – denní limit sázek (Tipsport-style). 0/NULL = bez limitu.
     ("users", "wager_limit", "INTEGER"),                   # aktuální denní strop sázek
     ("users", "wager_limit_pending", "INTEGER"),           # navýšení čeká na zítřek (snížit jde hned)
