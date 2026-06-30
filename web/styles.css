@@ -1598,6 +1598,36 @@ body::before { display: none !important; }
 .grd-seed b { font-size: 14px; }
 .grd-seed .faint { font-size: 11.5px; }
 
+/* 🚜 Statek – farm scéna: zvířata stojí na pastvině (ne obdélníky), animace + bubliny */
+.farm-pasture { position: relative; border-radius: 18px; border: 1px solid var(--border); overflow: hidden;
+  background: linear-gradient(180deg, rgba(70,96,128,.20) 0%, rgba(54,82,52,.26) 44%, rgba(86,104,46,.32) 100%);
+  padding: 26px 12px 18px; display: flex; flex-wrap: wrap; gap: 4px; align-items: flex-end; justify-content: center; min-height: 170px; }
+.farm-pasture::before { content: "☁️        🌤️          ☁️"; position: absolute; top: 7px; left: 0; right: 0; text-align: center; font-size: 15px; opacity: .3; letter-spacing: 6px; pointer-events: none; }
+.farm-pasture::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 13px; pointer-events: none;
+  background: repeating-linear-gradient(90deg, rgba(122,86,48,.5) 0 7px, rgba(88,60,32,.5) 7px 9px); }
+.farm-animal { position: relative; display: flex; flex-direction: column; align-items: center; gap: 0;
+  width: 90px; padding: 16px 4px 6px; z-index: 1; }
+.farm-animal[data-action] { cursor: pointer; }
+.fa-emoji { font-size: 50px; line-height: 1; filter: drop-shadow(0 5px 4px rgba(0,0,0,.45)); animation: faBob 3.2s ease-in-out infinite; }
+.fa-name { font-size: 12px; font-weight: 800; color: var(--text); white-space: nowrap; margin-top: 1px; }
+.fa-lvl { font-size: 10.5px; color: var(--accent); font-weight: 800; }
+.farm-animal.fa-hungry .fa-emoji { animation: faShake .55s ease-in-out infinite; }
+.farm-animal.fa-ready .fa-emoji { animation: faBounce .85s ease-in-out infinite; }
+.farm-animal.fa-ready { filter: drop-shadow(0 0 15px rgba(126,217,87,.5)); }
+.farm-animal[data-action]:hover .fa-emoji { transform: scale(1.09); }
+.farm-animal.fa-empty .fa-emoji { opacity: .28; animation: none; }
+.fa-bubble { position: absolute; top: -2px; left: 50%; transform: translateX(-50%); white-space: nowrap;
+  font-size: 11px; font-weight: 800; padding: 3px 9px; border-radius: 999px; box-shadow: 0 3px 8px -3px rgba(0,0,0,.55); z-index: 2; }
+.fa-bubble-hungry { background: #ffce5a; color: #5a3e0a; }
+.fa-bubble-ready { background: var(--farm-green, #46d369); color: #0e2a10; }
+.fa-bubble-grow { background: rgba(18,22,28,.88); color: var(--accent); font-variant-numeric: tabular-nums; }
+.fa-bubble-util { background: #7ed957; color: #133a0a; }
+.fa-sell { position: absolute; top: 1px; right: 4px; background: none; border: none; color: #ff8a8a; cursor: pointer; font-size: 13px; line-height: 1; opacity: .55; z-index: 3; padding: 2px; }
+.fa-sell:hover { opacity: 1; }
+@keyframes faBob { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-5px)} }
+@keyframes faShake { 0%,100%{transform:rotate(-5deg)} 50%{transform:rotate(5deg)} }
+@keyframes faBounce { 0%,100%{transform:translateY(0)} 40%{transform:translateY(-12px)} }
+
 /* denní bonus folded v Battle Passu */
 .bp-daily-done { font-size: 12.5px; font-weight: 700; color: var(--farm-green); background: rgba(126,217,87,.08); border: 1px solid rgba(126,217,87,.28); border-radius: 12px; padding: 9px 12px; margin: 0 0 14px; text-align: center; }
 

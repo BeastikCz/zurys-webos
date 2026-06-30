@@ -2439,7 +2439,7 @@ async function loadFarm() {
       <span style="margin-left:auto" class="faint">🌾 Krmivo <b style="color:var(--accent)">${f.krmivo}</b> <span style="font-size:11px">(ze sklizně)</span></span>
       ${f.prod_bonus ? `<span class="faint">🐴 +${f.prod_bonus}% produkce</span>` : ""}</div>`;
     const shop = f.animals.map((a) => farmShopHTML(a)).join("");
-    box.innerHTML = `${collBar}<div class="grd-grid">${slots}</div>${bulk}
+    box.innerHTML = `${collBar}<div class="farm-pasture">${slots}</div>${bulk}
       <p class="muted" style="font-size:12px;margin:16px 0 8px">Sloty: <b>${f.n_slots}</b>${f.sub ? ` (💜 sub +1)` : ` · 💜 sub má +1 slot`}. Krmení bere <b>krmivo</b> (zdarma ze zahrádky), jinak sedláky. Produkt = <b>XP</b> (mimo strop) + sedláci, <b>levelem roste</b> ⭐. Zlatý produkt (${f.golden_pct} %) ×${f.golden_mult}. Nenakrmené neprodukuje 🌾.</p>
       <div class="section-title" style="margin:18px 0 8px">🐾 Zvířata k koupi</div>
       <div class="grd-shop">${shop}</div>`;
@@ -2472,13 +2472,16 @@ async function farmFeed(slot) {
   } catch (e) { toast(e.message, "error"); }
 }
 function farmStars(lvl, max) { return `<span class="faint" style="font-size:11px" title="Level ${lvl}/${max} – krmením roste výnos i rychlost">⭐${lvl}</span>`; }
+function farmSellBtn(s) { return `<button class="fa-sell" data-action="farm-sell" data-slot="${s.slot}" title="Prodat zvíře (část ceny zpět)">✕</button>`; }
 function farmSlotHTML(s) {
-  if (s.empty) return `<div class="grd-plot grd-empty" style="opacity:.7"><div class="grd-crop">➕</div><div class="grd-lbl">Volný slot<br><span class="faint" style="font-size:11px">kup dole</span></div></div>`;
-  const sell = `<button data-action="farm-sell" data-slot="${s.slot}" title="Prodat (část ceny zpět)" style="position:absolute;top:3px;right:6px;background:none;border:none;color:#ff8a8a;cursor:pointer;font-size:14px;line-height:1">✕</button>`;
-  if (s.utility) return `<div class="grd-plot grd-ready" style="position:relative">${sell}<div class="grd-crop">${s.icon}</div><div class="grd-lbl">${esc(s.name)} ${farmStars(s.level, s.max_level)}<br><span class="faint" style="font-size:11px;color:#7ed957">pasivní +${s.bonus}% produkce</span></div></div>`;
-  if (s.state === "ready") return `<div class="grd-plot grd-ready" style="position:relative">${sell}<div class="grd-crop">${s.icon}</div><div class="grd-lbl">${esc(s.name)} ${farmStars(s.level, s.max_level)}</div><button class="bp-claim" data-action="farm-collect" data-slot="${s.slot}">${s.pico} Sebrat +${fmtPts(s.reward)}</button></div>`;
-  if (s.state === "hungry") return `<div class="grd-plot grd-pestd" style="position:relative">${sell}<div class="grd-crop">${s.icon}</div><div class="grd-lbl">${esc(s.name)} ${farmStars(s.level, s.max_level)} <span class="faint" style="font-size:11px;color:#ffd25a">má hlad</span></div><button class="grd-rescue-btn" data-action="farm-feed" data-slot="${s.slot}">🌾 Nakrmit ${fmtPts(s.feed)}</button></div>`;
-  return `<div class="grd-plot grd-grow" style="position:relative">${sell}<div class="grd-crop grd-sprout">${s.icon}</div><div class="grd-lbl">${esc(s.name)} ${farmStars(s.level, s.max_level)}</div><div class="grd-time" data-left="${s.seconds_left}">${grdDur(s.seconds_left)}</div></div>`;
+  if (s.empty) return `<div class="farm-animal fa-empty"><div class="fa-emoji">➕</div><div class="fa-name faint">volno</div></div>`;
+  const lvl = `<span class="fa-lvl">⭐${s.level}</span>`;
+  const name = `<div class="fa-name">${esc(s.name)} ${lvl}</div>`;
+  // celé zvíře je klikací (hlad→nakrmit, hotovo→sebrat); ✕ v rohu = prodej (closest data-action to vyřeší)
+  if (s.utility) return `<div class="farm-animal fa-util">${farmSellBtn(s)}<div class="fa-bubble fa-bubble-util">+${s.bonus}%</div><div class="fa-emoji">${s.icon}</div>${name}</div>`;
+  if (s.state === "ready") return `<div class="farm-animal fa-ready" data-action="farm-collect" data-slot="${s.slot}">${farmSellBtn(s)}<div class="fa-bubble fa-bubble-ready">${s.pico} +${fmtPts(s.reward)}</div><div class="fa-emoji">${s.icon}</div>${name}</div>`;
+  if (s.state === "hungry") return `<div class="farm-animal fa-hungry" data-action="farm-feed" data-slot="${s.slot}">${farmSellBtn(s)}<div class="fa-bubble fa-bubble-hungry">🌾 ${fmtPts(s.feed)}</div><div class="fa-emoji">${s.icon}</div>${name}</div>`;
+  return `<div class="farm-animal fa-grow">${farmSellBtn(s)}<div class="fa-bubble fa-bubble-grow grd-time" data-left="${s.seconds_left}">${grdDur(s.seconds_left)}</div><div class="fa-emoji">${s.icon}</div>${name}</div>`;
 }
 function farmShopHTML(a) {
   const locked = a.locked;
