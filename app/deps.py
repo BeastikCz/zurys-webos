@@ -460,7 +460,7 @@ def classify_xp(reason: str):
         return ("farm", QUEST_XP_FACTOR)                #   → quirk pryč: Sázkař/Lovec dropů teď konzistentně 0.5)
     if any(k in r for k in _XP_ZERO_KW):
         return ("zero", None)
-    if "skliz" in r:                                    # zahrádka „Sklizeň…" → uncapped (mimo strop), nízký faktor
+    if "skliz" in r or "statek:" in r:                  # zahrádka „Sklizeň…" + statek „Statek: vejce…" → uncapped, nízký faktor
         return ("garden", GARDEN_XP_FACTOR)
     return ("farm", 0.5 if any(k in r for k in _XP_HALF_KW) else 1.0)
 

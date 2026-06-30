@@ -17,7 +17,7 @@ from ..deps import (db_dep, require_user, add_points, try_debit, record_audit, c
 from ..models import (RedeemIn, TradeUrlIn, GiftIn, QuestClaimIn, CosmeticIn, FairSeedIn, SelfExcludeIn,
                       ProfileBioIn, WagerLimitIn, ModApplyIn, BattlePassClaimIn, LoginCalClaimIn,
                       GardenPlantIn, GardenPlantAllIn, GardenHarvestIn, DecorBuyIn, LevelPassClaimIn,
-                      EggClaimIn)
+                      EggClaimIn, FarmBuyIn, FarmSlotIn)
 from ..services import product_public, role_allows
 from ..ratelimit import rate_limit
 from ..security import secure_weighted_choice
@@ -1366,6 +1366,56 @@ def garden_decor_buy(data: DecorBuyIn, user: sqlite3.Row = Depends(require_user)
     if not r.get("ok"):
         raise HTTPException(status_code=400, detail=r.get("error", "Koupit se to teď nepodařilo."))
     return r
+
+
+# ---------------- Statek (mini-farma) ----------------
+@router.get("/farm")
+def farm_status(user: sqlite3.Row = Depends(require_user),
+                conn: sqlite3.Connection = Depends(db_dep)):
+    """Statek: stav slotů (prázdný / zvíře hladové / roste / hotovo) + katalog zvířat."""
+    from .. import farm
+    return farm.status(conn, user)
+
+
+@router.post("/farm/buy")
+def farm_buy(data: FarmBuyIn, user: sqlite3.Row = Depends(require_user),
+             conn: sqlite3.Connection = Depends(db_dep)):
+    """Koupí zvíře do volného slotu (sink). Nové zvíře je hladové."""
+    from .. import farm
+    r = farm.buy(conn, user, data.animal)
+    if not r.get("ok"):
+        raise HTTPException(status_code=400, detail=r.get("error", "Koupit se to teď nepodařilo."))
+    return r
+
+
+@router.post("/farm/feed")
+def farm_feed(data: FarmSlotIn, user: sqlite3.Row = Depends(require_user),
+              conn: sqlite3.Connection = Depends(db_dep)):
+    """Nakrmí hladové zvíře (sink) → spustí produkční cyklus."""
+    from .. import farm
+    r = farm.feed(conn, user, data.slot)
+    if not r.get("ok"):
+        raise HTTPException(status_code=400, detail=r.get("error", "Nakrmit se to teď nepodařilo."))
+    return r
+
+
+@router.post("/farm/collect")
+def farm_collect(data: FarmSlotIn, user: sqlite3.Row = Depends(require_user),
+                 conn: sqlite3.Connection = Depends(db_dep)):
+    """Sebere hotový produkt → odměna (XP + sedláci), zvíře zhladoví."""
+    from .. import farm
+    r = farm.collect(conn, user, data.slot)
+    if not r.get("ok"):
+        raise HTTPException(status_code=400, detail=r.get("error", "Sebrat se to teď nepodařilo."))
+    return r
+
+
+@router.post("/farm/collect-all")
+def farm_collect_all(user: sqlite3.Row = Depends(require_user),
+                     conn: sqlite3.Connection = Depends(db_dep)):
+    """Sebere všechny hotové produkty naráz."""
+    from .. import farm
+    return farm.collect_all(conn, user)
 
 
 # ---------------- Kolo štěstí (denní spin) ----------------

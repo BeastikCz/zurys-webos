@@ -235,6 +235,7 @@ function render() {
     kosmetika: pageCosmetics, bj: pageBjRoom, zpravy: pageMessages, fair: pageFair, mines: pageMines,
     connect: pageConnect, login: pageConnect, register: pageConnect, u: pageUserProfile,
     "mod-nabor": pageModApply, staty: pageGameStats, "sin-slavy": pageHallOfFame, zahrada: pageGarden,
+    statek: pageFarm,
   };
   (pages[r.name] || pageShop)(r.param);
   window.scrollTo({ top: 0, behavior: "instant" in window ? "instant" : "auto" });
@@ -294,7 +295,7 @@ function renderHeader() {
   const route = currentRoute();
   const u = state.user;
   document.body.classList.toggle("logged-in", !!u);   /* na mobilu uvolní místo v topbaru (skryje wordmark) */
-  const items = [["shop", "Shop"], ["bonusy", "Bonusy"], ["ukoly", "Úkoly"], ["zahrada", "Zahrádka"], ["leaderboard", "Žebříček"], ["exchange", "Směnárna"], ["games", "Hry"], ["predikce", "Predikce"]];
+  const items = [["shop", "Shop"], ["bonusy", "Bonusy"], ["ukoly", "Úkoly"], ["zahrada", "Zahrádka"], ["statek", "Statek"], ["leaderboard", "Žebříček"], ["exchange", "Směnárna"], ["games", "Hry"], ["predikce", "Predikce"]];
   const navDot = (k) => ((k === "bonusy" && u && bonusReady) || (k === "ukoly" && u && questReady)) ? `<span class="nav-dot" title="Máš nevyzvednutou odměnu!"></span>` : "";
   const navLinks = items.map(([k, l]) => `<a href="#/${k}" class="nav-link ${route === k ? "active" : ""}">${l}${navDot(k)}</a>`).join("")
     + (isStaff(u) ? `<a href="#/admin" class="nav-link ${route === "admin" ? "active" : ""}">${u.role === "admin" ? "Admin" : "Panel"}</a>` : "");
@@ -2413,6 +2414,78 @@ async function grdPlantAll() {
     if (state.user) state.user.points = r.balance;
     toast(`Zasazeno ${r.planted}× ${r.name} −${fmtPts(r.spent)} · doroste za ${r.hours} h.`, "success");
     renderHeader(); loadGarden();
+  } catch (e) { toast(e.message, "error"); }
+}
+
+/* ---------- Statek (mini-farma: zvířata krmená sedláky → produkt = XP + sedláci) ---------- */
+function pageFarm() {
+  const view = $("#view");
+  if (!state.user) { view.innerHTML = `<div class="empty"><div class="big">🚜</div>Přihlas se přes Kick a rozjeď statek!</div>`; return; }
+  view.innerHTML = `<div class="page-head with-mascot"><img class="page-mascot" src="/sedlak-cut.png" alt=""><div class="ph-text"><h1>🚜 Statek</h1><p class="muted">Kup zvíře → nakrm ho → produkuje v čase → seber produkt = <b>XP + sedláci</b>! 🥚</p></div></div>
+    <div id="farmBox">${skeletonCards(1)}</div>`;
+  loadFarm();
+}
+async function loadFarm() {
+  const box = document.getElementById("farmBox"); if (!box) return;
+  try {
+    const f = await api("/farm");
+    const slots = f.slots.map((s) => {
+      if (s.empty) return `<div class="grd-plot grd-empty" data-action="farm-buy" data-animal="${f.animals[0] ? f.animals[0].key : "chicken"}"><div class="grd-crop">➕</div><div class="grd-lbl">Koupit zvíře</div></div>`;
+      if (s.state === "ready") return `<div class="grd-plot grd-ready"><div class="grd-crop">${s.icon}</div><div class="grd-lbl">${esc(s.name)}</div><button class="bp-claim" data-action="farm-collect" data-slot="${s.slot}">${s.pico} Sebrat +${fmtPts(s.reward)}</button></div>`;
+      if (s.state === "hungry") return `<div class="grd-plot grd-pestd"><div class="grd-crop">${s.icon}</div><div class="grd-lbl">${esc(s.name)} <span class="faint" style="font-size:11px;color:#ffd25a">má hlad</span></div><button class="grd-rescue-btn" data-action="farm-feed" data-slot="${s.slot}">🌾 Nakrmit ${fmtPts(s.feed)}</button></div>`;
+      return `<div class="grd-plot grd-grow"><div class="grd-crop grd-sprout">${s.icon}</div><div class="grd-lbl">${esc(s.name)}</div><div class="grd-time" data-left="${s.seconds_left}">${grdDur(s.seconds_left)}</div></div>`;
+    }).join("");
+    const ready = f.slots.filter((s) => !s.empty && s.state === "ready");
+    const readySum = ready.reduce((a, s) => a + s.reward, 0);
+    const bulk = ready.length ? `<div class="grd-bulk" style="display:flex;gap:8px;flex-wrap:wrap;margin:14px 0 0"><button class="bp-claim" data-action="farm-collect-all">⚡ Sebrat vše (${ready.length}× · +${fmtPts(readySum)})</button></div>` : "";
+    const shop = f.animals.map((a) => `<button class="grd-seed" data-action="farm-buy" data-animal="${a.key}"><span class="grd-si">${a.icon}</span><b>${esc(a.name)}</b><span class="faint">koupě ${fmtPts(a.cost)} · krmivo ${fmtPts(a.feed)} / ${a.hours} h · ${a.pico} <b style="color:var(--farm-green,#46d369)">+${fmtPts(a.reward)} + XP</b></span></button>`).join("");
+    box.innerHTML = `<div class="grd-grid">${slots}</div>${bulk}
+      <p class="muted" style="font-size:12px;margin:16px 0 8px">Sloty: <b>${f.n_slots}</b>${f.sub ? ` (💜 sub +1)` : ` · 💜 sub má +1 slot`}. Produkt dává <b>XP do levelu i Battle Passu</b> (mimo denní strop) + sedláky. Zlatý produkt (${f.golden_pct} %) = ×${f.golden_mult} sedláci. Nenakrmené zvíře neprodukuje 🌾.</p>
+      <div class="section-title" style="margin:18px 0 8px">🐾 Zvířata k koupi</div>
+      <div class="grd-shop">${shop}</div>`;
+    if (window._farmTimer) clearInterval(window._farmTimer);
+    window._farmTimer = setInterval(() => {
+      let reload = false;
+      document.querySelectorAll("#farmBox .grd-time").forEach((el) => {
+        const s = parseInt(el.dataset.left, 10) - 1;
+        if (s <= 0) reload = true; else { el.dataset.left = s; el.textContent = grdDur(s); }
+      });
+      if (reload) { clearInterval(window._farmTimer); window._farmTimer = null; loadFarm(); }
+    }, 1000);
+  } catch (e) { box.innerHTML = `<div class="empty">${esc(e.message)}</div>`; }
+}
+async function farmBuy(animal) {
+  try {
+    const r = await api("/farm/buy", { method: "POST", body: { animal } });
+    if (state.user) state.user.points = r.balance;
+    toast(`Koupil jsi ${r.icon} ${esc(r.name)}! Teď ho nakrm 🌾`, "success");
+    renderHeader(); loadFarm();
+  } catch (e) { toast(e.message, "error"); }
+}
+async function farmFeed(slot) {
+  try {
+    const r = await api("/farm/feed", { method: "POST", body: { slot: parseInt(slot, 10) } });
+    if (state.user) state.user.points = r.balance;
+    toast(`Nakrmeno 🌾 — ${esc(r.name)} produkuje (${r.hours} h)`, "success");
+    renderHeader(); loadFarm();
+  } catch (e) { toast(e.message, "error"); }
+}
+async function farmCollect(slot) {
+  try {
+    const r = await api("/farm/collect", { method: "POST", body: { slot: parseInt(slot, 10) } });
+    if (state.user) state.user.points = r.balance;
+    toast(`${r.golden ? "🌟 ZLATÉ " : ""}${r.pico || ""} +${fmtPts(r.reward)} sedláků!`, "success");
+    if (r.golden) { try { confettiBurst(); } catch (e) {} }
+    renderHeader(); loadFarm();
+  } catch (e) { toast(e.message, "error"); }
+}
+async function farmCollectAll() {
+  try {
+    const r = await api("/farm/collect-all", { method: "POST", body: {} });
+    if (state.user) state.user.points = r.balance;
+    toast(`Sebráno ${r.count}× · +${fmtPts(r.total)} 🥚${r.golden ? ` · 🌟 ${r.golden}× zlaté!` : ""}`, "success");
+    try { confettiBurst(); } catch (e) {}
+    renderHeader(); loadFarm();
   } catch (e) { toast(e.message, "error"); }
 }
 
@@ -5625,6 +5698,10 @@ function handleAction(action, el) {
     case "grd-harvest": grdHarvest(el.dataset.plot); break;
     case "grd-harvest-all": grdHarvestAll(); break;
     case "grd-rescue": grdRescue(el.dataset.plot); break;
+    case "farm-buy": farmBuy(el.dataset.animal); break;
+    case "farm-feed": farmFeed(el.dataset.slot); break;
+    case "farm-collect": farmCollect(el.dataset.slot); break;
+    case "farm-collect-all": farmCollectAll(); break;
     case "decor-buy": buyDecor(el.dataset.key); break;
     case "claim-partner": claimPartnerLink(el.dataset.id, el.dataset.url); break;
     case "claim-quest": claimQuest(el.dataset.key); break;

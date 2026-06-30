@@ -344,6 +344,18 @@ CREATE TABLE IF NOT EXISTS garden_decor (
     PRIMARY KEY (user_id, decor_key)
 );
 
+-- Statek (mini-farma): zvíře v slotu. ready_at='' = hladové (neprodukuje), jinak ISO konec cyklu.
+-- Loop: koupě → krmení (ready_at=teď+hodiny) → sebrání produktu (ready_at='' → zas hlad).
+CREATE TABLE IF NOT EXISTS farm_animals (
+    user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    slot       INTEGER NOT NULL,             -- 0..n_slots-1
+    animal_key TEXT NOT NULL,
+    ready_at   TEXT NOT NULL DEFAULT '',     -- '' = hladové; jinak ISO konec produkčního cyklu
+    fed_count  INTEGER NOT NULL DEFAULT 0,   -- kolikrát nakrmeno (pro levely zvířete v P2)
+    bought_at  TEXT NOT NULL,
+    PRIMARY KEY (user_id, slot)
+);
+
 -- PvP hry o body: piškvorky (gomoku). 1v1 se sázkou, escrow vkladů, vítěz bere bank.
 CREATE TABLE IF NOT EXISTS games (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
