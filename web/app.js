@@ -2215,8 +2215,10 @@ async function loadShopAuctions() {                         // aukce ŽIJOU v sh
     const d = await api("/auctions");
     const active = d.active || [];
     if (!active.length) { box.innerHTML = ""; return; }     // žádná aukce → sekce zmizí
+    const tb = d.top_bidders || [];
+    const lb = tb.length ? `<div class="section-title" style="margin:18px 0 8px;font-size:14px">🏆 Top dražitelé</div><div class="panel" style="padding:8px 14px">${tb.map((b, i) => `<div style="display:flex;justify-content:space-between;align-items:center;font-size:13px;padding:3px 0"><span>${["🥇", "🥈", "🥉"][i] || (i + 1) + "."} <b>${esc(b.username || "?")}</b></span><span class="faint">${b.wins}× výhra · ${fmtPts(b.spent)} 🌾</span></div>`).join("")}</div>` : "";
     box.innerHTML = `<div class="section-title" style="margin:22px 0 10px">🔨 Probíhající aukce <span class="faint" style="font-weight:400;font-size:13px">— přihazuj sedláky, kdo dá nejvíc do konce, bere skin!</span></div>`
-      + active.map(auctionCardHTML).join("");
+      + active.map(auctionCardHTML).join("") + lb;
     _startAuctionTimer();
   } catch (e) { box.innerHTML = ""; }
 }
@@ -2226,7 +2228,7 @@ async function refreshAuctionBanner() {                     // celostránkový b
     const d = await api("/auctions");
     const a = (d.active || [])[0];                          // nejdřív končící = urgence
     if (!a) { el.innerHTML = ""; return; }
-    el.innerHTML = `<a href="#/shop" class="auc-banner">🔨 <b>AUKCE</b> · ${esc(a.title)}${a.sub_only ? " 💜" : ""} · <b>${fmtPts(a.current_bid || a.start_bid)} 🌾</b> · ⏳ <span data-aucbannerleft="${a.seconds_left}">${grdDur(a.seconds_left)}</span> · přihodit ➤</a>`;
+    el.innerHTML = `<a href="#/shop" class="auc-banner${a.seconds_left < 60 ? " auc-banner-urgent" : ""}">🔨 <b>${a.seconds_left < 60 ? "KONČÍ!" : "AUKCE"}</b> · ${esc(a.title)}${a.sub_only ? " 💜" : ""} · <b>${fmtPts(a.current_bid || a.start_bid)} 🌾</b> · ⏳ <span data-aucbannerleft="${a.seconds_left}">${grdDur(a.seconds_left)}</span> · přihodit ➤</a>`;
   } catch (e) { el.innerHTML = ""; }
 }
 function isSubUser(u) { return !!u && (u.is_sub || ["admin", "broadcaster", "mod"].includes(u.role)); }
@@ -2243,7 +2245,7 @@ function auctionCardHTML(a) {
       <div class="auc-info">
         <div class="auc-title">${esc(a.title)} ${subBadge}</div>
         <div class="auc-bid-now">${a.current_bid ? `<span class="faint">aktuálně</span> <b>${fmtPts(a.current_bid)}</b> 🌾 ${a.leader ? `· vede <b style="color:${me ? "var(--farm-green,#46d369)" : "var(--accent)"}">${esc(a.leader)}${me ? " (ty!)" : ""}</b>` : ""}` : `<span class="faint">vyvolávací cena</span> <b>${fmtPts(a.start_bid)}</b> 🌾`}</div>
-        <div class="auc-count" data-aucleft="${a.seconds_left}">⏳ ${grdDur(a.seconds_left)}</div>
+        <div class="auc-count${a.seconds_left < 60 ? " auc-urgent" : ""}" data-aucleft="${a.seconds_left}">⏳ ${grdDur(a.seconds_left)}</div>
       </div>
     </div>
     ${locked
@@ -2263,7 +2265,7 @@ function _startAuctionTimer() {
     let reload = false;
     document.querySelectorAll("[data-aucleft]").forEach((el) => {
       const s = parseInt(el.dataset.aucleft, 10) - 1;
-      if (s <= 0) reload = true; else { el.dataset.aucleft = s; el.textContent = "⏳ " + grdDur(s); }
+      if (s <= 0) reload = true; else { el.dataset.aucleft = s; el.textContent = "⏳ " + grdDur(s); el.classList.toggle("auc-urgent", s < 60); }
     });
     if (reload && _aucReload) { clearInterval(_auctionTimer); _auctionTimer = null; _aucReload(); }
   }, 1000);
@@ -2279,6 +2281,10 @@ async function bidAuction(id) {
   const amount = parseInt(inp && inp.value, 10);
   if (!amount || amount < 1) { toast("Zadej částku příhozu.", "error"); return; }
   if (state.user && amount > state.user.points) { toast("Tolik sedláků nemáš.", "error"); return; }
+  const minNext = parseInt(inp && inp.min, 10) || 0;           // pojistka proti překliku (escrow + 50 % ztráta)
+  if (amount >= 50000 || (minNext && amount >= minNext * 10)) {
+    if (!confirm(`Fakt přihodit ${fmtPts(amount)} sedláků? ⚠️ Když tě někdo přehodí, vrátí se ti jen 50 %.`)) return;
+  }
   try {
     const r = await api(`/auctions/${id}/bid`, { method: "POST", body: { amount } });
     if (state.user) state.user.points = r.balance;

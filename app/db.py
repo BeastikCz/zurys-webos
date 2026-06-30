@@ -214,6 +214,7 @@ CREATE TABLE IF NOT EXISTS auctions (
     buy_now           INTEGER NOT NULL DEFAULT 0,   -- 0 = bez kup-teď; jinak cena instantní výhry
     sub_only          INTEGER NOT NULL DEFAULT 0,   -- 1 = přihazovat smí jen sub
     chat_announce     INTEGER NOT NULL DEFAULT 1,   -- 1 = hlásit příhozy/výhru do Kick chatu (hype)
+    going_once_sent   INTEGER NOT NULL DEFAULT 0,   -- 1 = „poslední vteřiny" už hlášeno (1×; reset při anti-snipe)
     created_at        TEXT NOT NULL
 );
 
@@ -730,6 +731,7 @@ _MIGRATIONS = [
     ("auctions", "buy_now", "INTEGER NOT NULL DEFAULT 0"),       # aukce: kup-teď cena (0 = bez)
     ("auctions", "sub_only", "INTEGER NOT NULL DEFAULT 0"),      # aukce: jen sub smí přihazovat
     ("auctions", "chat_announce", "INTEGER NOT NULL DEFAULT 1"), # aukce: hlásit do Kick chatu
+    ("auctions", "going_once_sent", "INTEGER NOT NULL DEFAULT 0"),  # aukce: „poslední vteřiny" hlášeno
     # Responsible gaming – denní limit sázek (Tipsport-style). 0/NULL = bez limitu.
     ("users", "wager_limit", "INTEGER"),                   # aktuální denní strop sázek
     ("users", "wager_limit_pending", "INTEGER"),           # navýšení čeká na zítřek (snížit jde hned)

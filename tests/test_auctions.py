@@ -116,6 +116,34 @@ def test_sub_only_gate():
         conn.close()
 
 
+def test_top_bidders_and_going_once():
+    from app.db import get_conn
+    from app import auctions
+    from datetime import datetime, timezone, timedelta
+    conn = get_conn()
+    try:
+        u1 = _user(conn); conn.commit()
+        # 2 aukce vyhrané u1 → žebříček
+        for _ in range(2):
+            aid = auctions.create(conn, "Skin", "", 100, 50, 10)["id"]
+            auctions.bid(conn, _row(conn, u1), aid, 300)
+            conn.execute("UPDATE auctions SET ends_at='2000-01-01T00:00:00+00:00' WHERE id=?", (aid,)); conn.commit()
+            auctions.list_public(conn)
+        tb = auctions.top_bidders(conn)
+        top = next((x for x in tb if x["username"] == _row(conn, u1)["username"]), None)
+        assert top and top["wins"] == 2, f"u1 má 2 výhry, žebříček: {tb}"
+        # going_once flag: aukce končící za 20 s + příhoz → list_public nastaví flag 1×
+        aid2 = auctions.create(conn, "GoSkin", "", 100, 50, 10)["id"]
+        auctions.bid(conn, _row(conn, u1), aid2, 200)
+        soon = (datetime.now(timezone.utc) + timedelta(seconds=20)).isoformat()
+        conn.execute("UPDATE auctions SET ends_at=? WHERE id=?", (soon, aid2)); conn.commit()
+        auctions.list_public(conn)
+        assert conn.execute("SELECT going_once_sent FROM auctions WHERE id=?", (aid2,)).fetchone()[0] == 1, "going_once nastaveno"
+        auctions.list_public(conn)   # podruhé neopakuje (flag drží) – jen ověř že nespadne
+    finally:
+        conn.close()
+
+
 def test_antisnipe_extends():
     from app.db import get_conn
     from app import auctions

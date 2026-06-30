@@ -85,6 +85,13 @@ def list_public(conn) -> dict:
     active = []
     for a in conn.execute("SELECT * FROM auctions WHERE status = 'active' ORDER BY ends_at ASC"):
         secs = max(0, int((datetime.fromisoformat(a["ends_at"]) - now).total_seconds()))
+        # „going once" hype: 1× když zbývá < ANTISNIPE_SEC s (atomicky přes flag → poll ho neopakuje)
+        if 0 < secs <= ANTISNIPE_SEC and a["chat_announce"] and not a["going_once_sent"] and a["current_bidder_id"]:
+            if conn.execute("UPDATE auctions SET going_once_sent = 1 WHERE id = ? AND going_once_sent = 0",
+                            (a["id"],)).rowcount == 1:
+                conn.commit()
+                _announce_async(f"⏳ POSLEDNÍ VTEŘINY na „{a['title']}\"! Vede {_username(conn, a['current_bidder_id'])} "
+                                f"za {a['current_bid']}! Kdo přebije?! 🔨🔥")
         bids = [{"username": _username(conn, b["user_id"]), "amount": b["amount"], "created_at": b["created_at"]}
                 for b in conn.execute("SELECT user_id, amount, created_at FROM auction_bids "
                                       "WHERE auction_id = ? ORDER BY id DESC LIMIT 6", (a["id"],))]
@@ -98,7 +105,16 @@ def list_public(conn) -> dict:
                           "ORDER BY id DESC LIMIT 6"):
         ended.append({"id": a["id"], "title": a["title"], "image_url": a["image_url"] or "",
                       "winner": _username(conn, a["winner_id"]), "final_bid": a["current_bid"]})
-    return {"active": active, "ended": ended}
+    return {"active": active, "ended": ended, "top_bidders": top_bidders(conn)}
+
+
+def top_bidders(conn, limit: int = 5) -> list:
+    """Žebříček dražitelů: kdo vyhrál nejvíc aukcí (a utratil nejvíc) – status + rivalita."""
+    rows = conn.execute(
+        "SELECT a.winner_id, COUNT(*) wins, COALESCE(SUM(a.current_bid),0) spent FROM auctions a "
+        "WHERE a.status = 'ended' AND a.winner_id IS NOT NULL "
+        "GROUP BY a.winner_id ORDER BY wins DESC, spent DESC LIMIT ?", (limit,)).fetchall()
+    return [{"username": _username(conn, r["winner_id"]), "wins": r["wins"], "spent": r["spent"]} for r in rows]
 
 
 def bid(conn, user, auction_id: int, amount: int) -> dict:
@@ -122,15 +138,17 @@ def bid(conn, user, auction_id: int, amount: int) -> dict:
     if not try_debit(conn, user["id"], amount, f"Aukce #{auction_id} – příhoz (blokace)"):
         return {"ok": False, "error": f"Nemáš dost sedláků ({amount})."}
     prev_bidder, prev_amount = a["current_bidder_id"], a["current_bid"]
-    # anti-snipe: zbývá < N s → prodluž konec
-    new_ends = a["ends_at"]
+    # anti-snipe: zbývá < N s → prodluž konec (a povol nové „going once" – reset flag)
+    new_ends, extended_flag = a["ends_at"], 0
     if (datetime.fromisoformat(a["ends_at"]) - datetime.now(timezone.utc)).total_seconds() < ANTISNIPE_SEC:
         new_ends = (datetime.now(timezone.utc) + timedelta(seconds=ANTISNIPE_SEC)).isoformat()
+        extended_flag = 1
     # ATOMICKY se staň nejvyšším – jen pokud je můj příhoz pořád > current (anti-souběh)
     won = conn.execute(
-        "UPDATE auctions SET current_bid = ?, current_bidder_id = ?, bids_count = bids_count + 1, ends_at = ? "
+        "UPDATE auctions SET current_bid = ?, current_bidder_id = ?, bids_count = bids_count + 1, ends_at = ?, "
+        "going_once_sent = CASE WHEN ? = 1 THEN 0 ELSE going_once_sent END "
         "WHERE id = ? AND status = 'active' AND current_bid < ?",
-        (amount, user["id"], new_ends, auction_id, amount)).rowcount == 1
+        (amount, user["id"], new_ends, extended_flag, auction_id, amount)).rowcount == 1
     if not won:
         add_points(conn, user["id"], amount, f"Aukce #{auction_id} – vrácení (předběhnut)", xp=False)
         conn.commit()
