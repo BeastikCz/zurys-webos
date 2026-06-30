@@ -604,7 +604,7 @@ class RoomChatIn(BaseModel):
 
 class CrewCreateIn(BaseModel):
     name: str = Field(min_length=3, max_length=32)
-    tag: str = Field(min_length=2, max_length=4)
+    tag: str = Field(default="", max_length=12)   # NEPOVINNÝ, libovolné znaky; server (_valid_tag) ořeže na 4 + sanitizuje
 
 
 class CrewJoinIn(BaseModel):

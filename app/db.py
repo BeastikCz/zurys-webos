@@ -668,7 +668,7 @@ CREATE INDEX IF NOT EXISTS idx_bjchat_room ON bj_chat(room_id, id);
 CREATE TABLE IF NOT EXISTS crews (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     name        TEXT NOT NULL UNIQUE,
-    tag         TEXT NOT NULL UNIQUE,             -- [TAG] u nicku, 2-4 znaky
+    tag         TEXT UNIQUE,                      -- [TAG] u nicku, NEPOVINNÝ (NULL = bez tagu), max 4 libovolné znaky
     emblem      TEXT NOT NULL DEFAULT '🌾',
     leader_id   INTEGER NOT NULL,
     member_cap  INTEGER NOT NULL DEFAULT 25,
@@ -903,6 +903,19 @@ def init_db() -> None:
     conn = get_conn()
     try:
         conn.executescript(SCHEMA)
+        # crews.tag: NOT NULL UNIQUE → nullable (aby šel tag NEPOVINNÝ). SQLite neumí ALTER drop-NOT-NULL,
+        # takže přestav tabulku. Bezpečné jen u PRÁZDNÉ crews (žádná data k zachování). MUSÍ běžet PŘED
+        # column-loopem níž – přestavba dá jen základní SCHEMA sloupce, loop pak doplní migrované (streak_week/level/…).
+        if get_setting(conn, "_mig_crew_tag_nullable", "") != "1":
+            tinfo = conn.execute("PRAGMA table_info(crews)").fetchall()
+            tagcol = next((r for r in tinfo if r[1] == "tag"), None)
+            ncrews = conn.execute("SELECT COUNT(*) FROM crews").fetchone()[0]
+            if tagcol is not None and tagcol[3] == 1 and ncrews == 0:   # r[3] = notnull
+                conn.execute("PRAGMA foreign_keys = OFF")
+                conn.execute("DROP TABLE crews")
+                conn.executescript(SCHEMA)   # recreate crews s nullable tag (ostatní tabulky IF NOT EXISTS přeskočí)
+                conn.execute("PRAGMA foreign_keys = ON")
+                set_setting(conn, "_mig_crew_tag_nullable", "1")
         for table, col, ddl in _MIGRATIONS:
             cols = [r[1] for r in conn.execute(f"PRAGMA table_info({table})").fetchall()]
             if col not in cols:

@@ -551,3 +551,30 @@ def test_claim_goal_not_reached(client):
         assert False, "pod cílem nejde vyzvednout"
     except ValueError as e:
         assert "není splněn" in str(e).lower()
+
+
+def _tag_of(cid):
+    conn = get_conn()
+    try:
+        return conn.execute("SELECT tag FROM crews WHERE id=?", (cid,)).fetchone()["tag"]
+    finally:
+        conn.close()
+
+
+def test_tag_any_char_and_optional():
+    """Tag je NEPOVINNÝ (prázdný → NULL, víc prázdných koexistuje) a může být COKOLIV (™ apod.)."""
+    sfx = secrets.token_hex(3)
+    st1 = _run(crews.create, _mk_user(), "u1", f"TmKlub {sfx}", "CRY™")
+    assert _tag_of(st1["id"]) == "CRY™", "tag se symbolem ™ se uloží (žádné isalnum)"
+    st2 = _run(crews.create, _mk_user(), "u2", f"BeztagA {sfx}", "")
+    assert _tag_of(st2["id"]) is None, "prázdný tag → NULL (nepovinný)"
+    st3 = _run(crews.create, _mk_user(), "u3", f"BeztagB {sfx}", "")
+    assert _tag_of(st3["id"]) is None, "2. prázdný tag → NULL bez UNIQUE kolize"
+
+
+def test_tag_strips_html():
+    """Tag stripne HTML-breakout znaky (defense-in-depth; render stejně escapuje)."""
+    sfx = secrets.token_hex(3)
+    st = _run(crews.create, _mk_user(), "u", f"Xss {sfx}", "<b>x")
+    t = _tag_of(st["id"])
+    assert t and "<" not in t and ">" not in t, f"HTML znaky pryč: {t!r}"

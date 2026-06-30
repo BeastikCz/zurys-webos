@@ -183,8 +183,11 @@ def my_crew(conn, uid):
 
 
 def _valid_tag(tag):
-    t = (tag or "").strip().upper()
-    return t if (2 <= len(t) <= 4 and t.isalnum()) else None
+    """Tag je NEPOVINNÝ a může být COKOLIV (písmena/čísla/symboly ™€🔥…), max 4 znaky.
+    Vrací None = bez tagu. Strip jen HTML-breakout + řídicí znaky (render stejně escapuje – defense-in-depth)."""
+    import re
+    t = re.sub(r"""[<>&"'`\x00-\x1f\x7f]""", "", (tag or "").strip())[:4]
+    return t or None
 
 
 def create(conn, uid, username, name, tag):
@@ -194,13 +197,11 @@ def create(conn, uid, username, name, tag):
     name = (name or "").strip()
     if not (3 <= len(name) <= 32):
         raise ValueError("Název party musí mít 3–32 znaků.")
-    t = _valid_tag(tag)
-    if not t:
-        raise ValueError("Tag musí být 2–4 znaky (písmena/čísla).")
+    t = _valid_tag(tag)   # None = bez tagu (nepovinný)
     if conn.execute("SELECT 1 FROM crews WHERE name=? COLLATE NOCASE", (name,)).fetchone():
         raise ValueError("Parta s tímhle názvem už existuje.")
-    if conn.execute("SELECT 1 FROM crews WHERE tag=?", (t,)).fetchone():
-        raise ValueError("Tenhle tag už někdo má.")
+    if t and conn.execute("SELECT 1 FROM crews WHERE tag=?", (t,)).fetchone():
+        raise ValueError("Tenhle tag už někdo má – zkus jiný (nebo nech prázdný).")
     if not try_debit(conn, uid, FOUND_COST, "Založení party 🤝"):
         raise ValueError(f"Na založení party potřebuješ {FOUND_COST} sedláků.")
     code = None
@@ -211,7 +212,7 @@ def create(conn, uid, username, name, tag):
             break
     if not code:
         raise ValueError("Partu se nepodařilo založit, zkus to prosím znovu.")
-    emblem = EMBLEMS[abs(hash(t)) % len(EMBLEMS)]
+    emblem = EMBLEMS[abs(hash(t or name)) % len(EMBLEMS)]   # bez tagu → hash z názvu (ať není pořád stejný emblem)
     ts = now_iso()
     try:
         cur = conn.execute(
