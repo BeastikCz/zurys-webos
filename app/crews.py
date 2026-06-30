@@ -504,6 +504,27 @@ def state(conn, uid, crew_id):
     return _public(conn, crew_id, uid)
 
 
+def admin_list(conn):
+    """VŠECHNY party pro admina: meta (level/XP/streak/MOTD/soukromá/kód) + členové (kdo s kým, role,
+    all-time příspěvek, sub XP, týdenní XP). Vůdce první, pak dle příspěvku."""
+    out = []
+    for c in conn.execute("SELECT * FROM crews ORDER BY xp DESC, id DESC"):
+        members = []
+        for m in conn.execute(
+            "SELECT m.user_id, m.role, m.contributed, m.sub_xp, m.week_xp, m.joined_at, "
+            "u.username, u.kick_username FROM crew_members m JOIN users u ON u.id = m.user_id "
+            "WHERE m.crew_id = ? ORDER BY (m.role = 'leader') DESC, m.contributed DESC", (c["id"],)):
+            members.append({"user_id": m["user_id"], "username": m["username"], "kick_username": m["kick_username"],
+                            "role": m["role"], "contributed": m["contributed"] or 0, "sub_xp": m["sub_xp"] or 0,
+                            "week_xp": m["week_xp"] or 0, "joined_at": m["joined_at"]})
+        out.append({"id": c["id"], "name": c["name"], "tag": c["tag"] or "", "emblem": c["emblem"],
+                    "level": _level(c["xp"]), "xp": c["xp"] or 0, "member_count": len(members),
+                    "member_cap": c["member_cap"], "private": bool(c["private"]), "streak": c["streak"] or 0,
+                    "best_streak": c["best_streak"] or 0, "motd": c["motd"] or "", "code": c["code"],
+                    "created_at": c["created_at"], "members": members})
+    return out
+
+
 def _achievements(c, members_count, sub_total):
     """Odvozené odznaky party z aktuálních statů (počítá se on-the-fly, bez úložiště)."""
     lvl = _level(c["xp"])

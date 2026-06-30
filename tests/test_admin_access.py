@@ -246,3 +246,19 @@ def test_early_access_admin_bypass(client, path):
     """Admin vidí early-access featury vždy (i bez flagu)."""
     r = _get(client, path, _login_as("admin"))
     assert r.status_code == 200, f"admin má vidět {path} vždy, dostal {r.status_code}"
+
+
+# ---------------- Admin přehled part (crews): admin + broadcaster ----------------
+
+@pytest.mark.parametrize("role", ["admin", "broadcaster"])
+def test_admin_crews_allowed(client, role):
+    """Přehled part vidí admin i broadcaster (200)."""
+    r = _get(client, "/api/admin/crews", _login_as(role))
+    assert r.status_code == 200, f"{role} má vidět přehled part, dostal {r.status_code}"
+
+
+@pytest.mark.parametrize("role", ["mod", "predictor", "vip", "sub", "user"])
+def test_admin_crews_blocked(client, role):
+    """BEZPEČNOST: mod / predictor / divák na přehled part NESMÍ (403)."""
+    r = _get(client, "/api/admin/crews", _login_as(role))
+    assert r.status_code == 403, f"{role} dostal {r.status_code} na /admin/crews – má být 403"

@@ -578,3 +578,15 @@ def test_tag_strips_html():
     st = _run(crews.create, _mk_user(), "u", f"Xss {sfx}", "<b>x")
     t = _tag_of(st["id"])
     assert t and "<" not in t and ">" not in t, f"HTML znaky pryč: {t!r}"
+
+
+def test_admin_list_shows_members():
+    """admin_list vrací party + členy (kdo s kým), level/XP."""
+    sfx = secrets.token_hex(3)
+    st = _run(crews.create, _mk_user(), f"lead_{sfx}", f"AdminView {sfx}", "AV" + sfx[:2])
+    rows = _run(crews.admin_list)
+    crew = next((c for c in rows if c["id"] == st["id"]), None)
+    assert crew is not None, "parta je v admin_list"
+    assert crew["member_count"] == 1 and len(crew["members"]) == 1
+    assert crew["members"][0]["role"] == "leader", "vůdce mezi členy"
+    assert crew["level"] >= 1 and "xp" in crew and "sub_xp" in crew["members"][0]

@@ -147,7 +147,7 @@ function lbBadges(r) {
 // Oprávnění (zrcadlo serverové matice v config.py – server to stejně vynucuje)
 const ADMIN_SECTIONS = {
   overview: [], stats: ["broadcaster"], products: ["mod", "broadcaster"], users: ["mod", "broadcaster"], subs: [], orders: ["mod", "broadcaster"],
-  raffles: ["broadcaster"], auctions: ["broadcaster"], codes: ["broadcaster"], drops: ["broadcaster"], games: ["mod", "broadcaster"], bot: ["broadcaster"],
+  raffles: ["broadcaster"], auctions: ["broadcaster"], crews: ["broadcaster"], codes: ["broadcaster"], drops: ["broadcaster"], games: ["mod", "broadcaster"], bot: ["broadcaster"],
   predictions: ["mod", "predictor", "broadcaster"], economy: ["broadcaster"], news: ["broadcaster"], security: [],
   modnabor: ["broadcaster"], gifts: ["broadcaster"],
 };
@@ -2351,6 +2351,37 @@ async function buyNowAuction(id) {
   } catch (e) { toast(e.message, "error"); }
 }
 
+async function adminCrews() {                              // admin přehled part: kdo s kým, level, XP, příspěvky
+  const box = $("#adminContent");
+  box.innerHTML = `<div class="empty"><div class="big">⏳</div>Načítám party…</div>`;
+  let list;
+  try { list = await api("/admin/crews"); } catch (e) { box.innerHTML = `<div class="empty">Nepodařilo se načíst party.</div>`; return; }
+  if (!list.length) { box.innerHTML = `<div class="empty"><div class="big">🛡️</div>Zatím žádná parta. Až někdo založí crew, uvidíš tu kdo je s kým + XP.</div>`; return; }
+  const roleLbl = { leader: "👑 vůdce", officer: "🎖️ důstojník", member: "člen" };
+  box.innerHTML = `
+    <p class="muted" style="margin:0 0 14px">Přehled všech part — kdo je s kým, level, XP a příspěvky členů. Řazeno podle all-time crew XP. (Jen čtení.)</p>
+    ${list.map((c) => `
+      <div class="panel acrew-card">
+        <div class="acrew-head">
+          <span class="acrew-emblem">${c.emblem || "🌾"}</span>
+          <div style="flex:1;min-width:0">
+            <div class="acrew-title">${c.tag ? `<span class="crew-tag">[${esc(c.tag)}]</span> ` : ""}${esc(c.name)}${c.private ? ` <span class="badge" title="Soukromá – jen na pozvánku">🔒</span>` : ""}</div>
+            <div class="faint" style="font-size:12px">Lv ${c.level} · ${fmtPts(c.xp)} XP · 👥 ${c.member_count}/${c.member_cap} · 🔥 série ${c.streak} (max ${c.best_streak}) · kód ${esc(c.code)}</div>
+          </div>
+        </div>
+        ${c.motd ? `<div class="acrew-motd">💬 ${esc(c.motd)}</div>` : ""}
+        <div class="table-wrap"><table class="tbl"><thead><tr><th>Člen</th><th>Role</th><th title="All-time celkem přispěno (farm + sub)">Příspěvek</th><th title="All-time XP ze subů/giftů (ten cenný)">Sub XP</th><th title="Týdenní XP do žebříčku">Týden</th><th>Od</th></tr></thead><tbody>
+          ${c.members.map((m) => `<tr>
+            <td><b>${esc(m.username)}</b>${m.kick_username ? ` <span class="faint" style="font-size:11px">🟢 ${esc(m.kick_username)}</span>` : ""} <span class="faint" style="font-size:11px">🆔 ${m.user_id}</span></td>
+            <td>${roleLbl[m.role] || esc(m.role)}</td>
+            <td>${fmtPts(m.contributed)}</td>
+            <td>${fmtPts(m.sub_xp)}</td>
+            <td>${fmtPts(m.week_xp)}</td>
+            <td class="faint" style="font-size:11.5px">${(m.joined_at || "").slice(0, 10)}</td>
+          </tr>`).join("")}
+        </tbody></table></div>
+      </div>`).join("")}`;
+}
 async function adminAuctions() {
   const box = $("#adminContent");
   try {
@@ -3155,7 +3186,7 @@ async function pageAdmin() {
   }
   const tabs = [
     ["overview", "📊 Přehled"], ["products", "🎁 Odměny"], ["users", "👥 Uživatelé"], ["subs", "💜 Suby"], ["orders", "📦 Objednávky"],
-    ["raffles", "🎟️ Tomboly"], ["auctions", "🔨 Aukce"], ["predictions", "🎯 Predikce"], ["codes", "🎫 Kódy"], ["drops", "🎁 Dropy"], ["games", "🎮 Hry"],
+    ["raffles", "🎟️ Tomboly"], ["auctions", "🔨 Aukce"], ["crews", "🛡️ Crew"], ["predictions", "🎯 Predikce"], ["codes", "🎫 Kódy"], ["drops", "🎁 Dropy"], ["games", "🎮 Hry"],
     ["bot", "🤖 Kick bot"], ["economy", "⚙️ Ekonomika"], ["news", "📣 Novinky"], ["security", "🛡️ Bezpečnost"],
     ["modnabor", "🛡️ Nábor modů"], ["gifts", "💝 Dary"],
   ].filter(([k]) => canSection(state.user, k));
@@ -3434,6 +3465,7 @@ function renderAdminTab(tab) {
   else if (tab === "orders") adminOrders();
   else if (tab === "raffles") adminRaffles();
   else if (tab === "auctions") adminAuctions();
+  else if (tab === "crews") adminCrews();
   else if (tab === "predictions") adminPredictions();
   else if (tab === "codes") adminCodes();
   else if (tab === "drops") adminDrops();

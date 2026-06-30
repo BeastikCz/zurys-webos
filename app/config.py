@@ -45,6 +45,7 @@ ADMIN_SECTIONS = {
     "orders":   (ROLE_MOD, ROLE_BROADCASTER),
     "raffles":  (ROLE_BROADCASTER,),
     "auctions": (ROLE_BROADCASTER,),   # aukce o skiny (vystavit/zrušit) – jako tomboly
+    "crews":    (ROLE_BROADCASTER,),   # přehled part (kdo s kým, XP, členové) – read-only
     "codes":    (ROLE_BROADCASTER,),
     "drops":    (ROLE_BROADCASTER,),
     "games":    (ROLE_MOD, ROLE_BROADCASTER),   # moderace probíhajících her (ukončit/refund)

@@ -2556,6 +2556,13 @@ def admin_auctions(conn: sqlite3.Connection = Depends(db_dep)):
     return auctions.admin_list(conn)
 
 
+@router.get("/crews")
+def admin_crews(conn: sqlite3.Connection = Depends(db_dep)):
+    """Všechny party + členové (kdo s kým, role, contribution, sub/týdenní XP) pro admina/broadcastera."""
+    from .. import crews
+    return crews.admin_list(conn)
+
+
 @router.post("/auctions")
 def admin_auction_create(data: AuctionCreateIn, request: Request,
                          conn: sqlite3.Connection = Depends(db_dep),
