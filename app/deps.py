@@ -510,6 +510,12 @@ def add_points(conn: sqlite3.Connection, user_id: int, change: int, reason: str,
         "INSERT INTO points_log (user_id, change, reason, created_at) VALUES (?, ?, ?, ?)",
         (user_id, change, reason, now_iso()),
     )
+    if earn > 0:        # Crew XP: KAŽDÝ kladný XP event krmí partu člena (sjednocené s levelem, earn = XP).
+        try:            # Sub/resub/gift jdou UNcapped (supporter záře), farm týdně capnutý. Crew chyba nerozbije body.
+            from . import crews as _crews
+            _crews.contribute(conn, user_id, earn, is_sub=(classify_xp(reason)[0] == "sup"))
+        except Exception:
+            pass
 
 
 def notify(conn: sqlite3.Connection, user_id: int, icon: str, title: str,

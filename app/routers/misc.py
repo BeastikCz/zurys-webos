@@ -133,9 +133,10 @@ def stream_status(conn: sqlite3.Connection = Depends(db_dep)):
 def leaderboard(limit: int = Query(50, ge=1, le=200),
                 conn: sqlite3.Connection = Depends(db_dep)):
     rows = conn.execute(
-        "SELECT id, username, avatar_url, points, role, is_sub, is_vip, is_og, egg_found_at, earned_total, "
-        "cos_name, cos_frame, cos_banner, prestige FROM users "
-        "ORDER BY points DESC, username ASC LIMIT ?",
+        "SELECT u.id, u.username, u.avatar_url, u.points, u.role, u.is_sub, u.is_vip, u.is_og, u.egg_found_at, u.earned_total, "
+        "u.cos_name, u.cos_frame, u.cos_banner, u.prestige, c.tag AS crew_tag "
+        "FROM users u LEFT JOIN crew_members cm ON cm.user_id = u.id LEFT JOIN crews c ON c.id = cm.crew_id "
+        "ORDER BY u.points DESC, u.username ASC LIMIT ?",
         (limit,),
     ).fetchall()
     # ▲▼ pohyby z denních snapshotů (den/týden zpět). Chybí-li snapshot, delta = None (žádná šipka).
@@ -159,6 +160,7 @@ def leaderboard(limit: int = Query(50, ge=1, le=200),
         out.append({
             "rank": cur,
             "username": r["username"],
+            "crew_tag": (r["crew_tag"] if "crew_tag" in r.keys() else None),
             "avatar_url": r["avatar_url"],
             "points": r["points"],
             "role": r["role"],

@@ -106,9 +106,19 @@ function avatarHTML(name, url, cls = "", frameCls = "") {
 function cosF(o) { return (o && o.cos && o.cos.frame) || ""; }
 function cosN(o) { return (o && o.cos && o.cos.name) || ""; }
 function cosB(o) { return (o && o.cos && o.cos.banner) || ""; }
+/* Crew [TAG] před nickem — GLOBÁLNĚ. Mapa username→tag cachovaná v state.crewTags (loadCrewTags). */
+let _crewTagsAt = 0;
+async function loadCrewTags(force) {
+  if (!force && Date.now() - _crewTagsAt < 90000) return;
+  try { state.crewTags = await api("/crews/tags"); _crewTagsAt = Date.now(); } catch (e) {}
+}
+function tagPre(name) {
+  const t = state.crewTags && state.crewTags[(name == null ? "" : String(name)).trim().toLowerCase()];
+  return t ? `<span class="crew-tag">[${esc(t)}]</span> ` : "";
+}
 function uLink(name) {
   const n = (name == null ? "" : String(name)).trim();
-  return n ? `<a class="prof-link" href="#/u/${encodeURIComponent(n)}">${esc(n)}</a>` : esc(name || "?");
+  return n ? `<a class="prof-link" href="#/u/${encodeURIComponent(n)}">${tagPre(n)}${esc(n)}</a>` : esc(name || "?");
 }
 function roleBadge(role) {
   const map = { admin: ["badge-admin", "🛡️", "Admin"], broadcaster: ["badge-admin", "👑", "Broadcaster"], mod: ["badge-vip-role", "🔨", "Moderátor"], predictor: ["badge-vip-role", "🎯", "Predikce-mod"], vip: ["badge-vip-role", "💎", "VIP"], sub: ["badge-sub-role", "💜", "Sub"], user: ["badge-user-role", "👤", "Divák"] };
@@ -208,7 +218,7 @@ function clearCart() { state.cart = []; saveCart(); renderHeader(); }
 
 /* ---------------- Router ---------------- */
 const NAV = [
-  ["shop", "Shop"], ["leaderboard", "Žebříček"], ["exchange", "Směnárna"], ["faq", "FAQ"], ["redeem", "Kód"],
+  ["shop", "Shop"], ["leaderboard", "Žebříček"], ["crews", "Crew"], ["exchange", "Směnárna"], ["faq", "FAQ"], ["redeem", "Kód"],
 ];
 function parseRoute() { const h = location.hash.replace(/^#\/?/, "").split("?")[0]; const [name, param] = h.split("/"); return { name: name || "shop", param }; }
 function currentRoute() { return parseRoute().name; }
@@ -218,6 +228,7 @@ function closeDrawer() { $("#mobilenav").classList.remove("open"); }
 
 function render() {
   renderHeader();
+  if (state.user) loadCrewTags();   // refresh crew [TAG] mapy (throttled 90 s)
   closeDrawer();
   refreshAuctionBanner();        // celostránkový banner aktivní aukce
   if (!window._aucBannerPoll) window._aucBannerPoll = setInterval(refreshAuctionBanner, 15000);
@@ -229,12 +240,13 @@ function render() {
   if (duelTimer) { clearInterval(duelTimer); duelTimer = null; }
   if (dmThreadTimer) { clearInterval(dmThreadTimer); dmThreadTimer = null; }
   stopPredPoll();
+  if (_crewPoll) { clearInterval(_crewPoll); _crewPoll = null; }
   const r = parseRoute();
   const pages = {
     shop: pageShop, leaderboard: pageLeaderboard, exchange: pageExchange, redeem: pageRedeem,
     faq: pageFaq, pravidla: pageRules, cart: pageCart, profile: pageProfile, admin: pageAdmin,
     predikce: pagePredikce, games: pageGames, novinky: pageNews, bonusy: pageBonusy, ukoly: pageUkoly,
-    kosmetika: pageCosmetics, bj: pageBjRoom, zpravy: pageMessages, fair: pageFair, mines: pageMines,
+    kosmetika: pageCosmetics, bj: pageBjRoom, zpravy: pageMessages, fair: pageFair, mines: pageMines, crews: pageCrews,
     connect: pageConnect, login: pageConnect, register: pageConnect, u: pageUserProfile,
     "mod-nabor": pageModApply, staty: pageGameStats, "sin-slavy": pageHallOfFame, zahrada: pageGarden,
     statek: pageFarm,
@@ -297,7 +309,7 @@ function renderHeader() {
   const route = currentRoute();
   const u = state.user;
   document.body.classList.toggle("logged-in", !!u);   /* na mobilu uvolní místo v topbaru (skryje wordmark) */
-  const items = [["shop", "Shop"], ["bonusy", "Bonusy"], ["ukoly", "Úkoly"], ["zahrada", "Zahrádka"], ["statek", "Statek"], ["leaderboard", "Žebříček"], ["exchange", "Směnárna"], ["games", "Hry"], ["predikce", "Predikce"]];
+  const items = [["shop", "Shop"], ["bonusy", "Bonusy"], ["ukoly", "Úkoly"], ["zahrada", "Zahrádka"], ["statek", "Statek"], ["leaderboard", "Žebříček"], ["crews", "Crew"], ["exchange", "Směnárna"], ["games", "Hry"], ["predikce", "Predikce"]];
   const navDot = (k) => ((k === "bonusy" && u && bonusReady) || (k === "ukoly" && u && questReady)) ? `<span class="nav-dot" title="Máš nevyzvednutou odměnu!"></span>` : "";
   const navLinks = items.map(([k, l]) => `<a href="#/${k}" class="nav-link ${route === k ? "active" : ""}">${l}${navDot(k)}</a>`).join("")
     + (isStaff(u) ? `<a href="#/admin" class="nav-link ${route === "admin" ? "active" : ""}">${u.role === "admin" ? "Admin" : "Panel"}</a>` : "");
@@ -308,7 +320,7 @@ function renderHeader() {
   let right;
   if (u) {
     right = `<div class="pts-pill" title="Tvůj zůstatek"><span class="coin"></span><b class="pts-num">${Number(u.points).toLocaleString("cs-CZ")}</b><span class="lbl">sedláků</span></div>${u.level ? `<div class="lvl-pill"><b class="lvl-num">Lv ${u.level}</b><span class="lvl-bar"><i class="lvl-fill" style="width:${u.level_pct || 0}%"></i></span><div class="lvl-tip"><div class="lt-h">⭐ Level ${u.level} → ${u.level + 1}</div><div class="lt-bar"><i style="width:${u.level_pct || 0}%"></i></div><div class="lt-r"><span>${Number(u.level_into || 0).toLocaleString("cs-CZ")} / ${Number(u.level_span || 0).toLocaleString("cs-CZ")} XP</span><b>${u.level_pct || 0}%</b></div><div class="lt-m">Chybí <b>${Number(Math.max(0, (u.level_span || 0) - (u.level_into || 0))).toLocaleString("cs-CZ")}</b> XP do levelu ${u.level + 1}</div></div></div>` : ""}${cartBtn}${msgBtn}${notifBtn}
-      <a href="#/profile" class="user-chip" title="Můj profil">${avatarHTML(u.username, u.avatar_url, "", cosF(u))}<div style="display:flex;flex-direction:column;line-height:1.15"><span class="uc-name ${cosN(u)}">${esc(u.username)}</span><span class="uc-tier">${userTier(u.rank) ? "★ " + userTier(u.rank) : ""}</span></div></a>
+      <a href="#/profile" class="user-chip" title="Můj profil">${avatarHTML(u.username, u.avatar_url, "", cosF(u))}<div style="display:flex;flex-direction:column;line-height:1.15"><span class="uc-name ${cosN(u)}">${tagPre(u.username)}${esc(u.username)}</span><span class="uc-tier">${userTier(u.rank) ? "★ " + userTier(u.rank) : ""}</span></div></a>
       <button class="btn btn-ghost btn-sm logout-top" data-action="logout" title="Odhlásit">Odhlásit</button>`;
   } else {
     right = `${cartBtn}<button class="btn btn-kick btn-sm" data-action="connect">🟢 <span class="kick-long">Připojit přes Kick</span><span class="kick-short">Připojit</span></button>`;
@@ -1197,7 +1209,7 @@ function podiumCard(r, isMe) {
     <div class="podium-card podium-${r.rank}${isMe ? " me" : ""}" style="--d:${0.05 + r.rank * 0.08}s">
       ${rays}${sparks}<span class="pod-medal">${medal}</span>
       <div class="pod-av-wrap">${crown}${avatarHTML(r.username, r.avatar_url, "pod-av", cosF(r))}</div>
-      <a class="pod-name prof-link ${cosN(r)}" href="#/u/${encodeURIComponent(r.username)}">${esc(r.username)}${meTag}</a>
+      <a class="pod-name prof-link ${cosN(r)}" href="#/u/${encodeURIComponent(r.username)}">${r.crew_tag ? `<span class="crew-tag">[${esc(r.crew_tag)}]</span> ` : ""}${esc(r.username)}${meTag}</a>
       <div class="pod-badges">${lvlBadge(r.level)}${lbBadges(r)}</div>
       <div class="pod-pts"><span class="pod-num" data-count="${r.points}">${Number(r.points).toLocaleString("cs-CZ")}</span><span>sedláků</span></div>
       ${tierChip(r.rank)}
@@ -1217,7 +1229,7 @@ function lbRow(r, isMe) {
   return `
     <div class="lb-row${isMe ? " me" : ""}${r.climber ? " climber" : ""}" style="--d:${Math.min(r.rank, 24) * 0.025}s">
       <span class="lb-rank">${r.rank}</span>${avatarHTML(r.username, r.avatar_url, "", cosF(r))}
-      <div class="lb-id"><a class="uname prof-link ${cosN(r)}" href="#/u/${encodeURIComponent(r.username)}">${esc(r.username)}${meTag}</a> ${prestigeBadge(r.prestige)}<span class="lb-sub">${lvlBadge(r.level)}${lbBadges(r)}${tierChip(r.rank)}${fire}</span></div>
+      <div class="lb-id"><a class="uname prof-link ${cosN(r)}" href="#/u/${encodeURIComponent(r.username)}">${r.crew_tag ? `<span class="crew-tag">[${esc(r.crew_tag)}]</span> ` : ""}${esc(r.username)}${meTag}</a> ${prestigeBadge(r.prestige)}<span class="lb-sub">${lvlBadge(r.level)}${lbBadges(r)}${tierChip(r.rank)}${fire}</span></div>
       ${deltaTag(r.delta)}
       <span class="pts">${fmtPts(r.points)}</span>
     </div>`;
@@ -1283,7 +1295,7 @@ async function loadWeeklyEarners() {
       <div class="lb-list">${rows.slice(0, 15).map((r, i) => {
         const rk = i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : (i + 1);
         const mine = !!myName && r.username === myName;
-        return `<div class="lb-row${mine ? " me" : ""}"><span class="lb-rank">${rk}</span>${avatarHTML(r.username, r.avatar_url, "", cosF(r))}<div class="lb-id"><a class="uname prof-link ${cosN(r)}" href="#/u/${encodeURIComponent(r.username)}">${esc(r.username)}</a> ${roleBadge(r.role)}</div><span class="pts" style="color:#46d369">+${fmtPts(r.gained)}</span></div>`;
+        return `<div class="lb-row${mine ? " me" : ""}"><span class="lb-rank">${rk}</span>${avatarHTML(r.username, r.avatar_url, "", cosF(r))}<div class="lb-id"><a class="uname prof-link ${cosN(r)}" href="#/u/${encodeURIComponent(r.username)}">${tagPre(r.username)}${esc(r.username)}</a> ${roleBadge(r.role)}</div><span class="pts" style="color:#46d369">+${fmtPts(r.gained)}</span></div>`;
       }).join("")}</div>`;
   } catch (e) { box.innerHTML = ""; }
 }
@@ -1299,7 +1311,7 @@ async function loadSeasonEarners() {
       <div class="lb-list">${rows.slice(0, 15).map((r, i) => {
         const rk = i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : (i + 1);
         const mine = !!myName && r.username === myName;
-        return `<div class="lb-row${mine ? " me" : ""}"><span class="lb-rank">${rk}</span>${avatarHTML(r.username, r.avatar_url, "", cosF(r))}<div class="lb-id"><a class="uname prof-link ${cosN(r)}" href="#/u/${encodeURIComponent(r.username)}">${esc(r.username)}</a> ${roleBadge(r.role)}</div><span class="pts" style="color:var(--accent)">+${fmtPts(r.gained)}</span></div>`;
+        return `<div class="lb-row${mine ? " me" : ""}"><span class="lb-rank">${rk}</span>${avatarHTML(r.username, r.avatar_url, "", cosF(r))}<div class="lb-id"><a class="uname prof-link ${cosN(r)}" href="#/u/${encodeURIComponent(r.username)}">${tagPre(r.username)}${esc(r.username)}</a> ${roleBadge(r.role)}</div><span class="pts" style="color:var(--accent)">+${fmtPts(r.gained)}</span></div>`;
       }).join("")}</div>`;
   } catch (e) { box.innerHTML = ""; }
 }
@@ -1432,7 +1444,7 @@ async function pageUserProfile(nick) {
       <div class="profile-hero">
         ${avatarHTML(p.username, p.avatar_url, "prof-av", cosF(p))}
         <div class="ph-info">
-          <h1><span class="${cosN(p)}">${esc(p.username)}</span> ${roleBadge(p.role)} ${prestigeBadge(p.prestige)}</h1>
+          <h1>${tagPre(p.username)}<span class="${cosN(p)}">${esc(p.username)}</span> ${roleBadge(p.role)} ${prestigeBadge(p.prestige)}</h1>
           <div class="faint">${league ? "★ " + esc(league) + " · " : ""}#${p.rank} v leaderboardu · člen od ${since}${showId ? ` · <span title="ID účtu">🆔 ID ${p.id}</span>` : ""}</div>
           ${profLevelHTML(p)}
           <div class="ph-badges">${subVipBadges(p) || ""}</div>
@@ -5981,6 +5993,21 @@ function handleAction(action, el) {
     case "bjr-double": bjrAct("double"); break;
     case "bjr-split": bjrAct("split"); break;
     case "my-wrapped": showWrapped(); break;
+    case "crew-create": crewCreate(); break;
+    case "crew-join": crewJoin(); break;
+    case "crew-chat": crewChat(); break;
+    case "crew-leave": crewLeave(); break;
+    case "crew-claim": crewClaim(); break;
+    case "crew-kick": crewKick(el.dataset.uid, el.dataset.name); break;
+    case "crew-role": crewRole(el.dataset.uid, el.dataset.role); break;
+    case "crew-emblem": crewEmblemPicker(); break;
+    case "crew-set-emblem": crewSetEmblem(el.dataset.emblem); break;
+    case "crew-motd": crewMotd(); break;
+    case "crew-private": crewPrivate(el.dataset.private); break;
+    case "crew-approve": crewApprove(el.dataset.uid); break;
+    case "crew-reject": crewReject(el.dataset.uid); break;
+    case "crew-copy": crewCopy(el.dataset.code); break;
+    case "crew-sort": crewSortBoard(el.dataset.sort); break;
     case "bjr-next": bjrAct("next"); break;
     case "bjr-leave": bjrLeave(); break;
     case "bjr-chat": bjrChat(); break;
@@ -6439,7 +6466,7 @@ function updateBjRoom(g) {
   if (cbx) {
     const atBottom = cbx.scrollHeight - cbx.scrollTop - cbx.clientHeight < 50;
     cbx.innerHTML = (g.chat || []).length
-      ? g.chat.map((m) => `<div style="margin-bottom:3px"><b style="color:var(--accent)">${esc(m.username)}:</b> ${esc(m.msg)}</div>`).join("")
+      ? g.chat.map((m) => `<div style="margin-bottom:3px">${tagPre(m.username)}<b style="color:var(--accent)">${esc(m.username)}:</b> ${esc(m.msg)}</div>`).join("")
       : '<div class="faint">Zatím žádné zprávy. Napiš něco! 💬</div>';
     if (atBottom) cbx.scrollTop = cbx.scrollHeight;
   }
@@ -6497,6 +6524,256 @@ function bjrMute() {
   if (!_bjMuted) audioCtx();   // resume audio kontextu na klik (autoplay policy)
   if (_bjRoom) updateBjRoom(_bjRoom);
   toast(_bjMuted ? "🔇 Zvuk u stolu vypnut" : "🔊 Zvuk u stolu zapnut", "info");
+}
+
+/* ---------------- 🤝 Parta / Crew (klany) ---------------- */
+let _crewId = null, _crewPoll = null;
+async function pageCrews(param) {
+  if (!state.user) { navigate("connect"); return; }
+  if (_crewPoll) { clearInterval(_crewPoll); _crewPoll = null; }
+  $("#view").innerHTML = `<div class="page-head"><h1>🤝 Crew</h1><p class="muted">Farmařte spolu — vaše aktivita se sčítá do crew žebříčku.</p></div><div id="crewWrap">${skeletonCards(1)}</div>`;
+  _crewId = null;
+  try {
+    let cid = (param && /^\d+$/.test(param)) ? parseInt(param, 10) : null;
+    if (!cid) { const mine = await api("/crews/mine"); cid = mine.crew_id; }
+    if (cid) {
+      try {
+        const d = await api("/crews/" + cid);
+        _crewId = cid;
+        renderCrewDetail(d);
+        if (d.is_member) _crewPoll = setInterval(crewPoll, 4000);
+        return;
+      } catch (e) { /* parta smazaná/neexistuje → spadni do žebříčku */ }
+    }
+    const lb = await api("/crews/leaderboard");
+    renderCrewLobby(lb);
+  } catch (e) { toast(e.message, "error"); const w = $("#crewWrap"); if (w) w.innerHTML = '<div class="faint">Nepodařilo se načíst partu.</div>'; }
+}
+function renderCrewLobby(lb) {
+  const box = $("#crewWrap"); if (!box) return;
+  const sort = lb.sort || "week";
+  const rows = (lb.crews || []).map((c) => {
+    const crown = (sort === "month" && c.rank === 1 && c.month_xp > 0) ? '<span class="crew-crown" title="Parta měsíce">👑</span> ' : "";
+    let primary, secondary;
+    if (sort === "month") {
+      primary = `<b class="crew-sub">🎁 ${Number(c.month_xp || 0).toLocaleString("cs-CZ")}</b>`;
+      secondary = `<span class="faint">tento měsíc</span>`;
+    } else if (sort === "subs") {
+      primary = `<b class="crew-sub">🎁 ${Number(c.sub_total || 0).toLocaleString("cs-CZ")}</b>`;
+      secondary = `<span class="faint">all-time</span>`;
+    } else {
+      primary = `<b>${Number(c.week_xp).toLocaleString("cs-CZ")}</b> XP`;
+      secondary = c.sub_total ? `<span class="crew-sub faint">🎁 ${Number(c.sub_total).toLocaleString("cs-CZ")}</span>` : "";
+    }
+    return `
+    <a class="crew-row${crown ? " crew-champ" : ""}" href="#/crews/${c.id}">
+      <span class="crew-rank">#${c.rank}</span><span class="crew-emblem">${c.emblem}</span>
+      <span class="crew-name">${crown}<b>${esc(c.name)}</b> <span class="crew-tag">[${esc(c.tag)}]</span></span>
+      <span class="crew-meta">⭐${c.level} · ${c.members} 👤 · ${primary}${secondary ? " · " + secondary : ""}</span>
+    </a>`;
+  }).join("") || '<div class="faint">Zatím žádná parta — založ první! 🤝</div>';
+  const tog = (key, label) => `<button class="btn btn-sm ${sort === key ? "btn-accent" : "btn-ghost"}" data-action="crew-sort" data-sort="${key}">${label}</button>`;
+  box.innerHTML = `
+    <div class="panel crew-why" style="margin-bottom:14px">
+      <div class="crew-why-head">🤝 Proč být v partě?</div>
+      <div class="crew-why-grid">
+        <div class="crew-why-item"><span>🎯</span><div><b>Odměna všem</b><p>Parta splní týdenní cíl → každý člen bere sedláky. I když zrovna nefarmíš, parta ti je vydělá.</p></div></div>
+        <div class="crew-why-item"><span>🏷️</span><div><b>[TAG] u jména</b><p>Tag party před nickem — v žebříčku, chatu, všude. Identita + flex pro celou komunitu.</p></div></div>
+        <div class="crew-why-item"><span>🎁</span><div><b>Sub cíl + Supporter parta</b><p>Subněte/giftněte společně → odznak „Supporter parta" + první místo na supporter žebříčku.</p></div></div>
+        <div class="crew-why-item"><span>⭐</span><div><b>Level = prestige</b><p>Top party se chlubí levelem (bez stropu). Každý level navíc dá členům bonus sedláků za sub i farm.</p></div></div>
+      </div>
+    </div>
+    <div class="panel" style="margin-bottom:14px">
+      <div class="section-title" style="margin-top:0">➕ Založ partu <span class="faint" style="font-size:12px;font-weight:400">· 25 000 sedláků</span></div>
+      <div class="toolbar" style="gap:8px;flex-wrap:wrap">
+        <input class="input" id="crewName" placeholder="Název party" maxlength="32" style="flex:1;min-width:150px">
+        <input class="input" id="crewTag" placeholder="TAG" maxlength="4" style="max-width:90px;text-transform:uppercase">
+        <button class="btn btn-accent" data-action="crew-create">Založit 🤝</button>
+      </div>
+      <div class="toolbar" style="gap:8px;margin-top:10px">
+        <input class="input" id="crewCode" placeholder="Kód party (P…)" maxlength="20" style="max-width:190px;text-transform:uppercase">
+        <button class="btn btn-success" data-action="crew-join">Připojit ⚔️</button>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="section-title" style="margin-top:0;display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">
+        <span>🏆 Žebříček part <span class="faint" style="font-size:12px;font-weight:400">· ${sort === "month" ? "🏆 Parta měsíce (měsíční suby)" : sort === "subs" ? "🎁 supporteři (all-time)" : "týden " + esc(lb.week || "")}</span></span>
+        <span class="toolbar" style="gap:6px">${tog("week", "🌾 Týden")}${tog("subs", "🎁 Supporteři")}${tog("month", "🏆 Měsíc")}</span>
+      </div>
+      ${rows}
+    </div>`;
+}
+async function crewSortBoard(sort) {
+  try { const lb = await api("/crews/leaderboard?sort=" + encodeURIComponent(sort || "week")); renderCrewLobby(lb); }
+  catch (e) { toast(e.message, "error"); }
+}
+function _crewRole(r) { return r === "leader" ? "👑 " : (r === "officer" ? "⭐ " : ""); }
+function crewMembersHTML(d) {
+  return (d.members || []).map((m) => {
+    const isLeader = m.user_id === d.leader_id;
+    const mgmt = (d.is_leader && !isLeader && !m.is_you)
+      ? `<span class="crew-mgmt">${m.role === "officer"
+          ? `<button class="crew-mbtn" data-action="crew-role" data-uid="${m.user_id}" data-role="member" title="Sundat officera">⬇</button>`
+          : `<button class="crew-mbtn" data-action="crew-role" data-uid="${m.user_id}" data-role="officer" title="Povýšit na officera">⭐</button>`}<button class="crew-mbtn danger" data-action="crew-kick" data-uid="${m.user_id}" data-name="${esc(m.username)}" title="Vyhodit">✕</button></span>`
+      : "";
+    return `
+    <div class="crew-mrow${m.is_you ? " you" : ""}">
+      ${avatarHTML(m.username, m.avatar_url)}
+      <span class="crew-mname">${_crewRole(m.role)}${esc(m.username)}${m.is_you ? ' · <span style="color:var(--accent)">TY</span>' : ""}</span>
+      <span class="crew-mxp">${m.sub_xp ? `<b class="crew-sub">🎁 ${Number(m.sub_xp).toLocaleString("cs-CZ")}</b> · ` : ""}<span class="faint">⛏️ ${Number(m.farm_xp || 0).toLocaleString("cs-CZ")}</span></span>
+      ${mgmt}
+    </div>`;
+  }).join("");
+}
+function crewChatHTML(d) {
+  return (d.chat || []).length
+    ? d.chat.map((m) => `<div style="margin-bottom:3px">${tagPre(m.username)}<b style="color:var(--accent)">${esc(m.username)}:</b> ${esc(m.msg)}</div>`).join("")
+    : '<div class="faint">Zatím ticho. Napiš partě! 💬</div>';
+}
+function _weekWord(n) { return n === 1 ? "týden" : (n >= 2 && n <= 4 ? "týdny" : "týdnů"); }
+function crewGoalHTML(d) {
+  const pct = Math.min(100, Math.round((d.week_xp || 0) / Math.max(1, d.goal) * 100));
+  let cta;
+  if (!d.is_member) cta = `<div class="crew-goal-hint">Přidej se a farmařte spolu → odměna pro všechny členy.</div>`;
+  else if (d.can_claim_goal) cta = `<button class="btn btn-accent btn-sm crew-goal-claim" data-action="crew-claim">🎁 Vyzvednout odměnu +${fmtPts(d.goal_reward)}</button>`;
+  else if (d.you_claimed) cta = `<div class="crew-goal-hint">✔ Odměnu +${fmtPts(d.goal_reward)} máš tento týden vyzvednutou.</div>`;
+  else cta = `<div class="crew-goal-hint">Splňte cíl společně → každý člen dostane <b>+${fmtPts(d.goal_reward)}</b> 🌾</div>`;
+  const subPct = Math.min(100, Math.round((d.week_subs || 0) / Math.max(1, d.sub_goal) * 100));
+  return `<div class="crew-goal-top"><span>🎯 Týdenní cíl party ${d.goal_reached ? '<span class="crew-goal-done">✅ SPLNĚNO</span>' : ""}</span><b>${Number(d.week_xp).toLocaleString("cs-CZ")} / ${Number(d.goal).toLocaleString("cs-CZ")} XP</b></div>
+    <div class="crew-goal-bar"><div class="crew-goal-fill${d.goal_reached ? " done" : ""}" style="width:${pct}%"></div></div>
+    ${cta}
+    ${d.streak > 0 ? `<div class="crew-streak-line">🔥 <b>${d.streak}</b> ${_weekWord(d.streak)} v řadě se splněným cílem${d.best_streak > d.streak ? ` · rekord ${d.best_streak}` : ""} — nepřeruš to!</div>` : ""}
+    <div class="crew-subgoal">
+      <div class="crew-goal-top"><span>🎁 Sub cíl party ${d.sub_goal_reached ? '<span class="crew-supporter-badge">Supporter parta ✓</span>' : ""}</span><b>${d.week_subs || 0} / ${d.sub_goal} subů</b></div>
+      <div class="crew-goal-bar"><div class="crew-goal-fill sub" style="width:${subPct}%"></div></div>
+      <div class="crew-goal-hint">${d.sub_goal_reached ? "Parta tento týden nese — status Supporter parta 🎁" : "Subněte/giftněte společně → odznak Supporter parta + flex na žebříčku."}</div>
+    </div>`;
+}
+function renderCrewDetail(d) {
+  const box = $("#crewWrap"); if (!box) return;
+  box.innerHTML = `
+    <div class="panel crew-hero" style="margin-bottom:14px">
+      <div class="crew-hero-l"><span class="crew-hero-emblem">${d.emblem}</span>
+        <div><div class="crew-hero-name">${esc(d.name)} <span class="crew-tag">[${esc(d.tag)}]</span>${d.streak > 0 ? ` <span class="crew-streak">🔥 ${d.streak}</span>` : ""}</div>
+          <div class="muted" style="font-size:12.5px">⭐ Lvl ${d.level} · ${d.members_count}/${d.member_cap} členů · <b style="color:var(--text)">${Number(d.week_xp).toLocaleString("cs-CZ")}</b> XP tento týden</div>
+          <div class="crew-bonus-line">🎁 +${d.sub_bonus_pct}% sedláků za sub · ⛏️ +${d.farm_bonus_pct}% za farm <span class="faint" style="font-weight:400">— bonus všem členům</span></div></div>
+      </div>
+      ${d.is_member
+        ? `<div class="toolbar" style="gap:6px;flex-wrap:wrap">${d.code ? `<button class="btn btn-sm btn-ghost" data-action="crew-copy" data-code="${esc(d.code)}">📋 Kód</button>` : ""}${d.is_leader ? `<button class="btn btn-sm btn-ghost" data-action="crew-emblem" title="Změnit emblém">🎨</button><button class="btn btn-sm btn-ghost" data-action="crew-motd" title="Popis party">📝</button><button class="btn btn-sm btn-ghost" data-action="crew-private" data-private="${d.private ? 0 : 1}" title="${d.private ? "Zveřejnit partu" : "Udělat soukromou (join přes schválení)"}">${d.private ? "🔒" : "🔓"}</button>` : ""}<button class="btn btn-sm btn-danger" data-action="crew-leave">Odejít</button></div>`
+        : `<a class="btn btn-sm btn-ghost" href="#/crews">← Žebříček</a>`}
+    </div>
+    ${(d.motd || (d.achievements && d.achievements.length)) ? `<div class="panel crew-info" style="margin-bottom:14px">${d.motd ? `<div class="crew-motd">📝 ${esc(d.motd)}</div>` : ""}${(d.achievements && d.achievements.length) ? `<div class="crew-achs">${d.achievements.map((a) => `<span class="crew-ach">${a.icon} ${esc(a.name)}</span>`).join("")}</div>` : ""}</div>` : ""}
+    ${(d.is_leader && d.requests && d.requests.length) ? `<div class="panel" style="margin-bottom:14px"><div class="section-title" style="margin-top:0">🔔 Žádosti o vstup <span class="faint" style="font-size:12px;font-weight:400">· ${d.requests.length}</span></div>${d.requests.map((r) => `<div class="crew-req"><span class="crew-mname">${esc(r.username)}</span><span class="crew-mgmt"><button class="crew-mbtn" data-action="crew-approve" data-uid="${r.user_id}" title="Přijmout">✅</button><button class="crew-mbtn danger" data-action="crew-reject" data-uid="${r.user_id}" title="Zamítnout">✕</button></span></div>`).join("")}</div>` : ""}
+    <div class="panel crew-goal-panel" id="crewGoal" style="margin-bottom:14px">${crewGoalHTML(d)}</div>
+    <div class="panel" style="margin-bottom:14px">
+      <div class="section-title" style="margin-top:0">👥 Členové <span class="faint" style="font-size:12px;font-weight:400">· 🎁 suby · ⛏️ farm (kolik kdo přispěl)</span></div>
+      <div id="crewMembers">${crewMembersHTML(d)}</div>
+    </div>
+    ${d.is_member ? `<div class="panel">
+      <div class="section-title" style="margin-top:0;font-size:14px">💬 Crew chat</div>
+      <div id="crewChatBox" style="max-height:170px;overflow:auto;font-size:13px;margin-bottom:8px;line-height:1.5">${crewChatHTML(d)}</div>
+      <div class="toolbar" style="gap:6px"><input class="input" id="crewChatMsg" maxlength="200" placeholder="Napiš partě… (Enter pošle) 💬" style="flex:1"><button class="btn btn-sm btn-accent" data-action="crew-chat">Poslat</button></div>
+    </div>` : ""}`;
+  const ce = document.getElementById("crewChatMsg");
+  if (ce) ce.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); crewChat(); } });
+  const cb = document.getElementById("crewChatBox"); if (cb) cb.scrollTop = cb.scrollHeight;
+}
+async function crewPoll() {
+  if (!document.getElementById("crewMembers")) { if (_crewPoll) clearInterval(_crewPoll); _crewPoll = null; return; }
+  if (!_crewId || document.hidden) return;
+  let d; try { d = await api("/crews/" + _crewId); } catch (e) { return; }
+  const mb = document.getElementById("crewMembers"); if (mb) mb.innerHTML = crewMembersHTML(d);
+  const gb = document.getElementById("crewGoal"); if (gb) gb.innerHTML = crewGoalHTML(d);
+  const cbx = document.getElementById("crewChatBox");
+  if (cbx) { const atBottom = cbx.scrollHeight - cbx.scrollTop - cbx.clientHeight < 50; cbx.innerHTML = crewChatHTML(d); if (atBottom) cbx.scrollTop = cbx.scrollHeight; }
+}
+async function crewCreate() {
+  const name = (($("#crewName") || {}).value || "").trim();
+  const tag = (($("#crewTag") || {}).value || "").trim();
+  if (name.length < 3) { toast("Název party musí mít aspoň 3 znaky.", "error"); return; }
+  if (tag.length < 2) { toast("Tag musí mít 2–4 znaky.", "error"); return; }
+  try { const d = await api("/crews/create", { method: "POST", body: { name, tag } }); await refreshMe(); toast("Parta založena! 🤝", "success"); navigate("crews/" + d.id); }
+  catch (e) { toast(e.message, "error"); }
+}
+async function crewJoin() {
+  const code = (($("#crewCode") || {}).value || "").trim().toUpperCase();
+  if (!code) { toast("Zadej kód party.", "error"); return; }
+  try {
+    const d = await api("/crews/join", { method: "POST", body: { code } });
+    if (d.pending) { toast("Žádost odeslána — čeká na schválení vůdcem 🔔", "info"); return; }
+    toast("Vítej v partě! 🎉", "success"); navigate("crews/" + d.id);
+  } catch (e) { toast(e.message, "error"); }
+}
+async function crewChat() {
+  const el = document.getElementById("crewChatMsg"); const msg = el ? (el.value || "").trim() : "";
+  if (!msg || !_crewId) return; if (el) el.value = "";
+  try { await api("/crews/" + _crewId + "/chat", { method: "POST", body: { msg } }); crewPoll(); }
+  catch (e) { toast(e.message, "error"); }
+}
+async function crewClaim() {
+  if (!_crewId) return;
+  try {
+    const d = await api("/crews/" + _crewId + "/claim-goal", { method: "POST", body: {} });
+    await refreshMe();
+    toast(`🎁 Crew cíl splněn: +${fmtPts(d.claimed_now || 0)} sedláků!`, "success");
+    if (typeof confettiBurst === "function") confettiBurst();
+    renderCrewDetail(d);
+  } catch (e) { toast(e.message, "error"); }
+}
+async function crewMotd() {
+  if (!_crewId) return;
+  const text = prompt("Popis party (max 200 znaků):", "");
+  if (text === null) return;
+  try { const d = await api("/crews/" + _crewId + "/motd", { method: "POST", body: { text } }); toast("Popis uložen.", "success"); renderCrewDetail(d); }
+  catch (e) { toast(e.message, "error"); }
+}
+async function crewPrivate(p) {
+  if (!_crewId) return;
+  try { const d = await api("/crews/" + _crewId + "/private", { method: "POST", body: { private: String(p) === "1" } }); toast(d.private ? "Parta je teď soukromá 🔒" : "Parta je veřejná 🔓", "success"); renderCrewDetail(d); }
+  catch (e) { toast(e.message, "error"); }
+}
+async function crewApprove(uid) {
+  if (!_crewId || !uid) return;
+  try { const d = await api("/crews/" + _crewId + "/approve", { method: "POST", body: { user_id: parseInt(uid, 10) } }); toast("Přijat do party ✅", "success"); renderCrewDetail(d); }
+  catch (e) { toast(e.message, "error"); }
+}
+async function crewReject(uid) {
+  if (!_crewId || !uid) return;
+  try { const d = await api("/crews/" + _crewId + "/reject", { method: "POST", body: { user_id: parseInt(uid, 10) } }); toast("Žádost zamítnuta.", "info"); renderCrewDetail(d); }
+  catch (e) { toast(e.message, "error"); }
+}
+async function crewEmblemPicker() {
+  if (!_crewId) return;
+  let data;
+  try { data = await api("/crews/emblems"); } catch (e) { toast(e.message, "error"); return; }
+  const grid = (data.emblems || []).map((em) => `<button class="crew-em-pick" data-action="crew-set-emblem" data-emblem="${em}">${em}</button>`).join("");
+  openModal(`<h3 style="margin-top:0">🎨 Emblém party</h3><p class="faint" style="margin-top:-4px;font-size:13px">Změna stojí <b>${fmtPts(data.cost)}</b> · jen vůdce</p><div class="crew-em-grid">${grid}</div>`);
+}
+async function crewSetEmblem(em) {
+  if (!_crewId || !em) return;
+  try { const d = await api("/crews/" + _crewId + "/emblem", { method: "POST", body: { emblem: em } }); await refreshMe(); closeModal(); toast("Emblém změněn " + em, "success"); renderCrewDetail(d); }
+  catch (e) { toast(e.message, "error"); }
+}
+async function crewKick(uid, name) {
+  if (!_crewId || !uid) return;
+  if (!confirm("Vyhodit " + (name || "člena") + " z party?")) return;
+  try { const d = await api("/crews/" + _crewId + "/kick", { method: "POST", body: { user_id: parseInt(uid, 10) } }); toast("Člen vyhozen.", "info"); renderCrewDetail(d); }
+  catch (e) { toast(e.message, "error"); }
+}
+async function crewRole(uid, role) {
+  if (!_crewId || !uid) return;
+  try { const d = await api("/crews/" + _crewId + "/role", { method: "POST", body: { user_id: parseInt(uid, 10), role } }); toast(role === "officer" ? "Povýšen na officera ⭐" : "Sundáno na člena.", "success"); renderCrewDetail(d); }
+  catch (e) { toast(e.message, "error"); }
+}
+async function crewLeave() {
+  if (!confirm("Opravdu odejít z party? (vůdce ji předá / poslední ji rozpustí)")) return;
+  try { await api("/crews/" + _crewId + "/leave", { method: "POST" }); _crewId = null; toast("Odešel jsi z party.", "info"); navigate("crews"); }
+  catch (e) { toast(e.message, "error"); }
+}
+function crewCopy(code) {
+  if (!code) return;
+  if (navigator.clipboard) navigator.clipboard.writeText(code).then(() => toast("Kód party zkopírován! 📋", "success"));
+  else toast(code, "info");
 }
 
 async function pageGames() {
@@ -7119,6 +7396,7 @@ async function init() {
     adminState.tab = "bot";
     setTimeout(() => toast("✅ Bot připojen přes Kick (chat:write).", "success"), 300);
   }
+  if (state.user) await loadCrewTags(true);   // crew [TAG] mapa pro globální zobrazení u nicků
   if (!location.hash) location.hash = "#/shop";
   render();
   refreshBonusDot();   // rozsvítí tečku na „Bonusy", pokud je co vyzvednout
