@@ -366,12 +366,12 @@ function pageShop() {
   view.innerHTML = `
     <div class="ticker"><div class="ticker-track" id="tickerTrack"></div></div>
     <div id="dropBanner"></div>
+    <div id="shopAuctions"></div>
     <div class="da-head shop-hero"><img src="/sedlak-cut.png" class="hero-sedlak" alt="Sedlák" />
       <div><h1>Zurys <span class="accent">Shop</span></h1>
       <p>Utrať nasbírané sedláky za prémiové skiny a odměny — instantní odměny, limitky i tomboly. 🌾</p></div></div>
     <div id="happyBanner"></div>
     <div id="soldFeed"></div>
-    <div id="shopAuctions"></div>
     <div id="shopHero"></div>
     <div id="shopMilestone"></div>
     <div class="da-filters" id="filters"></div>
@@ -2217,13 +2217,14 @@ async function loadShopAuctions() {                         // aukce ŽIJOU v sh
     if (!active.length) { box.innerHTML = ""; return; }     // žádná aukce → sekce zmizí
     const tb = d.top_bidders || [];
     const lb = tb.length ? `<div class="section-title" style="margin:18px 0 8px;font-size:14px">🏆 Top dražitelé</div><div class="panel" style="padding:8px 14px">${tb.map((b, i) => `<div style="display:flex;justify-content:space-between;align-items:center;font-size:13px;padding:3px 0"><span>${["🥇", "🥈", "🥉"][i] || (i + 1) + "."} <b>${esc(b.username || "?")}</b></span><span class="faint">${b.wins}× výhra · ${fmtPts(b.spent)} 🌾</span></div>`).join("")}</div>` : "";
-    box.innerHTML = `<div class="section-title" style="margin:22px 0 10px">🔨 Probíhající aukce <span class="faint" style="font-weight:400;font-size:13px">— přihazuj sedláky, kdo dá nejvíc do konce, bere skin!</span></div>`
+    box.innerHTML = `<div class="section-title auc-live-title" style="margin:18px 0 10px"><span class="auc-live-dot"></span> LIVE aukce <span class="faint" style="font-weight:400;font-size:13px">— přihazuj sedláky, kdo dá nejvíc do konce, bere skin! 🔨</span></div>`
       + active.map(auctionCardHTML).join("") + lb;
     _startAuctionTimer();
   } catch (e) { box.innerHTML = ""; }
 }
-async function refreshAuctionBanner() {                     // celostránkový banner aktivní aukce (na VŠECH stránkách)
+async function refreshAuctionBanner() {                     // banner aktivní aukce – na všech stránkách KROMĚ shopu (tam je aukce nahoře)
   const el = document.getElementById("aucBanner"); if (!el) return;
+  if (location.hash.replace(/^#\/?/, "").split(/[/?]/)[0] === "shop") { el.innerHTML = ""; return; }
   try {
     const d = await api("/auctions");
     const a = (d.active || [])[0];                          // nejdřív končící = urgence
