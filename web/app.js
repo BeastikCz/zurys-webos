@@ -252,12 +252,37 @@ function render() {
     "mod-nabor": pageModApply, staty: pageGameStats, "sin-slavy": pageHallOfFame, zahrada: pageGarden,
     statek: pageFarm,
   };
-  if (["statek", "crews"].includes(r.name) && !hasEarlyAccess(state.user)) {   // early access gate (i přímej odkaz)
-    toast("🎫 Tahle featura je zatím v early access.", "info");
-    navigate("shop"); return;
+  if (["statek", "crews"].includes(r.name) && !hasEarlyAccess(state.user)) {   // lišta viditelná všem, klik bez accessu → teaser
+    pageEarlyAccess(r.name);
+    window.scrollTo({ top: 0, behavior: "instant" in window ? "instant" : "auto" });
+    return;
   }
   (pages[r.name] || pageShop)(r.param);
   window.scrollTo({ top: 0, behavior: "instant" in window ? "instant" : "auto" });
+}
+
+/* ---------------- Early access teaser (Statek/Crew bez přístupu) ---------------- */
+const EA_INFO = {
+  statek: { icon: "🚜", name: "Statek", tag: "MINI-FARMA",
+    desc: "Kup zvířata, krm je sklizní ze zahrádky a sbírej produkty za sedláky + XP. Slepice, kozy, ovce, krávy i koně.",
+    bullets: ["6 druhů zvířat s levely ⭐", "Krmivo zdarma ze sklizně zahrádky", "Sbírka + ilustrovaná farma"] },
+  crews: { icon: "🛡️", name: "Crew", tag: "PARTY / KLANY",
+    desc: "Založ partu, nos společný tag u jména, plňte společný cíl za odměnu a levelujte crew. Supporteři táhnou tým nahoru.",
+    bullets: ["Společný tag u jména všude", "Crew cíl + společná odměna", "Žebříček part + supporter board"] },
+};
+function pageEarlyAccess(name) {
+  const i = EA_INFO[name] || EA_INFO.statek;
+  $("#view").innerHTML = `
+    <div class="ea-teaser">
+      <div class="ea-badge">🎫 EARLY ACCESS</div>
+      <div class="ea-icon">${i.icon}</div>
+      <h1>${i.name} <span class="ea-soon">brzy pro všechny</span></h1>
+      <div class="ea-tag">${i.tag}</div>
+      <p class="ea-desc">${i.desc}</p>
+      <ul class="ea-bullets">${i.bullets.map((b) => `<li>${b}</li>`).join("")}</ul>
+      <div class="ea-lock">🔒 Zatím to testuje jen pár vybraných hráčů. Chceš dřív dovnitř? Napiš na streamu nebo modovi. 🌾</div>
+      <a href="#/shop" class="btn btn-primary ea-back">← Zpátky do shopu</a>
+    </div>`;
 }
 
 /* ---------------- Horní navigace (ZURYS) ---------------- */
@@ -314,8 +339,8 @@ function renderHeader() {
   const route = currentRoute();
   const u = state.user;
   document.body.classList.toggle("logged-in", !!u);   /* na mobilu uvolní místo v topbaru (skryje wordmark) */
-  const items = [["shop", "Shop"], ["bonusy", "Bonusy"], ["ukoly", "Úkoly"], ["zahrada", "Zahrádka"], ["statek", "Statek"], ["leaderboard", "Žebříček"], ["crews", "Crew"], ["exchange", "Směnárna"], ["games", "Hry"], ["predikce", "Predikce"]]
-    .filter(([k]) => !["statek", "crews"].includes(k) || hasEarlyAccess(u));   // early access: Crew + Statek jen pro grantnuté + admina
+  const items = [["shop", "Shop"], ["bonusy", "Bonusy"], ["ukoly", "Úkoly"], ["zahrada", "Zahrádka"], ["statek", "Statek"], ["leaderboard", "Žebříček"], ["crews", "Crew"], ["exchange", "Směnárna"], ["games", "Hry"], ["predikce", "Predikce"]];
+  // Statek + Crew vidí v liště VŠICHNI; bez early access ale klik ukáže teaser (viz render guard)
   const navDot = (k) => ((k === "bonusy" && u && bonusReady) || (k === "ukoly" && u && questReady)) ? `<span class="nav-dot" title="Máš nevyzvednutou odměnu!"></span>` : "";
   const navLinks = items.map(([k, l]) => `<a href="#/${k}" class="nav-link ${route === k ? "active" : ""}">${l}${navDot(k)}</a>`).join("")
     + (isStaff(u) ? `<a href="#/admin" class="nav-link ${route === "admin" ? "active" : ""}">${u.role === "admin" ? "Admin" : "Panel"}</a>` : "");

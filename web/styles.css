@@ -1724,6 +1724,24 @@ body::before { display: none !important; }
 @keyframes faShake { 0%,100%{transform:rotate(-5deg)} 50%{transform:rotate(5deg)} }
 @keyframes faBounce { 0%,100%{transform:translateY(0)} 40%{transform:translateY(-12px)} }
 
+/* 🎫 Early access teaser (Statek/Crew bez přístupu) */
+.ea-teaser { max-width: 520px; margin: 38px auto; text-align: center; padding: 32px 24px;
+  border: 1px solid var(--accent-2, var(--border)); border-radius: 20px;
+  background: radial-gradient(circle at 50% 0%, rgba(255,180,51,.10), transparent 65%), var(--surface, var(--bg-2)); }
+.ea-badge { display: inline-block; font-size: 12px; font-weight: 800; letter-spacing: .08em;
+  color: #1a1200; background: linear-gradient(135deg, #ffce5a, #ff9d2e); padding: 5px 14px; border-radius: 999px; }
+.ea-icon { font-size: 70px; margin: 16px 0 2px; filter: drop-shadow(0 6px 12px rgba(0,0,0,.4)); }
+.ea-teaser h1 { font-size: 27px; margin: 4px 0 2px; }
+.ea-soon { font-size: 13px; font-weight: 600; color: var(--accent); vertical-align: middle; }
+.ea-tag { font-size: 11px; letter-spacing: .1em; color: var(--text-dim); font-weight: 700; margin-bottom: 14px; }
+.ea-desc { color: var(--text-dim); font-size: 14.5px; line-height: 1.55; margin: 0 auto 16px; max-width: 420px; }
+.ea-bullets { list-style: none; padding: 0; margin: 0 auto 16px; max-width: 320px; text-align: left; display: inline-block; }
+.ea-bullets li { padding: 6px 0 6px 26px; position: relative; font-size: 14px; }
+.ea-bullets li::before { content: "✅"; position: absolute; left: 0; }
+.ea-lock { font-size: 13px; color: var(--text); background: rgba(255,180,51,.08); border: 1px solid rgba(255,180,51,.22);
+  border-radius: 12px; padding: 11px 14px; margin: 0 auto 18px; max-width: 440px; line-height: 1.5; }
+.ea-back { display: inline-block; }
+
 /* denní bonus folded v Battle Passu */
 .bp-daily-done { font-size: 12.5px; font-weight: 700; color: var(--farm-green); background: rgba(126,217,87,.08); border: 1px solid rgba(126,217,87,.28); border-radius: 12px; padding: 9px 12px; margin: 0 0 14px; text-align: center; }
 
