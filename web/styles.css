@@ -1598,13 +1598,12 @@ body::before { display: none !important; }
 .grd-seed b { font-size: 14px; }
 .grd-seed .faint { font-size: 11.5px; }
 
-/* 🚜 Statek – farm scéna: zvířata stojí na pastvině (ne obdélníky), animace + bubliny */
+/* 🚜 Statek – ilustrovaná farm scéna: SVG pozadí (stodola, kopce, slunce, plot) + zvířata navrch */
 .farm-pasture { position: relative; border-radius: 18px; border: 1px solid var(--border); overflow: hidden;
-  background: linear-gradient(180deg, rgba(70,96,128,.20) 0%, rgba(54,82,52,.26) 44%, rgba(86,104,46,.32) 100%);
-  padding: 26px 12px 18px; display: flex; flex-wrap: wrap; gap: 4px; align-items: flex-end; justify-content: center; min-height: 170px; }
-.farm-pasture::before { content: "☁️        🌤️          ☁️"; position: absolute; top: 7px; left: 0; right: 0; text-align: center; font-size: 15px; opacity: .3; letter-spacing: 6px; pointer-events: none; }
-.farm-pasture::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 13px; pointer-events: none;
-  background: repeating-linear-gradient(90deg, rgba(122,86,48,.5) 0 7px, rgba(88,60,32,.5) 7px 9px); }
+  min-height: 230px; box-shadow: inset 0 -30px 50px -30px rgba(0,0,0,.4); }
+.farm-bg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; z-index: 0; }
+.farm-animals-row { position: relative; z-index: 1; display: flex; flex-wrap: wrap; gap: 4px;
+  align-items: flex-end; justify-content: center; padding: 96px 12px 20px; min-height: 230px; }
 .farm-animal { position: relative; display: flex; flex-direction: column; align-items: center; gap: 0;
   width: 90px; padding: 16px 4px 6px; z-index: 1; }
 .farm-animal[data-action] { cursor: pointer; }
