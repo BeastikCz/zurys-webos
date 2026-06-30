@@ -1630,6 +1630,35 @@ body::before { display: none !important; }
 @keyframes aucPulse { 0%,100% { opacity: 1; } 50% { opacity: .55; } }
 .auc-live-dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: #e34948; margin-right: 5px; vertical-align: middle; box-shadow: 0 0 8px #e34948; animation: aucPulse 1.1s ease-in-out infinite; }
 
+/* 🚜 Statek – ilustrovaná farm scéna: SVG pozadí (stodola, kopce, slunce, plot) + zvířata navrch */
+.farm-pasture { position: relative; border-radius: 18px; border: 1px solid var(--border); overflow: hidden;
+  min-height: 230px; box-shadow: inset 0 -30px 50px -30px rgba(0,0,0,.4); }
+.farm-bg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; z-index: 0; }
+.farm-animals-row { position: relative; z-index: 1; display: flex; flex-wrap: wrap; gap: 4px;
+  align-items: flex-end; justify-content: center; padding: 96px 12px 20px; min-height: 230px; }
+.farm-animal { position: relative; display: flex; flex-direction: column; align-items: center; gap: 0;
+  width: 90px; padding: 16px 4px 6px; z-index: 1; }
+.farm-animal[data-action] { cursor: pointer; }
+.fa-emoji { font-size: 50px; line-height: 1; filter: drop-shadow(0 5px 4px rgba(0,0,0,.45)); animation: faBob 3.2s ease-in-out infinite; }
+.fa-name { font-size: 12px; font-weight: 800; color: var(--text); white-space: nowrap; margin-top: 1px; }
+.fa-lvl { font-size: 10.5px; color: var(--accent); font-weight: 800; }
+.farm-animal.fa-hungry .fa-emoji { animation: faShake .55s ease-in-out infinite; }
+.farm-animal.fa-ready .fa-emoji { animation: faBounce .85s ease-in-out infinite; }
+.farm-animal.fa-ready { filter: drop-shadow(0 0 15px rgba(126,217,87,.5)); }
+.farm-animal[data-action]:hover .fa-emoji { transform: scale(1.09); }
+.farm-animal.fa-empty .fa-emoji { opacity: .28; animation: none; }
+.fa-bubble { position: absolute; top: -2px; left: 50%; transform: translateX(-50%); white-space: nowrap;
+  font-size: 11px; font-weight: 800; padding: 3px 9px; border-radius: 999px; box-shadow: 0 3px 8px -3px rgba(0,0,0,.55); z-index: 2; }
+.fa-bubble-hungry { background: #ffce5a; color: #5a3e0a; }
+.fa-bubble-ready { background: var(--farm-green, #46d369); color: #0e2a10; }
+.fa-bubble-grow { background: rgba(18,22,28,.88); color: var(--accent); font-variant-numeric: tabular-nums; }
+.fa-bubble-util { background: #7ed957; color: #133a0a; }
+.fa-sell { position: absolute; top: 1px; right: 4px; background: none; border: none; color: #ff8a8a; cursor: pointer; font-size: 13px; line-height: 1; opacity: .55; z-index: 3; padding: 2px; }
+.fa-sell:hover { opacity: 1; }
+@keyframes faBob { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-5px)} }
+@keyframes faShake { 0%,100%{transform:rotate(-5deg)} 50%{transform:rotate(5deg)} }
+@keyframes faBounce { 0%,100%{transform:translateY(0)} 40%{transform:translateY(-12px)} }
+
 /* denní bonus folded v Battle Passu */
 .bp-daily-done { font-size: 12.5px; font-weight: 700; color: var(--farm-green); background: rgba(126,217,87,.08); border: 1px solid rgba(126,217,87,.28); border-radius: 12px; padding: 9px 12px; margin: 0 0 14px; text-align: center; }
 

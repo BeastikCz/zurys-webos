@@ -279,6 +279,16 @@ class DecorBuyIn(BaseModel):
     key: str = Field(..., min_length=1, max_length=24)
 
 
+class FarmBuyIn(BaseModel):
+    """Koupě zvířete na statek."""
+    animal: str = Field(..., min_length=1, max_length=24)
+
+
+class FarmSlotIn(BaseModel):
+    """Akce se slotem statku (krmení / sebrání produktu)."""
+    slot: int = Field(..., ge=0, le=20)
+
+
 class CommunityGoalIn(BaseModel):
     """Nastavení komunitního chat cíle (posílají se jen měněná pole)."""
     enabled: Optional[int] = Field(default=None, ge=0, le=1)

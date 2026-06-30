@@ -375,6 +375,26 @@ CREATE TABLE IF NOT EXISTS garden_decor (
     PRIMARY KEY (user_id, decor_key)
 );
 
+-- Statek (mini-farma): zvíře v slotu. ready_at='' = hladové (neprodukuje), jinak ISO konec cyklu.
+-- Loop: koupě → krmení (ready_at=teď+hodiny) → sebrání produktu (ready_at='' → zas hlad).
+CREATE TABLE IF NOT EXISTS farm_animals (
+    user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    slot       INTEGER NOT NULL,             -- 0..n_slots-1
+    animal_key TEXT NOT NULL,
+    ready_at   TEXT NOT NULL DEFAULT '',     -- '' = hladové; jinak ISO konec produkčního cyklu
+    fed_count  INTEGER NOT NULL DEFAULT 0,   -- kolikrát nakrmeno (pro levely zvířete v P2)
+    bought_at  TEXT NOT NULL,
+    PRIMARY KEY (user_id, slot)
+);
+
+-- Statek – sbírka: kdy-koliv vlastněné druhy zvířat (pro odznak „Statkář" za kompletní sbírku).
+CREATE TABLE IF NOT EXISTS farm_collection (
+    user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    animal_key TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    PRIMARY KEY (user_id, animal_key)
+);
+
 -- PvP hry o body: piškvorky (gomoku). 1v1 se sázkou, escrow vkladů, vítěz bere bank.
 CREATE TABLE IF NOT EXISTS games (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -732,6 +752,7 @@ _MIGRATIONS = [
     ("auctions", "sub_only", "INTEGER NOT NULL DEFAULT 0"),      # aukce: jen sub smí přihazovat
     ("auctions", "chat_announce", "INTEGER NOT NULL DEFAULT 1"), # aukce: hlásit do Kick chatu
     ("auctions", "going_once_sent", "INTEGER NOT NULL DEFAULT 0"),  # aukce: „poslední vteřiny" hlášeno
+    ("users", "feed_stock", "INTEGER NOT NULL DEFAULT 0"),    # Statek: zásoba krmiva (padá ze sklizně zahrádky) – krmí zvířata zdarma místo sedláků
     # Responsible gaming – denní limit sázek (Tipsport-style). 0/NULL = bez limitu.
     ("users", "wager_limit", "INTEGER"),                   # aktuální denní strop sázek
     ("users", "wager_limit_pending", "INTEGER"),           # navýšení čeká na zítřek (snížit jde hned)
