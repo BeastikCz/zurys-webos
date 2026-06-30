@@ -8,7 +8,7 @@ Týdenní reset je lazy (porovnává member.week s aktuálním ISO týdnem).
 Sociál: crew chat (vzor jako bj_chat). Vstup: založení = sink sedláků (anti-spam).
 """
 import sqlite3
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from .db import now_iso, local_week_id, local_date
 from .deps import try_debit, notify, add_points, XP_PER_SUB
@@ -21,6 +21,7 @@ CHAT_TAIL = 40
 EMBLEM_COST = 5000        # změna emblému party = sink sedláků (kosmetika, vůdce only)
 LEAVE_COOLDOWN_H = 6      # po odchodu z party musíš počkat X h než vstoupíš jinam (anti-churn/hop)
 MOTD_MAX = 200           # max délka crew popisu/MOTD
+WAR_HOURS = 72           # Crew War trvá 3 dny; odměna = STATUS (war_wins/losses/draws), ŽÁDNÉ sedláky (no faucet)
 EMBLEMS = ["🌾", "🚜", "🐮", "🐔", "🌽", "🥕", "🍺", "⚔️", "🔥", "👑", "🛠️", "🥔",
            "🐺", "🦅", "🐗", "🐉", "🦁", "🐂", "🏰", "🛡️", "🏹", "💀", "⭐", "🍻",
            "🌻", "🐝", "🐴", "🍎", "🪓", "🎯"]
@@ -82,7 +83,6 @@ def earn_bonus(conn, uid, kind):
 
 def _prev_week_id():
     """ISO id PŘEDCHOZÍHO týdne (stejný formát jako local_week_id) – kontrola návaznosti streaku."""
-    from datetime import timedelta
     from .db import local_now
     y, w, _ = (local_now() - timedelta(days=7)).isocalendar()
     return f"{y}-W{w:02d}"
@@ -124,6 +124,21 @@ def _notify_members(conn, crew_id, icon, title, body, link, *, skip=None):
     for r in conn.execute("SELECT user_id FROM crew_members WHERE crew_id=?", (crew_id,)):
         if r["user_id"] != skip:
             notify(conn, r["user_id"], icon, title, body, link)
+
+
+def _uname(conn, uid):
+    r = conn.execute("SELECT username FROM users WHERE id=?", (uid,)).fetchone()
+    return r["username"] if r else "?"
+
+
+def _log(conn, crew_id, event, actor_id=None, actor_name=None, target_id=None, target_name=None, detail=""):
+    """Zapíš událost do historie party (audit log, read-only pro členy). Necommituje (caller commituje).
+    Pozn.: crew_log má ON DELETE CASCADE na crews → historie zaniklé party (poslední odešel) mizí s ní,
+    proto se NEVOLÁ při dissolve větvi leave()."""
+    conn.execute(
+        "INSERT INTO crew_log (crew_id, event, actor_id, actor_name, target_id, target_name, detail, created_at) "
+        "VALUES (?,?,?,?,?,?,?,?)",
+        (crew_id, event, actor_id, actor_name, target_id, target_name, (detail or "")[:200], now_iso()))
 
 
 def _notify_crew_sub(conn, crew_id, subber_uid, n):
@@ -226,6 +241,7 @@ def create(conn, uid, username, name, tag):
     conn.execute(
         "INSERT INTO crew_members (crew_id, user_id, role, week_xp, week, joined_at) VALUES (?,?,'leader',0,?,?)",
         (cid, uid, local_week_id(), ts))
+    _log(conn, cid, "created", uid, username, detail="Parta založena")
     conn.commit()
     return _public(conn, cid, uid)
 
@@ -267,6 +283,7 @@ def join(conn, uid, username, code):
     _insert_member(conn, crew, uid)                    # atomický cap guard (fix race)
     _notify_members(conn, crew["id"], "🤝", "Nový člen party", username + " se přidal do party!",
                     "#/crews/" + str(crew["id"]), skip=uid)
+    _log(conn, crew["id"], "joined", uid, username)
     conn.commit()
     return _public(conn, crew["id"], uid)
 
@@ -276,17 +293,21 @@ def leave(conn, uid):
     if not m:
         return {"left": True}
     crew_id = m["crew_id"]
+    username = _uname(conn, uid)
     conn.execute("DELETE FROM crew_members WHERE user_id=?", (uid,))
     remaining = conn.execute(
         "SELECT user_id FROM crew_members WHERE crew_id=? ORDER BY joined_at, user_id", (crew_id,)).fetchall()
     if not remaining:
-        conn.execute("DELETE FROM crews WHERE id=?", (crew_id,))      # poslední odešel → parta zaniká
+        conn.execute("DELETE FROM crews WHERE id=?", (crew_id,))      # poslední odešel → parta zaniká (historie mizí s ní, FK cascade)
     else:
         crew = _crew(conn, crew_id)
         if crew and crew["leader_id"] == uid:                        # vůdce odešel → předej nejstaršímu
             nl = remaining[0]["user_id"]
             conn.execute("UPDATE crews SET leader_id=? WHERE id=?", (nl, crew_id))
             conn.execute("UPDATE crew_members SET role='leader' WHERE crew_id=? AND user_id=?", (crew_id, nl))
+            _log(conn, crew_id, "left", uid, username, detail="vůdcovství předáno: " + _uname(conn, nl))
+        else:
+            _log(conn, crew_id, "left", uid, username)
     conn.execute("UPDATE users SET crew_left_at=? WHERE id=?", (now_iso(), uid))   # cooldown po dobrovolném odchodu
     conn.commit()
     return {"left": True}
@@ -305,8 +326,10 @@ def kick(conn, leader_uid, target_uid):
     tm = _member(conn, target_uid)
     if not tm or tm["crew_id"] != lm["crew_id"]:
         raise ValueError("Tenhle hráč není v tvojí partě.")
+    target_name = _uname(conn, target_uid)
     conn.execute("DELETE FROM crew_members WHERE user_id=?", (target_uid,))
     notify(conn, target_uid, "🚪", "Odchod z party", "Byl jsi vyhozen z party " + crew["name"] + ".", "#/crews")
+    _log(conn, lm["crew_id"], "kicked", leader_uid, _uname(conn, leader_uid), target_uid, target_name)
     conn.commit()
     return _public(conn, lm["crew_id"], leader_uid)
 
@@ -330,6 +353,7 @@ def set_role(conn, leader_uid, target_uid, role):
     if role == "officer":
         notify(conn, target_uid, "⭐", "Povýšení v partě",
                "Vůdce tě povýšil na officera party " + crew["name"] + "!", "#/crews/" + str(crew["id"]))
+    _log(conn, lm["crew_id"], "role", leader_uid, _uname(conn, leader_uid), target_uid, _uname(conn, target_uid), detail=role)
     conn.commit()
     return _public(conn, lm["crew_id"], leader_uid)
 
@@ -349,6 +373,7 @@ def set_emblem(conn, leader_uid, emblem):
     if not try_debit(conn, leader_uid, EMBLEM_COST, "Změna emblému party 🎨"):
         raise ValueError(f"Na změnu emblému potřebuješ {EMBLEM_COST} sedláků.")
     conn.execute("UPDATE crews SET emblem=? WHERE id=?", (emblem, lm["crew_id"]))
+    _log(conn, lm["crew_id"], "emblem", leader_uid, _uname(conn, leader_uid), detail=emblem)
     conn.commit()
     return _public(conn, lm["crew_id"], leader_uid)
 
@@ -362,6 +387,7 @@ def toggle_private(conn, leader_uid, private):
     if not crew or crew["leader_id"] != leader_uid:
         raise ValueError("Jen vůdce mění soukromí party.")
     conn.execute("UPDATE crews SET private=? WHERE id=?", (1 if private else 0, lm["crew_id"]))
+    _log(conn, lm["crew_id"], "private", leader_uid, _uname(conn, leader_uid), detail="zapnuto 🔒" if private else "vypnuto 🔓")
     conn.commit()
     return _public(conn, lm["crew_id"], leader_uid)
 
@@ -374,7 +400,9 @@ def set_motd(conn, leader_uid, text):
     crew = _crew(conn, lm["crew_id"])
     if not crew or crew["leader_id"] != leader_uid:
         raise ValueError("Jen vůdce mění popis party.")
-    conn.execute("UPDATE crews SET motd=? WHERE id=?", ((text or "").strip()[:MOTD_MAX], lm["crew_id"]))
+    text = (text or "").strip()[:MOTD_MAX]
+    conn.execute("UPDATE crews SET motd=? WHERE id=?", (text, lm["crew_id"]))
+    _log(conn, lm["crew_id"], "motd", leader_uid, _uname(conn, leader_uid), detail=text[:60] or "(smazáno)")
     conn.commit()
     return _public(conn, lm["crew_id"], leader_uid)
 
@@ -401,6 +429,7 @@ def approve_request(conn, leader_uid, target_uid):
            "Vůdce tě přijal do party " + crew["name"] + "!", "#/crews/" + str(crew["id"]))
     _notify_members(conn, crew["id"], "🤝", "Nový člen party", req["username"] + " se přidal do party!",
                     "#/crews/" + str(crew["id"]), skip=target_uid)
+    _log(conn, crew["id"], "joined", target_uid, req["username"], detail="schváleno vůdcem")
     conn.commit()
     return _public(conn, crew["id"], leader_uid)
 
@@ -460,16 +489,123 @@ def claim_goal(conn, uid):
         conn.execute("UPDATE crews SET streak=?, streak_week=?, best_streak=MAX(best_streak, ?) WHERE id=?",
                      (ns, week, ns, crew_id))
     add_points(conn, uid, GOAL_REWARD, "Crew týdenní cíl 🤝", xp=False)
+    _log(conn, crew_id, "goal", uid, _uname(conn, uid), detail=f"+{GOAL_REWARD} sedláků (týdenní cíl)")
     conn.commit()
     out = _public(conn, crew_id, uid)
     out["claimed_now"] = GOAL_REWARD
     return out
 
 
+# ---------------- Crew Wars ----------------
+# Týdenní/víkendová drama mezi 2 partama: skóre = delta crews.xp od vyhlášení do konce (start_xp snapshot).
+# Odměna je VÝHRADNĚ status (war_wins/losses/draws na crews) – ŽÁDNÉ sedláky, no faucet. Lazy finalizace
+# (stejný pattern jako aukce _finalize_expired) – žádný daemon, finalizuje se při čtení (leaderboard/detail).
+def _finalize_wars(conn):
+    """Uzavře vypršené aktivní války: spočítá deltu XP obou stran, zapíše vítěze (None=remíza),
+    připíše war_wins/losses/draws, zaloguje do historie obou párty + notifikuje členy. Necommituje
+    (caller commituje, stejně jako auctions._finalize_expired)."""
+    now = now_iso()
+    rows = conn.execute("SELECT * FROM crew_wars WHERE status='active' AND ends_at<=?", (now,)).fetchall()
+    if not rows:
+        return
+    for w in rows:
+        if conn.execute("UPDATE crew_wars SET status='ended' WHERE id=? AND status='active'",
+                        (w["id"],)).rowcount != 1:
+            continue   # souběh – jiný request to už uzavřel
+        ca, cb = _crew(conn, w["crew_a_id"]), _crew(conn, w["crew_b_id"])
+        if not ca and not cb:                     # obě party mezitím zanikly → bez vítěze, nic k zalogování
+            continue
+        if ca and not cb:                          # soupeř zanikl → automatická výhra
+            conn.execute("UPDATE crew_wars SET winner_crew_id=? WHERE id=?", (ca["id"], w["id"]))
+            conn.execute("UPDATE crews SET war_wins=war_wins+1 WHERE id=?", (ca["id"],))
+            _log(conn, ca["id"], "war_end", detail="Vyhráno – soupeř zanikl 🏆")
+            _notify_members(conn, ca["id"], "🏆", "Vyhráli jste válku!", "Soupeř zanikl – výhra automaticky.", "#/crews/" + str(ca["id"]))
+            continue
+        if cb and not ca:
+            conn.execute("UPDATE crew_wars SET winner_crew_id=? WHERE id=?", (cb["id"], w["id"]))
+            conn.execute("UPDATE crews SET war_wins=war_wins+1 WHERE id=?", (cb["id"],))
+            _log(conn, cb["id"], "war_end", detail="Vyhráno – soupeř zanikl 🏆")
+            _notify_members(conn, cb["id"], "🏆", "Vyhráli jste válku!", "Soupeř zanikl – výhra automaticky.", "#/crews/" + str(cb["id"]))
+            continue
+        delta_a = max(0, (ca["xp"] or 0) - w["start_xp_a"])
+        delta_b = max(0, (cb["xp"] or 0) - w["start_xp_b"])
+        if delta_a == delta_b:
+            conn.execute("UPDATE crews SET war_draws=war_draws+1 WHERE id IN (?,?)", (ca["id"], cb["id"]))
+            for c, opp, mine in ((ca, cb, delta_a), (cb, ca, delta_b)):
+                _log(conn, c["id"], "war_end", detail=f"Remíza proti {opp['name']} ({mine} XP : {mine} XP)")
+                _notify_members(conn, c["id"], "🤝", "Válka skončila remízou", f"Remíza proti {opp['name']}! Oba {mine} XP.", "#/crews/" + str(c["id"]))
+        else:
+            winner, loser = (ca, cb) if delta_a > delta_b else (cb, ca)
+            wd, ld = (delta_a, delta_b) if delta_a > delta_b else (delta_b, delta_a)
+            conn.execute("UPDATE crew_wars SET winner_crew_id=? WHERE id=?", (winner["id"], w["id"]))
+            conn.execute("UPDATE crews SET war_wins=war_wins+1 WHERE id=?", (winner["id"],))
+            conn.execute("UPDATE crews SET war_losses=war_losses+1 WHERE id=?", (loser["id"],))
+            _log(conn, winner["id"], "war_end", detail=f"Vyhráno proti {loser['name']} ({wd} : {ld} XP) 🏆")
+            _log(conn, loser["id"], "war_end", detail=f"Prohráno proti {winner['name']} ({ld} : {wd} XP)")
+            _notify_members(conn, winner["id"], "🏆", "Vyhráli jste válku!", f"Porazili jste {loser['name']} ({wd} : {ld} XP)!", "#/crews/" + str(winner["id"]))
+            _notify_members(conn, loser["id"], "💀", "Prohráli jste válku", f"{winner['name']} vás porazili ({ld} : {wd} XP). Příště!", "#/crews/" + str(loser["id"]))
+
+
+def declare_war(conn, leader_uid, opponent_crew_id):
+    """Vůdce vyhlásí válku jiné partě (3 dny, skóre = kdo nasbírá víc crew XP). 1 aktivní válka/parta
+    (přirozený throttle, žádné stohování). Odměna je status, ne sedláky."""
+    _finalize_wars(conn)
+    lm = _member(conn, leader_uid)
+    if not lm:
+        raise ValueError("Nejsi v partě.")
+    crew = _crew(conn, lm["crew_id"])
+    if not crew or crew["leader_id"] != leader_uid:
+        raise ValueError("Jen vůdce party může vyhlásit válku.")
+    opponent_crew_id = int(opponent_crew_id)
+    if opponent_crew_id == crew["id"]:
+        raise ValueError("Sám se sebou válčit nelze.")
+    opp = _crew(conn, opponent_crew_id)
+    if not opp:
+        raise ValueError("Tahle parta neexistuje.")
+    if conn.execute("SELECT 1 FROM crew_wars WHERE (crew_a_id=? OR crew_b_id=?) AND status='active'",
+                    (crew["id"], crew["id"])).fetchone():
+        raise ValueError("Tvoje parta už ve válce je – počkej až skončí.")
+    if conn.execute("SELECT 1 FROM crew_wars WHERE (crew_a_id=? OR crew_b_id=?) AND status='active'",
+                    (opp["id"], opp["id"])).fetchone():
+        raise ValueError(f"{opp['name']} už s někým válčí – zkus jinou partu.")
+    ts = now_iso()
+    ends = (datetime.fromisoformat(ts) + timedelta(hours=WAR_HOURS)).isoformat()
+    conn.execute(
+        "INSERT INTO crew_wars (crew_a_id, crew_b_id, start_xp_a, start_xp_b, started_at, ends_at) VALUES (?,?,?,?,?,?)",
+        (crew["id"], opp["id"], crew["xp"] or 0, opp["xp"] or 0, ts, ends))
+    _log(conn, crew["id"], "war_start", leader_uid, _uname(conn, leader_uid), detail=f"vs {opp['name']}")
+    _log(conn, opp["id"], "war_start", leader_uid, _uname(conn, leader_uid), detail=f"vs {crew['name']}")
+    _notify_members(conn, crew["id"], "⚔️", "Vyhlásili jste válku!", f"Válka proti {opp['name']} začíná – kdo nasbírá víc XP do {WAR_HOURS}h, vyhrává!", "#/crews/" + str(crew["id"]))
+    _notify_members(conn, opp["id"], "⚔️", "Vyhlásili vám válku!", f"{crew['name']} vám vyhlásili válku – braňte se, sbírejte XP! ({WAR_HOURS}h)", "#/crews/" + str(opp["id"]))
+    conn.commit()
+    return _public(conn, crew["id"], leader_uid)
+
+
+def _war_state(conn, crew):
+    """Aktivní válka party (pro _public detail) – soupeř, kdo aktuálně vede, kdy končí. None = bez války."""
+    w = conn.execute(
+        "SELECT * FROM crew_wars WHERE (crew_a_id=? OR crew_b_id=?) AND status='active'",
+        (crew["id"], crew["id"])).fetchone()
+    if not w:
+        return None
+    am_a = w["crew_a_id"] == crew["id"]
+    opp_id = w["crew_b_id"] if am_a else w["crew_a_id"]
+    opp = _crew(conn, opp_id)
+    if not opp:
+        return None
+    my_gain = max(0, (crew["xp"] or 0) - (w["start_xp_a"] if am_a else w["start_xp_b"]))
+    opp_gain = max(0, (opp["xp"] or 0) - (w["start_xp_b"] if am_a else w["start_xp_a"]))
+    return {"opponent_id": opp["id"], "opponent_name": opp["name"], "opponent_tag": opp["tag"],
+            "opponent_emblem": opp["emblem"], "my_gain": my_gain, "opp_gain": opp_gain,
+            "started_at": w["started_at"], "ends_at": w["ends_at"]}
+
+
 # ---------------- veřejný stav ----------------
 def leaderboard(conn, uid, limit=50, sort="week"):
     """sort='week' → týdenní XP (farm+sub). 'subs' → SUPPORTER board (all-time sub_xp party).
     'month' → PARTA MĚSÍCE (měsíční sub race, #1 = koruna; měsíčně se resetuje → vždy nová soutěž)."""
+    _finalize_wars(conn)
+    conn.commit()
     week = local_week_id()
     month = local_date()[:7]
     order = {"subs": "sub_total DESC, c.id ASC",
@@ -484,11 +620,13 @@ def leaderboard(conn, uid, limit=50, sort="week"):
         "FROM crews c ORDER BY " + order + " LIMIT ?",
         (month, week, limit)).fetchall()
     m = _member(conn, uid)
+    at_war = {r["crew_a_id"] for r in conn.execute("SELECT crew_a_id FROM crew_wars WHERE status='active'")} \
+        | {r["crew_b_id"] for r in conn.execute("SELECT crew_b_id FROM crew_wars WHERE status='active'")}
     return {"week": week, "month": month, "sort": sort, "my_crew_id": m["crew_id"] if m else None,
             "crews": [{"rank": i + 1, "id": r["id"], "name": r["name"], "tag": r["tag"],
                        "emblem": r["emblem"], "members": r["members"], "week_xp": r["week_xp"],
                        "sub_total": r["sub_total"], "month_xp": r["month_xp"],
-                       "level": _level(r["xp"]), "goal": goal_for(r["members"])}
+                       "level": _level(r["xp"]), "goal": goal_for(r["members"]), "at_war": r["id"] in at_war}
                       for i, r in enumerate(rows)]}
 
 
@@ -504,9 +642,32 @@ def state(conn, uid, crew_id):
     return _public(conn, crew_id, uid)
 
 
+_LOG_VERBS = {
+    "created": "🤝 založil(a) partu", "joined": "🤝 vstoupil(a) do party", "left": "🚪 opustil(a) partu",
+    "kicked": "👢 vyhodil(a)", "role": "⭐ změnil(a) roli", "emblem": "🎨 změnil(a) emblém",
+    "motd": "📝 upravil(a) popis", "private": "🔒 změnil(a) soukromí", "goal": "🎁 vyzvedl(a) odměnu",
+    "war_start": "⚔️ vyhlásil(a) válku", "war_end": "🏆 válka skončila",
+}
+
+
+def get_log(conn, uid, crew_id, limit=50):
+    """Historie party (audit log) – vidí JEN členové (transparentnost dovnitř, ne ven)."""
+    m = _member(conn, uid)
+    if not m or m["crew_id"] != crew_id:
+        raise ValueError("Nejsi v téhle partě.")
+    rows = conn.execute(
+        "SELECT event, actor_id, actor_name, target_id, target_name, detail, created_at FROM crew_log "
+        "WHERE crew_id=? ORDER BY id DESC LIMIT ?", (crew_id, min(200, max(1, limit)))).fetchall()
+    return {"events": [{"event": r["event"], "verb": _LOG_VERBS.get(r["event"], r["event"]),
+                        "actor_name": r["actor_name"], "target_name": r["target_name"],
+                        "detail": r["detail"] or "", "created_at": r["created_at"]} for r in rows]}
+
+
 def admin_list(conn):
     """VŠECHNY party pro admina: meta (level/XP/streak/MOTD/soukromá/kód) + členové (kdo s kým, role,
     all-time příspěvek, sub XP, týdenní XP). Vůdce první, pak dle příspěvku."""
+    _finalize_wars(conn)
+    conn.commit()
     out = []
     for c in conn.execute("SELECT * FROM crews ORDER BY xp DESC, id DESC"):
         members = []
@@ -521,6 +682,7 @@ def admin_list(conn):
                     "level": _level(c["xp"]), "xp": c["xp"] or 0, "member_count": len(members),
                     "member_cap": c["member_cap"], "private": bool(c["private"]), "streak": c["streak"] or 0,
                     "best_streak": c["best_streak"] or 0, "motd": c["motd"] or "", "code": c["code"],
+                    "war_wins": c["war_wins"] or 0, "war_losses": c["war_losses"] or 0, "war_draws": c["war_draws"] or 0,
                     "created_at": c["created_at"], "members": members})
     return out
 
@@ -543,10 +705,19 @@ def _achievements(c, members_count, sub_total):
 
 
 def _public(conn, crew_id, viewer_uid):
+    _finalize_wars(conn)
+    conn.commit()
     c = _crew(conn, crew_id)
     if not c:
         return None
     week = local_week_id()
+    is_leader = c["leader_id"] == viewer_uid
+    # Aktivita členů (poslední přihlášení) – jen vůdce vidí (pomáhá rozhodnout koho kicknout). 1 batch query, ne N+1.
+    last_active = {}
+    if is_leader:
+        last_active = {r["user_id"]: r["ls"] for r in conn.execute(
+            "SELECT user_id, MAX(last_seen) AS ls FROM sessions WHERE user_id IN "
+            "(SELECT user_id FROM crew_members WHERE crew_id=?) GROUP BY user_id", (crew_id,))}
     members, total_week, week_sub_xp, total_sub = [], 0, 0, 0
     you_member = False
     you_claimed_week = None
@@ -567,6 +738,7 @@ def _public(conn, crew_id, viewer_uid):
         total_sub += sx
         members.append({"user_id": m["user_id"], "username": m["username"],
                         "avatar_url": m["avatar_url"] or "", "role": m["role"],
+                        "last_active": last_active.get(m["user_id"]) if is_leader else None,
                         "week_xp": wx, "contributed": m["contributed"] or 0,
                         "sub_xp": sx, "farm_xp": max(0, (m["contributed"] or 0) - sx), "is_you": is_you})
     chat = []
@@ -584,7 +756,6 @@ def _public(conn, crew_id, viewer_uid):
     week_subs = week_sub_xp // XP_PER_SUB
     sub_goal = sub_goal_for(len(members))
     streak = c["streak"] if c["streak_week"] in (week, _prev_week_id()) else 0   # živý jen pokud tento/minulý týden
-    is_leader = c["leader_id"] == viewer_uid
     requests = []
     if is_leader:                                   # žádosti o vstup vidí jen vůdce
         requests = [dict(r) for r in conn.execute(
@@ -608,4 +779,6 @@ def _public(conn, crew_id, viewer_uid):
         "code": c["code"] if you_member else None,        # kód vidí jen členové
         "members": members, "chat": chat,
         "is_member": you_member, "is_leader": is_leader,
+        "war": _war_state(conn, c), "war_wins": c["war_wins"] or 0,
+        "war_losses": c["war_losses"] or 0, "war_draws": c["war_draws"] or 0,
     }

@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from ..deps import db_dep, require_user, require_early_access
 from ..models import (CrewCreateIn, CrewJoinIn, CrewChatIn, CrewMemberIn, CrewRoleIn,
-                      CrewEmblemIn, CrewMotdIn, CrewPrivateIn)
+                      CrewEmblemIn, CrewMotdIn, CrewPrivateIn, CrewWarDeclareIn)
 from .. import crews
 
 # early access gate: celý Crew router je zatím jen pro grantnuté + admina (soft launch)
@@ -63,6 +63,13 @@ def crews_detail(crew_id: int, user: sqlite3.Row = Depends(require_user),
     if not d:
         raise HTTPException(status_code=404, detail="Parta nenalezena.")
     return d
+
+
+@router.get("/{crew_id}/log")
+def crews_log(crew_id: int, user: sqlite3.Row = Depends(require_user),
+              conn: sqlite3.Connection = Depends(db_dep)):
+    """Historie party (audit log) – kdo co kdy udělal. Jen pro členy."""
+    return _do(crews.get_log, conn, user["id"], crew_id)
 
 
 @router.post("/{crew_id}/leave")
@@ -124,3 +131,10 @@ def crews_approve(crew_id: int, data: CrewMemberIn, user: sqlite3.Row = Depends(
 def crews_reject(crew_id: int, data: CrewMemberIn, user: sqlite3.Row = Depends(require_user),
                  conn: sqlite3.Connection = Depends(db_dep)):
     return _do(crews.reject_request, conn, user["id"], data.user_id)
+
+
+@router.post("/{crew_id}/war/declare")
+def crews_war_declare(crew_id: int, data: CrewWarDeclareIn, user: sqlite3.Row = Depends(require_user),
+                      conn: sqlite3.Connection = Depends(db_dep)):
+    """Vůdce vyhlásí válku jiné partě (3 dny, skóre = crew XP). Odměna je status, ne sedláky."""
+    return _do(crews.declare_war, conn, user["id"], data.opponent_id)

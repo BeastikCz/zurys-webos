@@ -636,6 +636,10 @@ class CrewPrivateIn(BaseModel):
     private: bool
 
 
+class CrewWarDeclareIn(BaseModel):
+    opponent_id: int
+
+
 class GamesRakeIn(BaseModel):
     """Rake (% z banku pro house) na hrách/duelech. 0 = férové bez poplatku."""
     rake_pct: int = Field(ge=0, le=50)

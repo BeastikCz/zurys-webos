@@ -6063,14 +6063,17 @@ function handleAction(action, el) {
     case "crew-claim": crewClaim(); break;
     case "crew-kick": crewKick(el.dataset.uid, el.dataset.name); break;
     case "crew-role": crewRole(el.dataset.uid, el.dataset.role); break;
-    case "crew-emblem": crewEmblemPicker(); break;
     case "crew-set-emblem": crewSetEmblem(el.dataset.emblem); break;
-    case "crew-motd": crewMotd(); break;
     case "crew-private": crewPrivate(el.dataset.private); break;
     case "crew-approve": crewApprove(el.dataset.uid); break;
     case "crew-reject": crewReject(el.dataset.uid); break;
     case "crew-copy": crewCopy(el.dataset.code); break;
     case "crew-sort": crewSortBoard(el.dataset.sort); break;
+    case "crew-settings": crewSettingsModal(); break;
+    case "crew-settings-save-motd": crewSettingsSaveMotd(); break;
+    case "crew-history": crewHistoryModal(); break;
+    case "crew-war-open": crewWarModal(); break;
+    case "crew-war-declare": crewWarDeclare(el.dataset.id); break;
     case "bjr-next": bjrAct("next"); break;
     case "bjr-leave": bjrLeave(); break;
     case "bjr-chat": bjrChat(); break;
@@ -6590,7 +6593,7 @@ function bjrMute() {
 }
 
 /* ---------------- 🤝 Parta / Crew (klany) ---------------- */
-let _crewId = null, _crewPoll = null;
+let _crewId = null, _crewPoll = null, _crewDetail = null;
 async function pageCrews(param) {
   if (!state.user) { navigate("connect"); return; }
   if (_crewPoll) { clearInterval(_crewPoll); _crewPoll = null; }
@@ -6631,7 +6634,7 @@ function renderCrewLobby(lb) {
     return `
     <a class="crew-row${crown ? " crew-champ" : ""}" href="#/crews/${c.id}">
       <span class="crew-rank">#${c.rank}</span><span class="crew-emblem">${c.emblem}</span>
-      <span class="crew-name">${crown}<b>${esc(c.name)}</b> <span class="crew-tag">[${esc(c.tag)}]</span></span>
+      <span class="crew-name">${crown}<b>${esc(c.name)}</b> <span class="crew-tag">[${esc(c.tag)}]</span>${c.at_war ? ' <span class="crew-war-badge" title="Právě ve válce">⚔️</span>' : ""}</span>
       <span class="crew-meta">⭐${c.level} · ${c.members} 👤 · ${primary}${secondary ? " · " + secondary : ""}</span>
     </a>`;
   }).join("") || '<div class="faint">Zatím žádná parta — založ první! 🤝</div>';
@@ -6671,6 +6674,13 @@ async function crewSortBoard(sort) {
   catch (e) { toast(e.message, "error"); }
 }
 function _crewRole(r) { return r === "leader" ? "👑 " : (r === "officer" ? "⭐ " : ""); }
+function _crewIdleBadge(lastActive) {
+  if (!lastActive) return `<span class="crew-idle crew-idle-never" title="Nikdy se nepřihlásil(a)">⚪</span>`;
+  const days = (Date.now() - new Date(lastActive).getTime()) / 86400000;
+  const cls = days < 1 ? "crew-idle-active" : days < 7 ? "crew-idle-recent" : days < 14 ? "crew-idle-warn" : "crew-idle-dead";
+  const dot = days < 1 ? "🟢" : days < 7 ? "🟡" : days < 14 ? "🟠" : "🔴";
+  return `<span class="crew-idle ${cls}" title="Naposledy aktivní: ${timeAgo(lastActive)}">${dot}</span>`;
+}
 function crewMembersHTML(d) {
   return (d.members || []).map((m) => {
     const isLeader = m.user_id === d.leader_id;
@@ -6682,7 +6692,7 @@ function crewMembersHTML(d) {
     return `
     <div class="crew-mrow${m.is_you ? " you" : ""}">
       ${avatarHTML(m.username, m.avatar_url)}
-      <span class="crew-mname">${_crewRole(m.role)}${esc(m.username)}${m.is_you ? ' · <span style="color:var(--accent)">TY</span>' : ""}</span>
+      <span class="crew-mname">${_crewRole(m.role)}${esc(m.username)}${m.is_you ? ' · <span style="color:var(--accent)">TY</span>' : ""}${d.is_leader && !m.is_you ? " " + _crewIdleBadge(m.last_active) : ""}</span>
       <span class="crew-mxp">${m.sub_xp ? `<b class="crew-sub">🎁 ${Number(m.sub_xp).toLocaleString("cs-CZ")}</b> · ` : ""}<span class="faint">⛏️ ${Number(m.farm_xp || 0).toLocaleString("cs-CZ")}</span></span>
       ${mgmt}
     </div>`;
@@ -6712,7 +6722,35 @@ function crewGoalHTML(d) {
       <div class="crew-goal-hint">${d.sub_goal_reached ? "Parta tento týden nese — status Supporter parta 🎁" : "Subněte/giftněte společně → odznak Supporter parta + flex na žebříčku."}</div>
     </div>`;
 }
+function crewWarHTML(d) {
+  const record = (d.war_wins || d.war_losses || d.war_draws)
+    ? `<span class="faint" style="font-size:12px">Bilance ${d.war_wins}V-${d.war_losses}P-${d.war_draws}R</span>` : "";
+  if (!d.war) {
+    if (!d.is_leader && !record) return "";
+    return `<div class="panel crew-war-panel" style="margin-bottom:14px">
+      <div class="section-title" style="margin-top:0;display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
+        <span>⚔️ Crew War</span>${record}
+      </div>
+      ${d.is_leader
+        ? `<div class="faint" style="font-size:13px;margin-bottom:8px">Vyhlas válku jiné partě — 3 dny, kdo nasbírá víc XP vyhrává. Odměna = sláva, žádné sedláky.</div>
+           <button class="btn btn-sm btn-accent" data-action="crew-war-open">⚔️ Vyhlásit válku</button>`
+        : `<div class="faint" style="font-size:13px">Zatím žádná aktivní válka.</div>`}
+    </div>`;
+  }
+  const w = d.war;
+  const total = Math.max(1, w.my_gain + w.opp_gain);
+  const myPct = Math.round(w.my_gain / total * 100);
+  const leading = w.my_gain > w.opp_gain;
+  const tied = w.my_gain === w.opp_gain;
+  return `<div class="panel crew-war-panel crew-war-active" style="margin-bottom:14px">
+    <div class="section-title" style="margin-top:0">⚔️ VÁLKA proti ${w.opponent_emblem} <b>${esc(w.opponent_name)}</b>${w.opponent_tag ? ` <span class="crew-tag">[${esc(w.opponent_tag)}]</span>` : ""}</div>
+    <div class="crew-war-bar"><div class="crew-war-fill${leading ? " leading" : tied ? "" : " losing"}" style="width:${myPct}%"></div></div>
+    <div class="crew-war-nums"><span><b>${Number(w.my_gain).toLocaleString("cs-CZ")}</b> my</span><span class="faint">vs</span><span><b>${Number(w.opp_gain).toLocaleString("cs-CZ")}</b> oni</span></div>
+    <div class="faint" style="font-size:12px;margin-top:6px">⏳ Válka končí za ${countdown(w.ends_at)}</div>
+  </div>`;
+}
 function renderCrewDetail(d) {
+  _crewDetail = d;
   const box = $("#crewWrap"); if (!box) return;
   box.innerHTML = `
     <div class="panel crew-hero" style="margin-bottom:14px">
@@ -6722,9 +6760,10 @@ function renderCrewDetail(d) {
           <div class="crew-bonus-line">🎁 +${d.sub_bonus_pct}% sedláků za sub · ⛏️ +${d.farm_bonus_pct}% za farm <span class="faint" style="font-weight:400">— bonus všem členům</span></div></div>
       </div>
       ${d.is_member
-        ? `<div class="toolbar" style="gap:6px;flex-wrap:wrap">${d.code ? `<button class="btn btn-sm btn-ghost" data-action="crew-copy" data-code="${esc(d.code)}">📋 Kód</button>` : ""}${d.is_leader ? `<button class="btn btn-sm btn-ghost" data-action="crew-emblem" title="Změnit emblém">🎨</button><button class="btn btn-sm btn-ghost" data-action="crew-motd" title="Popis party">📝</button><button class="btn btn-sm btn-ghost" data-action="crew-private" data-private="${d.private ? 0 : 1}" title="${d.private ? "Zveřejnit partu" : "Udělat soukromou (join přes schválení)"}">${d.private ? "🔒" : "🔓"}</button>` : ""}<button class="btn btn-sm btn-danger" data-action="crew-leave">Odejít</button></div>`
+        ? `<div class="toolbar" style="gap:6px;flex-wrap:wrap">${d.code ? `<button class="btn btn-sm btn-ghost" data-action="crew-copy" data-code="${esc(d.code)}">📋 Kód</button>` : ""}<button class="btn btn-sm btn-ghost" data-action="crew-history" title="Historie party">📜</button>${d.is_leader ? `<button class="btn btn-sm btn-ghost" data-action="crew-settings" title="Nastavení party">⚙️</button>` : ""}<button class="btn btn-sm btn-danger" data-action="crew-leave">Odejít</button></div>`
         : `<a class="btn btn-sm btn-ghost" href="#/crews">← Žebříček</a>`}
     </div>
+    <div id="crewWar">${crewWarHTML(d)}</div>
     ${(d.motd || (d.achievements && d.achievements.length)) ? `<div class="panel crew-info" style="margin-bottom:14px">${d.motd ? `<div class="crew-motd">📝 ${esc(d.motd)}</div>` : ""}${(d.achievements && d.achievements.length) ? `<div class="crew-achs">${d.achievements.map((a) => `<span class="crew-ach">${a.icon} ${esc(a.name)}</span>`).join("")}</div>` : ""}</div>` : ""}
     ${(d.is_leader && d.requests && d.requests.length) ? `<div class="panel" style="margin-bottom:14px"><div class="section-title" style="margin-top:0">🔔 Žádosti o vstup <span class="faint" style="font-size:12px;font-weight:400">· ${d.requests.length}</span></div>${d.requests.map((r) => `<div class="crew-req"><span class="crew-mname">${esc(r.username)}</span><span class="crew-mgmt"><button class="crew-mbtn" data-action="crew-approve" data-uid="${r.user_id}" title="Přijmout">✅</button><button class="crew-mbtn danger" data-action="crew-reject" data-uid="${r.user_id}" title="Zamítnout">✕</button></span></div>`).join("")}</div>` : ""}
     <div class="panel crew-goal-panel" id="crewGoal" style="margin-bottom:14px">${crewGoalHTML(d)}</div>
@@ -6745,8 +6784,10 @@ async function crewPoll() {
   if (!document.getElementById("crewMembers")) { if (_crewPoll) clearInterval(_crewPoll); _crewPoll = null; return; }
   if (!_crewId || document.hidden) return;
   let d; try { d = await api("/crews/" + _crewId); } catch (e) { return; }
+  _crewDetail = d;
   const mb = document.getElementById("crewMembers"); if (mb) mb.innerHTML = crewMembersHTML(d);
   const gb = document.getElementById("crewGoal"); if (gb) gb.innerHTML = crewGoalHTML(d);
+  const wb = document.getElementById("crewWar"); if (wb) wb.innerHTML = crewWarHTML(d);
   const cbx = document.getElementById("crewChatBox");
   if (cbx) { const atBottom = cbx.scrollHeight - cbx.scrollTop - cbx.clientHeight < 50; cbx.innerHTML = crewChatHTML(d); if (atBottom) cbx.scrollTop = cbx.scrollHeight; }
 }
@@ -6783,16 +6824,38 @@ async function crewClaim() {
     renderCrewDetail(d);
   } catch (e) { toast(e.message, "error"); }
 }
-async function crewMotd() {
+async function crewSettingsModal() {
+  if (!_crewId || !_crewDetail || !_crewDetail.is_leader) return;
+  const d = _crewDetail;
+  let emData; try { emData = await api("/crews/emblems"); } catch (e) { emData = { emblems: [], cost: 0 }; }
+  const emGrid = (emData.emblems || []).map((em) => `<button class="crew-em-pick${em === d.emblem ? " sel" : ""}" data-action="crew-set-emblem" data-emblem="${em}">${em}</button>`).join("");
+  openModal(`
+    <h3 style="margin-top:0">⚙️ Nastavení party</h3>
+    <div class="field" style="margin-bottom:16px">
+      <label>📝 Popis party (MOTD)</label>
+      <textarea class="input" id="crewMotdInput" maxlength="200" rows="3" style="width:100%;resize:vertical;margin-top:6px">${esc(d.motd || "")}</textarea>
+      <button class="btn btn-sm btn-accent" style="margin-top:8px" data-action="crew-settings-save-motd">Uložit popis</button>
+    </div>
+    <div class="field" style="margin-bottom:16px">
+      <label>🔒 Soukromí</label>
+      <p class="faint" style="font-size:12.5px;margin:4px 0 8px">${d.private ? "Parta je soukromá — nový člen musí počkat na schválení." : "Parta je veřejná — kdokoliv s kódem se přidá rovnou."}</p>
+      <button class="btn btn-sm btn-ghost" data-action="crew-private" data-private="${d.private ? 0 : 1}">${d.private ? "🔓 Zveřejnit partu" : "🔒 Udělat soukromou"}</button>
+    </div>
+    <div class="field">
+      <label>🎨 Emblém <span class="faint" style="font-weight:400">· změna ${fmtPts(emData.cost)}</span></label>
+      <div class="crew-em-grid" style="margin-top:8px">${emGrid}</div>
+    </div>`);
+}
+async function crewSettingsSaveMotd() {
   if (!_crewId) return;
-  const text = prompt("Popis party (max 200 znaků):", "");
-  if (text === null) return;
-  try { const d = await api("/crews/" + _crewId + "/motd", { method: "POST", body: { text } }); toast("Popis uložen.", "success"); renderCrewDetail(d); }
+  const el = document.getElementById("crewMotdInput");
+  const text = el ? el.value : "";
+  try { const d = await api("/crews/" + _crewId + "/motd", { method: "POST", body: { text } }); closeModal(); toast("Popis uložen.", "success"); renderCrewDetail(d); }
   catch (e) { toast(e.message, "error"); }
 }
 async function crewPrivate(p) {
   if (!_crewId) return;
-  try { const d = await api("/crews/" + _crewId + "/private", { method: "POST", body: { private: String(p) === "1" } }); toast(d.private ? "Parta je teď soukromá 🔒" : "Parta je veřejná 🔓", "success"); renderCrewDetail(d); }
+  try { const d = await api("/crews/" + _crewId + "/private", { method: "POST", body: { private: String(p) === "1" } }); closeModal(); toast(d.private ? "Parta je teď soukromá 🔒" : "Parta je veřejná 🔓", "success"); renderCrewDetail(d); }
   catch (e) { toast(e.message, "error"); }
 }
 async function crewApprove(uid) {
@@ -6804,13 +6867,6 @@ async function crewReject(uid) {
   if (!_crewId || !uid) return;
   try { const d = await api("/crews/" + _crewId + "/reject", { method: "POST", body: { user_id: parseInt(uid, 10) } }); toast("Žádost zamítnuta.", "info"); renderCrewDetail(d); }
   catch (e) { toast(e.message, "error"); }
-}
-async function crewEmblemPicker() {
-  if (!_crewId) return;
-  let data;
-  try { data = await api("/crews/emblems"); } catch (e) { toast(e.message, "error"); return; }
-  const grid = (data.emblems || []).map((em) => `<button class="crew-em-pick" data-action="crew-set-emblem" data-emblem="${em}">${em}</button>`).join("");
-  openModal(`<h3 style="margin-top:0">🎨 Emblém party</h3><p class="faint" style="margin-top:-4px;font-size:13px">Změna stojí <b>${fmtPts(data.cost)}</b> · jen vůdce</p><div class="crew-em-grid">${grid}</div>`);
 }
 async function crewSetEmblem(em) {
   if (!_crewId || !em) return;
@@ -6837,6 +6893,38 @@ function crewCopy(code) {
   if (!code) return;
   if (navigator.clipboard) navigator.clipboard.writeText(code).then(() => toast("Kód party zkopírován! 📋", "success"));
   else toast(code, "info");
+}
+async function crewHistoryModal() {
+  if (!_crewId) return;
+  let data;
+  try { data = await api("/crews/" + _crewId + "/log"); } catch (e) { toast(e.message, "error"); return; }
+  const rows = (data.events || []).map((e) => `
+    <div class="crew-log-row">
+      <span class="crew-log-text">${e.actor_name ? `<b>${esc(e.actor_name)}</b> ` : ""}${esc(e.verb)}${e.target_name ? ` <b>${esc(e.target_name)}</b>` : ""}${e.detail ? ` <span class="faint">— ${esc(e.detail)}</span>` : ""}</span>
+      <span class="crew-log-time faint">${timeAgo(e.created_at)}</span>
+    </div>`).join("") || '<div class="faint">Zatím žádná historie.</div>';
+  openModal(`<h3 style="margin-top:0">📜 Historie party</h3><div class="crew-log-list">${rows}</div>`, "modal-lg");
+}
+async function crewWarModal() {
+  if (!_crewId || !_crewDetail) return;
+  if (!_crewDetail.is_leader) { toast("Jen vůdce party může vyhlásit válku.", "error"); return; }
+  let lb;
+  try { lb = await api("/crews/leaderboard?sort=week"); } catch (e) { toast(e.message, "error"); return; }
+  const candidates = (lb.crews || []).filter((c) => c.id !== _crewId && !c.at_war).slice(0, 30);
+  const rows = candidates.map((c) => `
+    <div class="crew-war-pick-row">
+      <span class="crew-emblem">${c.emblem}</span>
+      <span class="crew-name"><b>${esc(c.name)}</b> ${c.tag ? `<span class="crew-tag">[${esc(c.tag)}]</span>` : ""} <span class="faint" style="font-size:11.5px">⭐${c.level} · ${c.members}👤</span></span>
+      <button class="btn btn-sm btn-accent" data-action="crew-war-declare" data-id="${c.id}">⚔️ Vyhlásit</button>
+    </div>`).join("") || '<div class="faint">Žádná jiná parta zatím nečeká na výzvu.</div>';
+  openModal(`<h3 style="margin-top:0">⚔️ Vyhlásit válku</h3><p class="faint" style="margin-top:-4px;font-size:13px">3 dny, kdo nasbírá víc crew XP vyhrává. Odměna = sláva (status), žádné sedláky.</p><div class="crew-war-pick-list">${rows}</div>`, "modal-lg");
+}
+async function crewWarDeclare(id) {
+  if (!_crewId || !id) return;
+  try {
+    const d = await api("/crews/" + _crewId + "/war/declare", { method: "POST", body: { opponent_id: parseInt(id, 10) } });
+    closeModal(); toast("⚔️ Válka vyhlášena!", "success"); renderCrewDetail(d);
+  } catch (e) { toast(e.message, "error"); }
 }
 
 async function pageGames() {

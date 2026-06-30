@@ -590,3 +590,120 @@ def test_admin_list_shows_members():
     assert crew["member_count"] == 1 and len(crew["members"]) == 1
     assert crew["members"][0]["role"] == "leader", "vůdce mezi členy"
     assert crew["level"] >= 1 and "xp" in crew and "sub_xp" in crew["members"][0]
+
+
+def test_log_records_lifecycle_events():
+    """Historie party zaznamenává založení/vstup/MOTD/roli/kick chronologicky (nejnovější první)."""
+    sfx = secrets.token_hex(3)
+    leader = _mk_user()
+    st = _run(crews.create, leader, f"Leader_{sfx}", f"LogPartyA {sfx}", "LA")
+    cid = st["id"]
+    member = _mk_user()
+    _run(crews.join, member, f"Member_{sfx}", st["code"])
+    _run(crews.set_motd, leader, "Ahoj parto!")
+    _run(crews.set_role, leader, member, "officer")
+    _run(crews.kick, leader, member)
+    log = _run(crews.get_log, leader, cid)
+    events = [e["event"] for e in log["events"]]
+    assert events == ["kicked", "role", "motd", "joined", "created"], f"log pořadí (nejnovější první): {events}"
+
+
+def test_log_only_visible_to_members():
+    """Historii party nesmí číst nečlen (transparentnost dovnitř, ne ven)."""
+    sfx = secrets.token_hex(3)
+    leader = _mk_user()
+    st = _run(crews.create, leader, f"Leader_{sfx}", f"LogPartyB {sfx}", "LB")
+    outsider = _mk_user()
+    try:
+        _run(crews.get_log, outsider, st["id"])
+        assert False, "nečlen neměl číst historii"
+    except ValueError as e:
+        assert "nejsi" in str(e).lower()
+
+
+def test_war_declare_blocks_duplicate_and_self():
+    sfx = secrets.token_hex(3)
+    l1 = _mk_user(); st1 = _run(crews.create, l1, f"L1_{sfx}", f"WarA {sfx}", "WA")
+    l2 = _mk_user(); st2 = _run(crews.create, l2, f"L2_{sfx}", f"WarB {sfx}", "WB")
+    try:
+        _run(crews.declare_war, l1, st1["id"])
+        assert False, "sám se sebou nelze válčit"
+    except ValueError:
+        pass
+    _run(crews.declare_war, l1, st2["id"])
+    try:
+        _run(crews.declare_war, l1, st2["id"])
+        assert False, "2. válka té samé party měla být odmítnuta"
+    except ValueError as e:
+        assert "ve válce" in str(e).lower()
+    l3 = _mk_user(); st3 = _run(crews.create, l3, f"L3_{sfx}", f"WarC {sfx}", "WC")
+    try:
+        _run(crews.declare_war, l3, st2["id"])
+        assert False, "soupeř už válčí s jiným, mělo selhat"
+    except ValueError as e:
+        assert "válčí" in str(e).lower()
+
+
+def test_war_finalize_winner_loser_and_log():
+    """Lazy finalizace: delta XP rozhodne vítěze, status-only odměna (war_wins/losses), zalogováno."""
+    sfx = secrets.token_hex(3)
+    l1 = _mk_user(); st1 = _run(crews.create, l1, f"WL1_{sfx}", f"WinPty {sfx}", "WI")
+    l2 = _mk_user(); st2 = _run(crews.create, l2, f"WL2_{sfx}", f"LosePty {sfx}", "LO")
+    _run(crews.declare_war, l1, st2["id"])
+    _commit(crews.contribute, l1, 5000, False)
+    _commit(crews.contribute, l2, 2000, False)
+    conn = get_conn()
+    try:
+        conn.execute("UPDATE crew_wars SET ends_at=? WHERE crew_a_id=?", ("2000-01-01T00:00:00+00:00", st1["id"]))
+        conn.commit()
+    finally:
+        conn.close()
+    winner_pub = _run(crews._public, st1["id"], l1)
+    loser_pub = _run(crews._public, st2["id"], l2)
+    assert winner_pub["war"] is None and loser_pub["war"] is None, "válka skončila → war=None"
+    assert winner_pub["war_wins"] == 1 and winner_pub["war_losses"] == 0
+    assert loser_pub["war_losses"] == 1 and loser_pub["war_wins"] == 0
+    log = _run(crews.get_log, l1, st1["id"])
+    assert any(e["event"] == "war_end" and "Vyhráno" in (e["detail"] or "") for e in log["events"])
+
+
+def test_war_finalize_draw():
+    sfx = secrets.token_hex(3)
+    l1 = _mk_user(); st1 = _run(crews.create, l1, f"D1_{sfx}", f"DrawA {sfx}", "DA")
+    l2 = _mk_user(); st2 = _run(crews.create, l2, f"D2_{sfx}", f"DrawB {sfx}", "DB")
+    _run(crews.declare_war, l1, st2["id"])
+    _commit(crews.contribute, l1, 3000, False)
+    _commit(crews.contribute, l2, 3000, False)
+    conn = get_conn()
+    try:
+        conn.execute("UPDATE crew_wars SET ends_at=? WHERE crew_a_id=?", ("2000-01-01T00:00:00+00:00", st1["id"]))
+        conn.commit()
+    finally:
+        conn.close()
+    pub1 = _run(crews._public, st1["id"], l1)
+    pub2 = _run(crews._public, st2["id"], l2)
+    assert pub1["war_draws"] == 1 and pub2["war_draws"] == 1
+    assert pub1["war_wins"] == 0 and pub1["war_losses"] == 0
+
+
+def test_member_activity_visible_only_to_leader():
+    """last_active vidí jen vůdce (privacy); ostatní členové NEvidí last_active jiných."""
+    sfx = secrets.token_hex(3)
+    leader = _mk_user()
+    st = _run(crews.create, leader, f"AL_{sfx}", f"ActivityPty {sfx}", "AC")
+    member = _mk_user()
+    _run(crews.join, member, f"AM_{sfx}", st["code"])
+    conn = get_conn()
+    try:
+        tok = secrets.token_hex(16)
+        conn.execute("INSERT INTO sessions (token,user_id,created_at,expires_at,last_seen) VALUES (?,?,?,?,?)",
+                    (tok, member, now_iso(), now_iso(), now_iso()))
+        conn.commit()
+    finally:
+        conn.close()
+    leader_view = _run(crews._public, st["id"], leader)
+    member_view = _run(crews._public, st["id"], member)
+    member_row_for_leader = next(m for m in leader_view["members"] if m["user_id"] == member)
+    member_row_for_member = next(m for m in member_view["members"] if m["user_id"] == member)
+    assert member_row_for_leader["last_active"] is not None, "vůdce vidí last_active"
+    assert member_row_for_member["last_active"] is None, "člen NEvidí cizí last_active"

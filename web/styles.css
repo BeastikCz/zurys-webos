@@ -961,6 +961,31 @@ footer.site-footer { border-top: 1px solid var(--border); padding: 22px 0; color
 .crew-ach { font-size: 11.5px; font-weight: 700; background: rgba(255,211,77,.12); border: 1px solid rgba(255,211,77,.3); color: var(--gold); border-radius: 20px; padding: 3px 9px; white-space: nowrap; }
 .crew-req { display: flex; align-items: center; justify-content: space-between; padding: 6px 4px; border-bottom: 1px solid var(--border); }
 .crew-req:last-child { border-bottom: none; }
+.crew-em-pick.sel { border-color: var(--gold); background: rgba(255,211,77,.18); box-shadow: 0 0 0 1px var(--gold); }
+
+/* ⚔️ Crew War */
+.crew-war-badge { font-size: 12px; filter: drop-shadow(0 0 3px rgba(227,75,72,.6)); }
+.crew-war-panel { background: linear-gradient(180deg, rgba(227,75,72,.06), transparent); }
+.crew-war-active { border-color: rgba(227,75,72,.35); }
+.crew-war-bar { height: 12px; border-radius: 8px; background: rgba(255,255,255,.08); overflow: hidden; }
+.crew-war-fill { height: 100%; border-radius: 8px; background: linear-gradient(90deg, #e24b4a, #ff8a4d); transition: width .5s ease; }
+.crew-war-fill.leading { background: linear-gradient(90deg, #46d369, #7be0a0); }
+.crew-war-fill.losing { background: linear-gradient(90deg, #e24b4a, #ff6b6b); }
+.crew-war-nums { display: flex; align-items: center; justify-content: space-between; font-size: 13px; margin-top: 7px; }
+.crew-war-nums b { color: var(--accent); font-variant-numeric: tabular-nums; }
+.crew-war-pick-list { display: flex; flex-direction: column; gap: 6px; max-height: 50vh; overflow-y: auto; margin-top: 10px; }
+.crew-war-pick-row { display: flex; align-items: center; gap: 9px; padding: 8px 10px; border-radius: 10px; background: var(--surface-2); border: 1px solid var(--border); }
+.crew-war-pick-row .crew-name { flex: 1; min-width: 0; font-size: 13px; }
+
+/* 📜 Historie party (audit log) */
+.crew-log-list { display: flex; flex-direction: column; gap: 2px; max-height: 55vh; overflow-y: auto; margin-top: 10px; }
+.crew-log-row { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; padding: 7px 4px; border-bottom: 1px solid var(--border); font-size: 13px; }
+.crew-log-row:last-child { border-bottom: none; }
+.crew-log-text { flex: 1; min-width: 0; line-height: 1.45; }
+.crew-log-time { font-size: 11.5px; white-space: nowrap; flex-shrink: 0; }
+
+/* 🧹 Aktivita členů (vůdce: kdo je idle) */
+.crew-idle { font-size: 10px; cursor: help; }
 
 /* 🎁 Wrapped „Moje čísla" karta (screenshot-friendly) */
 .wr-card { width: min(440px, 92vw); text-align: center; padding: 26px 24px 18px; border-radius: 20px; cursor: default;

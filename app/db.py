@@ -707,6 +707,36 @@ CREATE TABLE IF NOT EXISTS crew_requests (
     created_at  TEXT NOT NULL,
     PRIMARY KEY (crew_id, user_id)
 );
+-- Historie party (audit log): kdo co kdy udělal (vstup/odchod/kick/povýšení/změna nastavení/cíl).
+-- Read-only pro členy (transparentnost), žádné mazání. Lazy – žádný cron, jen INSERT při akci.
+CREATE TABLE IF NOT EXISTS crew_log (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    crew_id     INTEGER NOT NULL REFERENCES crews(id) ON DELETE CASCADE,
+    event       TEXT NOT NULL,        -- created|joined|left|kicked|role|emblem|motd|private|goal|war_start|war_end
+    actor_id    INTEGER,              -- kdo akci udělal (NULL = systém, např. konec války)
+    actor_name  TEXT,
+    target_id   INTEGER,              -- na koho akce směřovala (kick/role), jinak NULL
+    target_name TEXT,
+    detail      TEXT,                 -- lidsky čitelný doplněk (např. nová role, % atd.)
+    created_at  TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_crewlog_crew ON crew_log(crew_id, id DESC);
+-- Crew Wars: 1 aktivní válka/parta (přirozený throttle). Skóre = delta crews.xp od vyhlášení do konce
+-- (snapshot start_xp_a/b). Odměna je JEN STATUS (war_wins/losses/draws) – ŽÁDNÉ sedláky (no faucet).
+-- Lazy finalizace (stejný pattern jako aukce) – žádný daemon.
+CREATE TABLE IF NOT EXISTS crew_wars (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    crew_a_id       INTEGER NOT NULL REFERENCES crews(id) ON DELETE CASCADE,
+    crew_b_id       INTEGER NOT NULL REFERENCES crews(id) ON DELETE CASCADE,
+    start_xp_a      INTEGER NOT NULL DEFAULT 0,
+    start_xp_b      INTEGER NOT NULL DEFAULT 0,
+    status          TEXT NOT NULL DEFAULT 'active',   -- active | ended
+    winner_crew_id  INTEGER,                          -- NULL = remíza
+    started_at      TEXT NOT NULL,
+    ends_at         TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_crewwars_a ON crew_wars(crew_a_id, status);
+CREATE INDEX IF NOT EXISTS idx_crewwars_b ON crew_wars(crew_b_id, status);
 
 -- Mines (single-player provably-fair): 1 aktivní hra na uživatele. layout = JSON pozic bomb,
 -- revealed = JSON odkrytých bezpečných polí. Bomby se hráči NEposílají, dokud hra běží.
@@ -880,6 +910,10 @@ _MIGRATIONS = [
     ("bj_seats", "result2", "TEXT"),
     ("bj_seats", "payout2", "INTEGER NOT NULL DEFAULT 0"),
     ("bj_seats", "active_hand", "INTEGER NOT NULL DEFAULT 1"),
+    # Crew Wars: status-only odměna (žádné sedláky, no faucet) – počítadla na partě.
+    ("crews", "war_wins", "INTEGER NOT NULL DEFAULT 0"),
+    ("crews", "war_losses", "INTEGER NOT NULL DEFAULT 0"),
+    ("crews", "war_draws", "INTEGER NOT NULL DEFAULT 0"),
 ]
 
 
