@@ -173,3 +173,35 @@ def test_mod_can_manage_orders(client):
 def test_mod_can_access_products(client):
     """Moderátor smí na sekci Odměny (products) – správa shop položek."""
     assert _get(client, "/api/admin/products", _login_as("mod")).status_code == 200, "mod má vidět/spravovat odměny"
+
+
+# ---------------- Predikční moderátor (predictor): vidí admin, ale JEN predikce ----------------
+
+def test_predictor_can_access_predictions(client):
+    """Predikční moderátor smí na admin predikce (200)."""
+    r = _get(client, "/api/predictions/admin/all", _login_as("predictor"))
+    assert r.status_code == 200, f"predictor má vidět admin predikce, dostal {r.status_code}: {r.text}"
+
+
+@pytest.mark.parametrize("path", [
+    "/api/admin/products", "/api/admin/orders?status=all", "/api/admin/economy/dashboard",
+    "/api/admin/economy/games-rake", "/api/admin/overview", "/api/admin/checklist",
+])
+def test_predictor_blocked_everywhere_else(client, path):
+    """BEZPEČNOST: predikční moderátor NESMÍ nikam jinam než predikce (403)."""
+    r = _get(client, path, _login_as("predictor"))
+    assert r.status_code == 403, (
+        f"BEZPEČNOSTNÍ DÍRA: predictor dostal {r.status_code} na {path} – smí JEN predikce, jinde musí 403!")
+
+
+def test_predictor_cannot_adjust_points(client):
+    """Predikční moderátor nesmí sahat na body uživatelů (jiná sekce)."""
+    uid = _make_target()
+    r = _post(client, f"/api/admin/users/{uid}/points", _login_as("predictor"), {"change": 100, "reason": "x"})
+    assert r.status_code == 403, f"BEZPEČNOST: predictor nesmí na body, dostal {r.status_code}"
+
+
+def test_non_staff_cannot_access_predictions_admin(client):
+    """Sanity: běžný divák nesmí na admin predikce (403)."""
+    r = _get(client, "/api/predictions/admin/all", _login_as("user"))
+    assert r.status_code == 403, f"user nesmí na admin predikce, dostal {r.status_code}"

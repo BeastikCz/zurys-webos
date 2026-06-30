@@ -111,7 +111,7 @@ function uLink(name) {
   return n ? `<a class="prof-link" href="#/u/${encodeURIComponent(n)}">${esc(n)}</a>` : esc(name || "?");
 }
 function roleBadge(role) {
-  const map = { admin: ["badge-admin", "🛡️", "Admin"], broadcaster: ["badge-admin", "👑", "Broadcaster"], mod: ["badge-vip-role", "🔨", "Moderátor"], vip: ["badge-vip-role", "💎", "VIP"], sub: ["badge-sub-role", "💜", "Sub"], user: ["badge-user-role", "👤", "Divák"] };
+  const map = { admin: ["badge-admin", "🛡️", "Admin"], broadcaster: ["badge-admin", "👑", "Broadcaster"], mod: ["badge-vip-role", "🔨", "Moderátor"], predictor: ["badge-vip-role", "🎯", "Predikce-mod"], vip: ["badge-vip-role", "💎", "VIP"], sub: ["badge-sub-role", "💜", "Sub"], user: ["badge-user-role", "👤", "Divák"] };
   const [cls, icon, label] = map[role] || map.user;
   // Admin = výrazně (ikona + text ADMIN + glow), ať na něj dávají bacha. Ostatní = jen emote + tooltip.
   if (role === "admin") {
@@ -130,7 +130,7 @@ function subVipBadges(u) {
 }
 // Pro leaderboard: staff dostane svůj badge + sub/vip; běžný divák jen sub/vip (jinak „Divák").
 function lbBadges(r) {
-  if (["admin", "broadcaster", "mod"].includes(r.role)) return roleBadge(r.role) + " " + subVipBadges(r);
+  if (["admin", "broadcaster", "mod", "predictor"].includes(r.role)) return roleBadge(r.role) + " " + subVipBadges(r);
   return subVipBadges(r) || roleBadge("user");
 }
 
@@ -138,10 +138,10 @@ function lbBadges(r) {
 const ADMIN_SECTIONS = {
   overview: [], stats: ["broadcaster"], products: ["mod", "broadcaster"], users: ["mod", "broadcaster"], subs: [], orders: ["mod", "broadcaster"],
   raffles: ["broadcaster"], auctions: ["broadcaster"], codes: ["broadcaster"], drops: ["broadcaster"], games: ["mod", "broadcaster"], bot: ["broadcaster"],
-  predictions: ["mod", "broadcaster"], economy: ["broadcaster"], news: ["broadcaster"], security: [],
+  predictions: ["mod", "predictor", "broadcaster"], economy: ["broadcaster"], news: ["broadcaster"], security: [],
   modnabor: ["broadcaster"], gifts: ["broadcaster"],
 };
-function isStaff(u) { return !!u && ["admin", "broadcaster", "mod"].includes(u.role); }
+function isStaff(u) { return !!u && ["admin", "broadcaster", "mod", "predictor"].includes(u.role); }
 function canDM(u) { return !!u && ["admin", "broadcaster"].includes(u.role); }   // PM jen broadcaster+admin (mod NE)
 function canSection(u, sec) { return !!u && (u.role === "admin" || (ADMIN_SECTIONS[sec] || []).includes(u.role)); }
 
@@ -2988,8 +2988,8 @@ async function pageAdmin() {
     ["modnabor", "🛡️ Nábor modů"], ["gifts", "💝 Dary"],
   ].filter(([k]) => canSection(state.user, k));
   if (!tabs.some(([k]) => k === adminState.tab)) adminState.tab = tabs.length ? tabs[0][0] : null;
-  const lbl = state.user.role === "admin" ? "Admin panel"
-    : "Panel — " + (state.user.role === "broadcaster" ? "Broadcaster" : "Moderátor");
+  const ROLE_LBL = { broadcaster: "Broadcaster", predictor: "Predikce", mod: "Moderátor" };
+  const lbl = state.user.role === "admin" ? "Admin panel" : "Panel — " + (ROLE_LBL[state.user.role] || "Tým");
   const maintBanner = state.user.role === "admin" ? `<div id="maintBanner" class="maint-banner"></div>` : "";
   view.innerHTML = `
     <div class="page-head"><h1>🛠️ ${lbl}</h1><p class="muted">Vidíš jen sekce, na které máš oprávnění.</p></div>
@@ -4001,8 +4001,8 @@ async function adminUsers() {
       ${list.map((u) => `<tr>
         <td><div style="display:flex;align-items:center;gap:9px">${avatarHTML(u.username, u.avatar_url)}<b>${esc(u.username)}</b></div>${isAdmin ? `<div class="faint" style="font-size:11px;margin-top:2px" title="ID účtu">🆔 ID ${u.id}</div>` : ""}${userAdminTools(u, isAdmin)}</td>
         <td class="faint" style="font-size:12.5px">${u.kick_username ? "🟢 " + esc(u.kick_username) : (isAdmin ? esc(u.email || "—") : "—")}${isAdmin ? "<br>" + (u.last_ip ? `<span class="code-pill">${esc(u.last_ip)}</span>${u.ip_count > 1 ? ` <span class="faint">(${u.ip_count} IP)</span>` : ""}` : "<span class='faint'>bez IP</span>") : ""}</td>
-        <td>${isAdmin ? `<select class="select" style="width:128px;padding:6px 8px" data-action="user-role" data-id="${u.id}">
-          ${["user", "sub", "vip", "mod", "broadcaster", "admin"].map((r) => `<option value="${r}" ${u.role === r ? "selected" : ""}>${r}</option>`).join("")}
+        <td>${isAdmin ? `<select class="select" style="width:158px;padding:6px 8px" data-action="user-role" data-id="${u.id}">
+          ${[["user", "user"], ["sub", "sub"], ["vip", "vip"], ["mod", "mod"], ["predictor", "🎯 predictor (jen predikce)"], ["broadcaster", "broadcaster"], ["admin", "admin"]].map(([r, l]) => `<option value="${r}" ${u.role === r ? "selected" : ""}>${l}</option>`).join("")}
         </select>
         <div style="display:flex;gap:6px;margin-top:7px;flex-wrap:wrap">
           ${[["is_sub", "SUB"], ["is_vip", "VIP"], ["is_og", "OG"]].map(([key, lbl]) => `<button type="button" data-action="user-flag-toggle" data-id="${u.id}" data-flag="${key}" class="flag-chip${u[key] ? " on" : ""}" title="Odznak ${lbl} – klikni pro zapnutí/vypnutí">${lbl}</button>`).join("")}

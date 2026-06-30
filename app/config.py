@@ -24,17 +24,19 @@ ROLE_USER = "user"
 ROLE_SUB = "sub"
 ROLE_VIP = "vip"
 ROLE_MOD = "mod"                # moderátor (staff)
+ROLE_PREDICTOR = "predictor"    # predikční moderátor (staff) – vidí admin, ale JEN sekci Predikce, nic víc
 ROLE_BROADCASTER = "broadcaster"  # broadcaster (staff)
 ROLE_ADMIN = "admin"
-ALL_ROLES = (ROLE_USER, ROLE_SUB, ROLE_VIP, ROLE_MOD, ROLE_BROADCASTER, ROLE_ADMIN)
+ALL_ROLES = (ROLE_USER, ROLE_SUB, ROLE_VIP, ROLE_MOD, ROLE_PREDICTOR, ROLE_BROADCASTER, ROLE_ADMIN)
 
 # Staff = role s přístupem do administrace (admin má vždy vše)
-STAFF_ROLES = (ROLE_MOD, ROLE_BROADCASTER, ROLE_ADMIN)
+STAFF_ROLES = (ROLE_MOD, ROLE_PREDICTOR, ROLE_BROADCASTER, ROLE_ADMIN)
 
 # Sekce admin panelu → NE-admin role, které na ni smí. Admin smí vždy všechno.
 #   broadcaster = provoz platformy;
 #   moderátor (mod) = JEN: vidět uživatele + úprava bodů, objednávky, predikce, hry. NIC víc.
 #   ban/role/flags/import/economy/security/products/raffles/codes/drops/bot/news/stats = NE mod.
+#   predikční moderátor (predictor) = vidí admin panel, ale JEN sekci Predikce. Nic jiného (ani uživatele/body).
 MOD_POINTS_MAX = 50000          # strop ±bodů, které smí MOD přidat/odebrat na jeden zásah (admin bez limitu)
 ADMIN_SECTIONS = {
     "stats":    (ROLE_BROADCASTER,),
@@ -47,7 +49,7 @@ ADMIN_SECTIONS = {
     "drops":    (ROLE_BROADCASTER,),
     "games":    (ROLE_MOD, ROLE_BROADCASTER),   # moderace probíhajících her (ukončit/refund)
     "bot":      (ROLE_BROADCASTER,),
-    "predictions": (ROLE_MOD, ROLE_BROADCASTER),   # moderátor smí spravovat predikce
+    "predictions": (ROLE_MOD, ROLE_PREDICTOR, ROLE_BROADCASTER),   # mod, predikční moderátor i broadcaster smí spravovat predikce
     "economy":  (ROLE_BROADCASTER,),   # vč. zapnout/vypnout stream (live toggle)
     "news":     (ROLE_BROADCASTER,),   # patch notes / novinky (changelog)
     "gifts":    (ROLE_BROADCASTER,),   # schvalování žádostí o dar bodů (gift requests)
