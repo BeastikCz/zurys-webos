@@ -205,3 +205,44 @@ def test_non_staff_cannot_access_predictions_admin(client):
     """Sanity: běžný divák nesmí na admin predikce (403)."""
     r = _get(client, "/api/predictions/admin/all", _login_as("user"))
     assert r.status_code == 403, f"user nesmí na admin predikce, dostal {r.status_code}"
+
+
+# ---------------- Early access gate: Crew + Statek jen pro grantnuté + admina ----------------
+
+def _login_early(early: int = 1) -> str:
+    """Uživatel s early_access flagem + relace."""
+    from app.db import get_conn, now_iso
+    from datetime import datetime, timezone, timedelta
+    conn = get_conn()
+    try:
+        s = secrets.token_hex(4)
+        uid = conn.execute("INSERT INTO users (kick_username, username, role, points, early_access, created_at) "
+                           "VALUES (?,?,?,0,?,?)", (f"ea_{s}", f"ea_{s}", "user", early, now_iso())).lastrowid
+        tok = secrets.token_hex(24)
+        conn.execute("INSERT INTO sessions (token, user_id, created_at, expires_at) VALUES (?,?,?,?)",
+                     (tok, uid, now_iso(), (datetime.now(timezone.utc) + timedelta(days=1)).isoformat()))
+        conn.commit()
+        return tok
+    finally:
+        conn.close()
+
+
+@pytest.mark.parametrize("path", ["/api/crews/mine", "/api/farm"])
+def test_early_access_blocks_normal_user(client, path):
+    """BEZPEČNOST: běžný uživatel bez early_access NEVIDÍ Crew ani Statek (403)."""
+    r = _get(client, path, _login_early(early=0))
+    assert r.status_code == 403, f"bez early_access má být 403 na {path}, dostal {r.status_code}"
+
+
+@pytest.mark.parametrize("path", ["/api/crews/mine", "/api/farm"])
+def test_early_access_granted_user_allowed(client, path):
+    """Grantnutý uživatel (early_access=1) Crew + Statek vidí (200)."""
+    r = _get(client, path, _login_early(early=1))
+    assert r.status_code == 200, f"s early_access má být 200 na {path}, dostal {r.status_code}: {r.text}"
+
+
+@pytest.mark.parametrize("path", ["/api/crews/mine", "/api/farm"])
+def test_early_access_admin_bypass(client, path):
+    """Admin vidí early-access featury vždy (i bez flagu)."""
+    r = _get(client, path, _login_as("admin"))
+    assert r.status_code == 200, f"admin má vidět {path} vždy, dostal {r.status_code}"

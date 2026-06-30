@@ -152,6 +152,7 @@ const ADMIN_SECTIONS = {
   modnabor: ["broadcaster"], gifts: ["broadcaster"],
 };
 function isStaff(u) { return !!u && ["admin", "broadcaster", "mod", "predictor"].includes(u.role); }
+function hasEarlyAccess(u) { return !!u && (u.early_access || u.role === "admin"); }   // Crew + Statek = early access (admin grantuje)
 function canDM(u) { return !!u && ["admin", "broadcaster"].includes(u.role); }   // PM jen broadcaster+admin (mod NE)
 function canSection(u, sec) { return !!u && (u.role === "admin" || (ADMIN_SECTIONS[sec] || []).includes(u.role)); }
 
@@ -251,6 +252,10 @@ function render() {
     "mod-nabor": pageModApply, staty: pageGameStats, "sin-slavy": pageHallOfFame, zahrada: pageGarden,
     statek: pageFarm,
   };
+  if (["statek", "crews"].includes(r.name) && !hasEarlyAccess(state.user)) {   // early access gate (i přímej odkaz)
+    toast("🎫 Tahle featura je zatím v early access.", "info");
+    navigate("shop"); return;
+  }
   (pages[r.name] || pageShop)(r.param);
   window.scrollTo({ top: 0, behavior: "instant" in window ? "instant" : "auto" });
 }
@@ -309,7 +314,8 @@ function renderHeader() {
   const route = currentRoute();
   const u = state.user;
   document.body.classList.toggle("logged-in", !!u);   /* na mobilu uvolní místo v topbaru (skryje wordmark) */
-  const items = [["shop", "Shop"], ["bonusy", "Bonusy"], ["ukoly", "Úkoly"], ["zahrada", "Zahrádka"], ["statek", "Statek"], ["leaderboard", "Žebříček"], ["crews", "Crew"], ["exchange", "Směnárna"], ["games", "Hry"], ["predikce", "Predikce"]];
+  const items = [["shop", "Shop"], ["bonusy", "Bonusy"], ["ukoly", "Úkoly"], ["zahrada", "Zahrádka"], ["statek", "Statek"], ["leaderboard", "Žebříček"], ["crews", "Crew"], ["exchange", "Směnárna"], ["games", "Hry"], ["predikce", "Predikce"]]
+    .filter(([k]) => !["statek", "crews"].includes(k) || hasEarlyAccess(u));   // early access: Crew + Statek jen pro grantnuté + admina
   const navDot = (k) => ((k === "bonusy" && u && bonusReady) || (k === "ukoly" && u && questReady)) ? `<span class="nav-dot" title="Máš nevyzvednutou odměnu!"></span>` : "";
   const navLinks = items.map(([k, l]) => `<a href="#/${k}" class="nav-link ${route === k ? "active" : ""}">${l}${navDot(k)}</a>`).join("")
     + (isStaff(u) ? `<a href="#/admin" class="nav-link ${route === "admin" ? "active" : ""}">${u.role === "admin" ? "Admin" : "Panel"}</a>` : "");
@@ -4146,7 +4152,7 @@ async function adminUsers() {
           ${[["user", "user"], ["sub", "sub"], ["vip", "vip"], ["mod", "mod"], ["predictor", "🎯 predictor (jen predikce)"], ["broadcaster", "broadcaster"], ["admin", "admin"]].map(([r, l]) => `<option value="${r}" ${u.role === r ? "selected" : ""}>${l}</option>`).join("")}
         </select>
         <div style="display:flex;gap:6px;margin-top:7px;flex-wrap:wrap">
-          ${[["is_sub", "SUB"], ["is_vip", "VIP"], ["is_og", "OG"]].map(([key, lbl]) => `<button type="button" data-action="user-flag-toggle" data-id="${u.id}" data-flag="${key}" class="flag-chip${u[key] ? " on" : ""}" title="Odznak ${lbl} – klikni pro zapnutí/vypnutí">${lbl}</button>`).join("")}
+          ${[["is_sub", "SUB"], ["is_vip", "VIP"], ["is_og", "OG"], ["early_access", "🎫 Early"]].map(([key, lbl]) => `<button type="button" data-action="user-flag-toggle" data-id="${u.id}" data-flag="${key}" class="flag-chip${u[key] ? " on" : ""}" title="${key === "early_access" ? "Early access – vidí Crew + Statek" : "Odznak " + lbl} – klikni pro zapnutí/vypnutí">${lbl}</button>`).join("")}
         </div>` : roleBadge(u.role) + " " + subVipBadges(u)}</td>
         <td title="Nafarmeno celkem (XP). Do dalšího levelu chybí ${Number(Math.max(0, (u.level_span || 0) - (u.level_into || 0))).toLocaleString("cs-CZ")} XP."><b style="color:var(--accent);font-size:13px;white-space:nowrap">⭐ ${u.level || 1}</b><br><span class="faint" style="font-size:11px;white-space:nowrap">${Number(u.earned_total || 0).toLocaleString("cs-CZ")} XP</span></td>
         <td><b style="color:var(--kick)">${fmtPts(u.points)}</b></td>

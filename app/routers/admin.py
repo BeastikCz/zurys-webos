@@ -846,12 +846,12 @@ def set_role(user_id: int, data: UserRoleIn, request: Request,
 def set_flags(user_id: int, data: UserFlagsIn, request: Request,
               conn: sqlite3.Connection = Depends(db_dep),
               admin: sqlite3.Row = Depends(require_admin)):
-    """Nastaví odznaky SUB/VIP/OG (nezávislé na roli – můžou být i víc naráz). Posílají se jen měněné."""
+    """Nastaví odznaky SUB/VIP/OG + early_access (nezávislé na roli – můžou být i víc naráz). Posílají se jen měněné."""
     target = conn.execute("SELECT username FROM users WHERE id = ?", (user_id,)).fetchone()
     if not target:
         raise HTTPException(status_code=404, detail="Uživatel nenalezen.")
     sets, vals, changed = [], [], []
-    for col in ("is_sub", "is_vip", "is_og"):
+    for col in ("is_sub", "is_vip", "is_og", "early_access"):
         val = getattr(data, col)
         if val is not None:
             sets.append(f"{col} = ?")

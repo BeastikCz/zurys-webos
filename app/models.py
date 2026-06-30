@@ -470,10 +470,11 @@ class UserRoleIn(BaseModel):
 
 
 class UserFlagsIn(BaseModel):
-    """Odznaky SUB / VIP / OG (nezávislé na roli – můžou být i víc naráz). Posílají se jen měněné."""
+    """Odznaky SUB / VIP / OG + early access (nezávislé na roli – můžou být i víc naráz). Posílají se jen měněné."""
     is_sub: Optional[bool] = None
     is_vip: Optional[bool] = None
     is_og: Optional[bool] = None
+    early_access: Optional[bool] = None
 
 
 class UserPointsIn(BaseModel):

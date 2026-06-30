@@ -245,6 +245,7 @@ def to_public(row: sqlite3.Row, include_email: bool = False) -> dict:
         "is_sub": bool(row["is_sub"]) if "is_sub" in row.keys() else False,
         "is_vip": bool(row["is_vip"]) if "is_vip" in row.keys() else False,
         "is_og": bool(row["is_og"]) if "is_og" in row.keys() else False,
+        "early_access": bool(row["early_access"]) if "early_access" in row.keys() else False,
         "egg_found": bool(row["egg_found_at"]) if "egg_found_at" in row.keys() else False,
     }
     _et = row["earned_total"] if "earned_total" in row.keys() else 0
@@ -324,6 +325,23 @@ def require_staff(user: sqlite3.Row = Depends(require_user)) -> sqlite3.Row:
     """Vyžaduje staff roli (admin / broadcaster / moderátor)."""
     if user["role"] not in STAFF_ROLES:
         raise HTTPException(status_code=403, detail="Nemáš přístup do administrace.")
+    return user
+
+
+def has_early_access(user) -> bool:
+    """Vidí early-access featury (Crew + Statek)? Admin vždy + ručně grantnutý flag."""
+    try:
+        if user["role"] == ROLE_ADMIN:
+            return True
+        return bool(user["early_access"]) if "early_access" in user.keys() else False
+    except (KeyError, IndexError, TypeError):
+        return False
+
+
+def require_early_access(user: sqlite3.Row = Depends(require_user)) -> sqlite3.Row:
+    """Gate pro early-access featury (Crew + Statek) – soft launch jen pro grantnuté + admina."""
+    if not has_early_access(user):
+        raise HTTPException(status_code=403, detail="Tahle featura je zatím v early access. 🎫")
     return user
 
 
