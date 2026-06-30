@@ -144,6 +144,96 @@ def test_top_bidders_and_going_once():
         conn.close()
 
 
+def test_buy_now_refunds_current_leader_not_old():
+    """TOCTOU fix: buy_now vrací REÁLNÉMU aktuálnímu vůdci (z DB), ne starému ze snapshotu."""
+    from app.db import get_conn
+    from app import auctions
+    conn = get_conn()
+    try:
+        aid = auctions.create(conn, "BN", "", 100, 50, 10, buy_now=50000)["id"]
+        u1, u2, u3 = _user(conn), _user(conn), _user(conn); conn.commit()
+        auctions.bid(conn, _row(conn, u1), aid, 200)        # u1 vede 200
+        auctions.bid(conn, _row(conn, u2), aid, 400)        # u2 přehodí → u1 dostane 50 % (100)
+        assert _pts(conn, u1) == 100000 - 100
+        assert _pts(conn, u2) == 100000 - 400
+        r = auctions.buy_now(conn, _row(conn, u3), aid)     # u3 vykoupí
+        assert r["ok"] and _pts(conn, u3) == 100000 - 50000
+        assert _pts(conn, u2) == 100000, "aktuální vůdce u2 dostal 100 % zpět"
+        assert _pts(conn, u1) == 100000 - 100, "starý (přehozený) vůdce NEDOSTANE nic navíc"
+    finally:
+        conn.close()
+
+
+def test_bid_cannot_reach_buynow():
+    """Příhoz >= kup-teď cena je zamítnut → current_bid vždy < buy_now (brání money-printu)."""
+    from app.db import get_conn
+    from app import auctions
+    conn = get_conn()
+    try:
+        aid = auctions.create(conn, "BN2", "", 100, 50, 10, buy_now=1000)["id"]
+        u1 = _user(conn); conn.commit()
+        assert not auctions.bid(conn, _row(conn, u1), aid, 1000).get("ok"), "příhoz = buy_now zamítnut"
+        assert not auctions.bid(conn, _row(conn, u1), aid, 1500).get("ok"), "příhoz > buy_now zamítnut"
+        assert _pts(conn, u1) == 100000, "zamítnutý příhoz nic neodečte"
+        assert auctions.bid(conn, _row(conn, u1), aid, 900)["ok"], "příhoz < buy_now OK"
+    finally:
+        conn.close()
+
+
+def test_buynow_rejected_when_bid_reached_price():
+    """Guard: když příhoz dosáhl/přesáhl kup-teď cenu, buy_now je zamítnut + escrow vrácen."""
+    from app.db import get_conn
+    from app import auctions
+    conn = get_conn()
+    try:
+        aid = auctions.create(conn, "BN3", "", 100, 50, 10, buy_now=1000)["id"]
+        u1, u2 = _user(conn), _user(conn); conn.commit()
+        auctions.bid(conn, _row(conn, u1), aid, 900)
+        conn.execute("UPDATE auctions SET current_bid = 1000 WHERE id = ?", (aid,)); conn.commit()  # simuluj dosažení ceny
+        r = auctions.buy_now(conn, _row(conn, u2), aid)
+        assert not r.get("ok"), "kup-teď zamítnut když příhoz >= cena"
+        assert _pts(conn, u2) == 100000, "escrow vrácen (kup teď selhal)"
+    finally:
+        conn.close()
+
+
+def test_cancel_refunds_current_leader_after_outbid():
+    """TOCTOU fix: cancel vrací 100 % AKTUÁLNÍMU vůdci (z DB), ne přehozenému ze snapshotu."""
+    from app.db import get_conn
+    from app import auctions
+    conn = get_conn()
+    try:
+        aid = auctions.create(conn, "C", "", 100, 50, 10)["id"]
+        u1, u2 = _user(conn), _user(conn); conn.commit()
+        auctions.bid(conn, _row(conn, u1), aid, 300)
+        auctions.bid(conn, _row(conn, u2), aid, 600)        # u2 vede, u1 dostal 50 % (150)
+        r = auctions.cancel(conn, aid)
+        assert r["ok"] and r["refunded"] == 600
+        assert _pts(conn, u2) == 100000, "aktuální vůdce u2 dostal 100 % zpět"
+        assert _pts(conn, u1) == 100000 - 150, "u1 zůstává na 50 % z přehození (cancel mu nic navíc nedává)"
+    finally:
+        conn.close()
+
+
+def test_image_url_sanitized():
+    """image_url do CSS url() – breakout znaky pryč, nepovolené schéma zahozeno."""
+    from app.db import get_conn
+    from app import auctions
+    conn = get_conn()
+    try:
+        a1 = auctions.create(conn, "X1", "https://cdn.example.com/skin.png", 100, 50, 10)["id"]
+        assert conn.execute("SELECT image_url FROM auctions WHERE id=?", (a1,)).fetchone()["image_url"] \
+            == "https://cdn.example.com/skin.png", "čistá URL projde beze změny"
+        a2 = auctions.create(conn, "X2", "https://x.com/a.png'); background:url(evil)", 100, 50, 10)["id"]
+        u2 = conn.execute("SELECT image_url FROM auctions WHERE id=?", (a2,)).fetchone()["image_url"]
+        assert not any(ch in u2 for ch in "'\"()<> "), f"breakout znaky odstraněny: {u2}"
+        a3 = auctions.create(conn, "X3", "javascript:alert(1)", 100, 50, 10)["id"]
+        assert conn.execute("SELECT image_url FROM auctions WHERE id=?", (a3,)).fetchone()["image_url"] == "", \
+            "nepovolené schéma zahozeno"
+    finally:
+        conn.close()
+
+
 def test_antisnipe_extends():
     from app.db import get_conn
     from app import auctions

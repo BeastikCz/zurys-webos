@@ -6,9 +6,17 @@ Anti-snipe: příhoz v posledních ANTISNIPE_SEC s prodlouží konec o ANTISNIPE
 Finalizace LAZY (na čtení/příhozu) – žádný daemon; frontend countdown polluje, takže uzavře včas.
 Atomicita: podmíněný UPDATE (current_bid < můj) → vyhraje jen 1 příhoz i při souběhu (1 SQLite writer).
 """
+import re
 from datetime import datetime, timezone, timedelta
 
 from .db import now_iso
+
+
+def _safe_image_url(url: str) -> str:
+    """image_url jde do CSS background-image:url('...') → zahoď CSS-breakout znaky a vynuť bezpečné schéma.
+    Admin-only pole, ale defense-in-depth proti CSS/HTML injekci (Steam/CDN URL tyhle znaky nemají)."""
+    img = re.sub(r"""['"()<>\\`\s]""", "", (url or "").strip())[:500]
+    return img if re.match(r"^(https?://|/)", img) else ""
 
 ANTISNIPE_SEC = 30          # příhoz v posledních N s prodlouží konec o N s
 MAX_MINUTES = 7 * 24 * 60   # max délka aukce (7 dní)
@@ -19,20 +27,24 @@ OUTBID_REFUND_PCT = 0.5     # přehozenému se vrátí jen 50 % příhozu (zbyte
 def _finalize_expired(conn) -> None:
     """Uzavře aukce po ends_at (status active → ended, vítěz = current_bidder) + notifikuje vítěze.
     Necommituje sám commit, dělá caller (volá se před čtením/příhozem). Atomické per aukce."""
-    rows = conn.execute("SELECT * FROM auctions WHERE status = 'active' AND ends_at <= ?", (now_iso(),)).fetchall()
+    now = now_iso()
+    rows = conn.execute("SELECT id FROM auctions WHERE status = 'active' AND ends_at <= ?", (now,)).fetchall()
     if not rows:
         return
     from .deps import notify
     for a in rows:
-        if conn.execute("UPDATE auctions SET status = 'ended', winner_id = ? WHERE id = ? AND status = 'active'",
-                        (a["current_bidder_id"], a["id"])).rowcount != 1:
+        # vítěz = current_bidder ATOMICKY ze živého sloupce (ne stale snapshot); gate i na ends_at,
+        # ať těsný anti-snipe příhoz (posune ends_at do budoucna) tohle uzavření PROHRAJE a aukce běží dál.
+        if conn.execute("UPDATE auctions SET status = 'ended', winner_id = current_bidder_id "
+                        "WHERE id = ? AND status = 'active' AND ends_at <= ?", (a["id"], now)).rowcount != 1:
             continue
-        if a["current_bidder_id"]:
-            notify(conn, a["current_bidder_id"], "🏆", "Vyhrál jsi aukci! 🔨",
-                   f"Vyhrál jsi „{a['title']}\" za {a['current_bid']} sedláků! Admin ti pošle skin. 🎉", "#/shop")
-            if a["chat_announce"]:
-                _announce_async(f"🏆 AUKCE SKONČILA! „{a['title']}\" vydražil {_username(conn, a['current_bidder_id'])} "
-                                f"za {a['current_bid']} sedláků! 🔨🌾")
+        fa = conn.execute("SELECT * FROM auctions WHERE id = ?", (a["id"],)).fetchone()
+        if fa["winner_id"]:
+            notify(conn, fa["winner_id"], "🏆", "Vyhrál jsi aukci! 🔨",
+                   f"Vyhrál jsi „{fa['title']}\" za {fa['current_bid']} sedláků! Admin ti pošle skin. 🎉", "#/shop")
+            if fa["chat_announce"]:
+                _announce_async(f"🏆 AUKCE SKONČILA! „{fa['title']}\" vydražil {_username(conn, fa['winner_id'])} "
+                                f"za {fa['current_bid']} sedláků! 🔨🌾")
 
 
 def _public(a, viewer_id=None) -> dict:
@@ -134,6 +146,8 @@ def bid(conn, user, auction_id: int, amount: int) -> dict:
     min_next = _min_next(a)
     if amount < min_next:
         return {"ok": False, "error": f"Minimální příhoz je {min_next} sedláků."}
+    if a["buy_now"] and amount >= a["buy_now"]:        # příhoz nesmí dorůst/přerůst kup-teď cenu → drž current_bid < buy_now
+        return {"ok": False, "error": f"Tolik už ne — radši klikni 💎 Kup teď za {a['buy_now']} sedláků."}
     # escrow: zablokuj (odečti) sedláky příhozce
     if not try_debit(conn, user["id"], amount, f"Aukce #{auction_id} – příhoz (blokace)"):
         return {"ok": False, "error": f"Nemáš dost sedláků ({amount})."}
@@ -143,12 +157,13 @@ def bid(conn, user, auction_id: int, amount: int) -> dict:
     if (datetime.fromisoformat(a["ends_at"]) - datetime.now(timezone.utc)).total_seconds() < ANTISNIPE_SEC:
         new_ends = (datetime.now(timezone.utc) + timedelta(seconds=ANTISNIPE_SEC)).isoformat()
         extended_flag = 1
-    # ATOMICKY se staň nejvyšším – jen pokud je můj příhoz pořád > current (anti-souběh)
+    # ATOMICKY se staň nejvyšším – jen pokud je můj příhoz pořád > current A nejsem už vůdce já
+    # (poslední podmínka brání souběžnému self-outbidu dvou mých příhozů → ztráta 50 % vlastního escrow)
     won = conn.execute(
         "UPDATE auctions SET current_bid = ?, current_bidder_id = ?, bids_count = bids_count + 1, ends_at = ?, "
         "going_once_sent = CASE WHEN ? = 1 THEN 0 ELSE going_once_sent END "
-        "WHERE id = ? AND status = 'active' AND current_bid < ?",
-        (amount, user["id"], new_ends, extended_flag, auction_id, amount)).rowcount == 1
+        "WHERE id = ? AND status = 'active' AND current_bid < ? AND (current_bidder_id IS NULL OR current_bidder_id <> ?)",
+        (amount, user["id"], new_ends, extended_flag, auction_id, amount, user["id"])).rowcount == 1
     if not won:
         add_points(conn, user["id"], amount, f"Aukce #{auction_id} – vrácení (předběhnut)", xp=False)
         conn.commit()
@@ -186,18 +201,26 @@ def buy_now(conn, user, auction_id: int) -> dict:
     price = a["buy_now"]
     if not try_debit(conn, user["id"], price, f"Aukce #{auction_id} – kup teď 💎"):
         return {"ok": False, "error": f"Nemáš dost sedláků ({price})."}
+    # try_debit zahájil write-txn (drží lock) → re-SELECT vidí REÁLNÉHO aktuálního vůdce/cenu (ne stale snapshot `a`).
+    cur = conn.execute("SELECT status, current_bidder_id, current_bid FROM auctions WHERE id = ?", (auction_id,)).fetchone()
+    if cur["status"] != "active" or (cur["current_bid"] or 0) >= price:
+        # mezitím skončila NEBO příhoz dorovnal/přesáhl kup-teď cenu → vykoupení nedává smysl, vrať vše
+        add_points(conn, user["id"], price, f"Aukce #{auction_id} – vrácení (kup teď selhal)", xp=False)
+        conn.commit()
+        return {"ok": False, "error": "Aukce už nejde vykoupit (skončila, nebo příhoz dosáhl kup-teď ceny)."}
+    real_bidder, real_bid = cur["current_bidder_id"], cur["current_bid"]
     if conn.execute("UPDATE auctions SET status = 'ended', winner_id = ?, current_bid = ?, current_bidder_id = ? "
                     "WHERE id = ? AND status = 'active'",
                     (user["id"], price, user["id"], auction_id)).rowcount != 1:
         add_points(conn, user["id"], price, f"Aukce #{auction_id} – vrácení (kup teď selhal)", xp=False)
         conn.commit()
         return {"ok": False, "error": "Aukce právě skončila jinak."}
-    if a["current_bidder_id"] == user["id"]:          # kupující byl vůdce → vrať mu jeho escrow (neplatí 2×)
-        add_points(conn, user["id"], a["current_bid"], f"Aukce #{auction_id} – vrácení escrow (kup teď)", xp=False)
-    elif a["current_bidder_id"]:                      # jiný vůdce → vrať mu 100 % (vykoupen, ne přehozen)
-        add_points(conn, a["current_bidder_id"], a["current_bid"], f"Aukce #{auction_id} – vrácení (vykoupeno)", xp=False)
-        notify(conn, a["current_bidder_id"], "🔨", "Aukce vykoupena",
-               f"Někdo koupil „{a['title']}\" za kup-teď cenu. Sedláci ({a['current_bid']}) vráceny. 💰", "#/shop")
+    if real_bidder == user["id"]:                     # kupující byl vůdce → vrať mu jeho escrow (neplatí 2×)
+        add_points(conn, user["id"], real_bid, f"Aukce #{auction_id} – vrácení escrow (kup teď)", xp=False)
+    elif real_bidder:                                 # jiný vůdce → vrať mu 100 % (vykoupen, ne přehozen)
+        add_points(conn, real_bidder, real_bid, f"Aukce #{auction_id} – vrácení (vykoupeno)", xp=False)
+        notify(conn, real_bidder, "🔨", "Aukce vykoupena",
+               f"Někdo koupil „{a['title']}\" za kup-teď cenu. Sedláci ({real_bid}) vráceny. 💰", "#/shop")
     conn.execute("INSERT INTO auction_bids (auction_id, user_id, amount, created_at) VALUES (?,?,?,?)",
                  (auction_id, user["id"], price, now_iso()))
     conn.commit()
@@ -221,7 +244,7 @@ def create(conn, title: str, image_url: str, start_bid: int, min_increment: int,
     cur = conn.execute(
         "INSERT INTO auctions (title, image_url, start_bid, min_increment, current_bid, status, ends_at, "
         "buy_now, sub_only, chat_announce, created_at) VALUES (?, ?, ?, ?, 0, 'active', ?, ?, ?, ?, ?)",
-        (title[:120], (image_url or "").strip()[:500], start_bid, min_increment, ends,
+        (title[:120], _safe_image_url(image_url), start_bid, min_increment, ends,
          buy_now, 1 if sub_only else 0, 1 if chat_announce else 0, now_iso()))
     conn.commit()
     return {"ok": True, "id": cur.lastrowid, "ends_at": ends}
@@ -239,12 +262,15 @@ def cancel(conn, auction_id: int) -> dict:
                     (auction_id,)).rowcount != 1:
         conn.commit()
         return {"ok": False, "error": "Aukce mezitím skončila."}
-    if a["current_bidder_id"]:
-        add_points(conn, a["current_bidder_id"], a["current_bid"], f"Aukce #{auction_id} – zrušeno (vráceno)", xp=False)
-        notify(conn, a["current_bidder_id"], "🔨", "Aukce zrušena",
-               f"Aukce „{a['title']}\" byla zrušena. Sedláci ({a['current_bid']}) vráceny. 💰", "#/shop")
+    # re-SELECT po gate UPDATE (drží write-lock) → REÁLNÝ aktuální vůdce, ne stale snapshot z úvodu funkce
+    cur = conn.execute("SELECT current_bidder_id, current_bid, title FROM auctions WHERE id = ?", (auction_id,)).fetchone()
+    bidder, bid_amt = cur["current_bidder_id"], cur["current_bid"]
+    if bidder:
+        add_points(conn, bidder, bid_amt, f"Aukce #{auction_id} – zrušeno (vráceno)", xp=False)
+        notify(conn, bidder, "🔨", "Aukce zrušena",
+               f"Aukce „{cur['title']}\" byla zrušena. Sedláci ({bid_amt}) vráceny. 💰", "#/shop")
     conn.commit()
-    return {"ok": True, "refunded": a["current_bid"] if a["current_bidder_id"] else 0}
+    return {"ok": True, "refunded": bid_amt if bidder else 0}
 
 
 def admin_list(conn) -> list:
