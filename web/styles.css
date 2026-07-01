@@ -1887,3 +1887,5 @@ body::before { display: none !important; }
 .vs-lbl { text-align: left !important; color: var(--muted, #9aa0b4); }
 .vs-win { color: var(--farm-green, #46d369); font-weight: 800; }
 .vs-verdict { margin-top: 12px; text-align: center; font-size: 15px; }
+.lb-vs { opacity: .35; text-decoration: none; font-size: 14px; padding: 2px 4px; transition: opacity .15s, transform .15s; }
+.lb-row:hover .lb-vs, .lb-vs:hover { opacity: 1; transform: scale(1.2); }

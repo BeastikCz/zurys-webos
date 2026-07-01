@@ -1261,11 +1261,12 @@ function deltaTag(d) {
 function lbRow(r, isMe) {
   const meTag = isMe ? `<span class="me-tag">TY</span>` : "";
   const fire = r.climber ? `<span class="lb-fire">🔥 STOUPÁ TÝDNE</span>` : "";
+  const vsBtn = (state.user && !isMe) ? `<a class="lb-vs" href="#/vs/${encodeURIComponent(r.username)}" title="Porovnej svoje čísla s ${esc(r.username)}">⚔️</a>` : "";
   return `
     <div class="lb-row${isMe ? " me" : ""}${r.climber ? " climber" : ""}" style="--d:${Math.min(r.rank, 24) * 0.025}s">
       <span class="lb-rank">${r.rank}</span>${avatarHTML(r.username, r.avatar_url, "", cosF(r))}
       <div class="lb-id"><a class="uname prof-link ${cosN(r)}" href="#/u/${encodeURIComponent(r.username)}">${r.crew_tag ? `<span class="crew-tag">[${esc(r.crew_tag)}]</span> ` : ""}${esc(r.username)}${meTag}</a> ${prestigeBadge(r.prestige)}<span class="lb-sub">${lvlBadge(r.level)}${lbBadges(r)}${tierChip(r.rank)}${fire}</span></div>
-      ${deltaTag(r.delta)}
+      ${vsBtn}${deltaTag(r.delta)}
       <span class="pts">${fmtPts(r.points)}</span>
     </div>`;
 }
