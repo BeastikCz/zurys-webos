@@ -235,6 +235,18 @@ CREATE TABLE IF NOT EXISTS webhook_seen (
     created_at TEXT NOT NULL
 );
 
+-- StreamElements donaty (poll daemon se_tips.py) – jen pro overlay alerty, žádné sedláky.
+-- se_id UNIQUE = dedup proti opakovanému pollu.
+CREATE TABLE IF NOT EXISTS donations (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    se_id      TEXT UNIQUE,
+    name       TEXT,
+    amount     REAL NOT NULL,
+    currency   TEXT,
+    message    TEXT,
+    created_at TEXT NOT NULL
+);
+
 -- Web Push subscriptiony (notifikace do mobilu i když je appka zavřená). 1 řádka = 1
 -- prohlížeč/zařízení; uživatel jich může mít víc. endpoint UNIQUE (re-subscribe přepíše).
 CREATE TABLE IF NOT EXISTS push_subs (

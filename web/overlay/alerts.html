@@ -317,18 +317,20 @@
     // LIVE režim (pro OBS): JEN alerty — žádný trvalý SUB cíl ani gift train (na přání). Source je průhledný dokud nevyskočí alert.
     // Baseline první poll (zapamatuje poslední id, staré eventy nehlásí), pak jen id > since. Jen ČTE, žádný zápis.
     goal.style.display="none"; train.style.display="none";
-    let lastId=null;
+    let lastId=null,lastDon=0;
     const pollLive=()=>{
-      const url=lastId==null?"/api/recent-events":"/api/recent-events?since="+lastId;
+      const url=lastId==null?"/api/recent-events":"/api/recent-events?since="+lastId+"&don_since="+lastDon;
       fetch(url,{cache:"no-store"}).then(r=>r.json()).then(d=>{
-        if(lastId==null){lastId=d.latest_id;return;}
+        if(lastId==null){lastId=d.latest_id;lastDon=d.don_latest_id||0;return;}
         (d.events||[]).forEach(e=>{
           const name=e.username||"Anonym";
           if(e.kind==="gift") enqueue(eventData("gift",e.count||1,{name}));
           else if(e.kind==="resub") enqueue(eventData("resub",1,{name,subtitle:"Obnovil podporu farmy 🌾",value:"RE",unit:"RESUB",parts:["💜","🌾","⭐","💜","🌱"]}));
           else enqueue(eventData("sub",1,{name}));
         });
+        (d.donates||[]).forEach(e=>enqueue(eventData("donate",Math.max(1,Math.round(e.amount||0)),{name:e.username||"Anonym",subtitle:"Podpora farmy 💛"})));
         lastId=d.latest_id;
+        if(d.don_latest_id!=null)lastDon=d.don_latest_id;
       }).catch(()=>{});
     };
     pollLive();setInterval(pollLive,2000);

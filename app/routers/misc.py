@@ -434,11 +434,12 @@ def recent_gifts_status(since: int = None, conn: sqlite3.Connection = Depends(db
 
 
 @router.get("/recent-events")
-def recent_events_status(since: int = None, conn: sqlite3.Connection = Depends(db_dep)):
+def recent_events_status(since: int = None, don_since: int = None,
+                         conn: sqlite3.Connection = Depends(db_dep)):
     """Nové sub-typ eventy (new/resub/gift) s id > since (pro sjednocený alert overlay alerts.html).
-    Bez since → baseline latest_id. kind: 'gift'|'resub'|'new'."""
+    Bez since → baseline latest_id. kind: 'gift'|'resub'|'new'. Donaty: don_since/don_latest_id/donates."""
     from ..subgoal import recent_events
-    return recent_events(conn, since)
+    return recent_events(conn, since, don_since=don_since)
 
 
 @router.get("/happy-hour")

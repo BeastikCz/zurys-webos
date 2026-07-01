@@ -169,15 +169,27 @@ def recent_gifts(conn, since=None, limit: int = 20) -> dict:
     return {"latest_id": latest, "gifts": gifts}
 
 
-def recent_events(conn, since=None, limit: int = 20) -> dict:
+def recent_events(conn, since=None, limit: int = 20, don_since=None) -> dict:
     """Nové sub-typ eventy (new/resub/gift) s points_log.id > since pro sjednocený alert overlay.
     since=None → baseline (jen latest_id, staré nehlásí). Vrací {latest_id, events:[{id,kind,count,username,avatar_url}]}.
-    kind: 'gift' (×N), 'resub', 'new'. Filtr na id (PK) → rychlé při pollingu."""
+    kind: 'gift' (×N), 'resub', 'new'. Filtr na id (PK) → rychlé při pollingu.
+
+    Donaty (StreamElements, tabulka donations) mají VLASTNÍ kurzor don_since/don_latest_id
+    (jiný id-space než points_log) → klíče don_latest_id + donates:[{id,kind:'donate',username,amount,currency}]."""
     import re
+    don_row = conn.execute("SELECT MAX(id) m FROM donations").fetchone()
+    don_latest = (don_row["m"] if don_row else 0) or 0
+    donates = []
+    if don_since is not None:
+        donates = [{"id": r["id"], "kind": "donate", "username": r["name"],
+                    "amount": r["amount"], "currency": r["currency"]}
+                   for r in conn.execute(
+                       "SELECT id, name, amount, currency FROM donations WHERE id > ? ORDER BY id ASC LIMIT ?",
+                       (don_since, limit))]
     overall = conn.execute("SELECT MAX(id) m FROM points_log").fetchone()
     latest = (overall["m"] if overall else 0) or 0
     if since is None:
-        return {"latest_id": latest, "events": []}
+        return {"latest_id": latest, "events": [], "don_latest_id": don_latest, "donates": []}
     rows = conn.execute(
         "SELECT pl.id, pl.reason, u.username, u.avatar_url FROM points_log pl JOIN users u ON u.id = pl.user_id "
         "WHERE pl.id > ? AND LOWER(pl.reason) NOT LIKE '%příjemce%' AND ("
@@ -194,7 +206,7 @@ def recent_events(conn, since=None, limit: int = 20) -> dict:
             out.append(dict(base, kind="resub", count=1))
         elif "kick sub" in rl:
             out.append(dict(base, kind="new", count=1))
-    return {"latest_id": latest, "events": out}
+    return {"latest_id": latest, "events": out, "don_latest_id": don_latest, "donates": donates}
 
 
 def tick(conn, count: int = 1) -> None:

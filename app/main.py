@@ -18,6 +18,7 @@ from .achievements import start_achievements_daemon
 from .order_cleanup import start_order_cleanup_daemon
 from .anniversary import start_anniversary_daemon
 from .garden_notify import start_garden_notify_daemon
+from .se_tips import start_se_tips_daemon
 from .mines_anticheat import start_mines_anticheat_daemon
 from .config import WEB_DIR, UPLOAD_DIR, SESSION_COOKIE, STAFF_ROLES, TRUSTED_IPS
 from .db import init_db, get_conn, now_iso, get_setting, set_setting
@@ -67,6 +68,8 @@ start_order_cleanup_daemon()
 start_anniversary_daemon()
 # Zahrádka: in-app notifikace „úroda dozrála" + „chrobáci v zahrádce" (1× na záhon)
 start_garden_notify_daemon()
+# StreamElements donaty → overlay alerty (no-op bez SE_JWT + SE_CHANNEL_ID secrets)
+start_se_tips_daemon()
 # Mines anticheat: auto-ban při detekci bota (>25 her za 5 min)
 start_mines_anticheat_daemon()
 
