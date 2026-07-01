@@ -10,6 +10,11 @@ data/
 *.db
 *.db-wal
 *.db-shm
+*.sqlite3
+
+# Smlouvy a výstupy pro streamera – NIKDY necommitovat
+SMLOUVA*
+deliverables/
 
 # Python venv + cache
 .venv/
