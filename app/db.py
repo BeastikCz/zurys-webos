@@ -821,6 +821,7 @@ _MIGRATIONS = [
     ("garden", "pest", "INTEGER NOT NULL DEFAULT 0"),          # chrobáci: 0=nezachráněno, 2=zachráněno (aktivita derivovaná z pest_at + okna)
     ("garden", "pest_at", "TEXT"),                             # KDY se chrobáci objeví (ISO) / NULL = bez chrobáků. Aktivní = pest_at .. pest_at+okno
     ("garden", "notified", "INTEGER NOT NULL DEFAULT 0"),      # bitmask in-app notifikací: 1=úroda dozrála, 2=chrobáci (1× na záhon, brání spamu)
+    ("garden", "fert", "INTEGER NOT NULL DEFAULT 0"),          # hnojivo: 1 = pohnojeno (zbývající růst ×0.5, 1× na výsadbu)
     ("battlepass", "claimed_premium", "TEXT NOT NULL DEFAULT '[]'"),   # prémiová (sub-only) řada Battle Passu – JSON list vyzvednutých tierů
     ("auctions", "buy_now", "INTEGER NOT NULL DEFAULT 0"),       # aukce: kup-teď cena (0 = bez)
     ("auctions", "sub_only", "INTEGER NOT NULL DEFAULT 0"),      # aukce: jen sub smí přihazovat

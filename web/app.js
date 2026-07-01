@@ -2567,10 +2567,13 @@ async function loadGarden() {
       }
       if (p.ready) return `<div class="grd-plot grd-ready"><div class="grd-crop">${p.icon}</div><div class="grd-lbl">${esc(p.name)}</div><button class="bp-claim" data-action="grd-harvest" data-plot="${p.plot}">Sklidit +${fmtPts(p.reward)}</button></div>`;
       const pestRefresh = p.pest_in > 0 ? ` data-refresh-left="${p.pest_in}"` : "";
-      return `<div class="grd-plot grd-grow"${pestRefresh}><div class="grd-crop grd-sprout">🌱</div><div class="grd-lbl">${esc(p.name)}</div><div class="grd-time" data-left="${p.seconds_left}">${grdDur(p.seconds_left)}</div></div>`;
+      const fert = p.fert
+        ? `<div class="faint" style="font-size:11px;color:var(--farm-green,#46d369)">💩 pohnojeno</div>`
+        : `<button class="grd-rescue-btn" data-action="grd-fert" data-plot="${p.plot}" title="Hnojivo zkrátí zbývající čas růstu na polovinu. Jde použít 1× na výsadbu. Výnos se nemění.">💩 Hnojivo ${fmtPts(p.fert_cost)}</button>`;
+      return `<div class="grd-plot grd-grow"${pestRefresh}><div class="grd-crop grd-sprout">🌱</div><div class="grd-lbl">${esc(p.name)}</div><div class="grd-time" data-left="${p.seconds_left}">${grdDur(p.seconds_left)}</div>${fert}</div>`;
     }).join("");
     const shop = g.crops.map((c) => `<button class="grd-seed${_gardenSel === c.key ? " sel" : ""}" data-action="grd-pick" data-crop="${c.key}"><span class="grd-si">${c.icon}</span><b>${esc(c.name)}</b><span class="faint">${c.hours} h · semínko ${fmtPts(c.cost)} · oček. <b>${c.expected_no_rescue >= 0 ? "+" : ""}${fmtPts(c.expected_no_rescue || 0)}</b> / aktivně <b>${c.expected_rescue >= 0 ? "+" : ""}${fmtPts(c.expected_rescue || 0)}</b> · 🎟️ <b style="color:var(--farm-green,#46d369)">+${fmtPts(c.xp || 0)} XP</b></span></button>`).join("");
-    const seedNote = `<p class="muted" style="font-size:12px;margin:-4px 0 10px">Semínko stojí <b>${g.seed_pct}%</b> z výnosu${g.sub ? ` — máš <b style="color:var(--accent)">sub slevu (jen ${g.seed_pct_sub}%)</b> 💜` : ` · 💜 sub jen ${g.seed_pct_sub}%`}. Chrobáci: <b>${g.pest_chance || 0}%</b>, záchrana <b>${g.rescue_pct || 0}%</b> výnosu.<br>🎟️ <b>Sklizeň dává XP do levelu i Battle Passu</b> — <b>mimo denní strop</b>, počítá se vždy (i když máš chat vyfarmený)${g.sub ? ", sub ×1.5" : ""}. Chrobáci úrodu i XP půlí.</p>`;
+    const seedNote = `<p class="muted" style="font-size:12px;margin:-4px 0 10px">Semínko stojí <b>${g.seed_pct}%</b> z výnosu${g.sub ? ` — máš <b style="color:var(--accent)">sub slevu (jen ${g.seed_pct_sub}%)</b> 💜` : ` · 💜 sub jen ${g.seed_pct_sub}%`}. Chrobáci: <b>${g.pest_chance || 0}%</b>, záchrana <b>${g.rescue_pct || 0}%</b> výnosu.<br>🎟️ <b>Sklizeň dává XP do levelu i Battle Passu</b> — <b>mimo denní strop</b>, počítá se vždy (i když máš chat vyfarmený)${g.sub ? ", sub ×1.5" : ""}. Chrobáci úrodu i XP půlí. 💩 <b>Hnojivo</b> zkrátí zbývající růst na polovinu (${g.fert_pct || 20} % výnosu, 1× na výsadbu).</p>`;
     const readyPlots = g.plots.filter((p) => !p.empty && p.ready);
     const emptyCount = g.plots.filter((p) => p.empty).length;
     const readySum = readyPlots.reduce((s, p) => s + ((p.pest || p.eaten) ? Math.round(p.reward * 0.5) : p.reward), 0);
@@ -2624,6 +2627,14 @@ async function grdRescue(plot) {
     const r = await api("/garden/rescue", { method: "POST", body: { plot: parseInt(plot, 10) } });
     if (state.user) state.user.points = r.balance;
     toast(`🐛➡️🌱 Postřik! ${r.name} zachráněna (−${fmtPts(r.cost)}) — bude plná sklizeň.`, "success");
+    renderHeader(); loadGarden();
+  } catch (e) { toast(e.message, "error"); }
+}
+async function grdFert(plot) {
+  try {
+    const r = await api("/garden/fertilize", { method: "POST", body: { plot: parseInt(plot, 10) } });
+    if (state.user) state.user.points = r.balance;
+    toast(`💩 Pohnojeno! ${r.name} doroste už za ${grdDur(r.seconds_left)} (−${fmtPts(r.cost)}).`, "success");
     renderHeader(); loadGarden();
   } catch (e) { toast(e.message, "error"); }
 }
@@ -5986,6 +5997,7 @@ function handleAction(action, el) {
     case "grd-harvest": grdHarvest(el.dataset.plot); break;
     case "grd-harvest-all": grdHarvestAll(); break;
     case "grd-rescue": grdRescue(el.dataset.plot); break;
+    case "grd-fert": grdFert(el.dataset.plot); break;
     case "farm-buy": farmBuy(el.dataset.animal); break;
     case "farm-feed": farmFeed(el.dataset.slot); break;
     case "farm-collect": farmCollect(el.dataset.slot); break;

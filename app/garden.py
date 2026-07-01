@@ -22,6 +22,8 @@ PEST_SPAWN_MAX = 0.85    # … nejpozdějc po 85 %
 PEST_WINDOW_FRAC = 0.30  # okno na záchranu = 30 % doby růstu; po něm sežerou půlku úrody (zamčeno)
 GOLDEN_CHANCE = 0.03     # šance na ZLATOU (vzácnou) sklizeň ze zdravé úrody → ×3 výnos i XP
 GOLDEN_MULT = 3
+FERT_PCT = 0.20          # cena hnojiva = 20 % výnosu (min 5)
+FERT_REMAIN_MULT = 0.5   # hnojivo: ZBÝVAJÍCÍ čas růstu ×0.5 — kupuje čas, ne výnos → žádný tisk sedláků
 
 # (key, ikona, název, hodiny růstu, výnos při sklizni). Cena semínka = % z výnosu (počítá se dle subu).
 CROPS = [
@@ -60,6 +62,11 @@ def _seed_cost(crop, is_sub: bool) -> int:
 def _rescue_cost(crop) -> int:
     """Cena záchrany před chrobáci = % výnosu. Min 5."""
     return max(5, round(crop["reward"] * PEST_RESCUE_PCT))
+
+
+def _fert_cost(crop) -> int:
+    """Cena hnojiva = % výnosu. Min 5."""
+    return max(5, round(crop["reward"] * FERT_PCT))
 
 
 def _pest_chance(conn, user_id: int) -> float:
@@ -146,13 +153,16 @@ def status(conn, user) -> dict:
                       "pest": pstate == "active", "eaten": pstate == "eaten",
                       "pest_in": transition_left if pstate == "incoming" else 0,
                       "rescue_left": transition_left if pstate == "active" else 0,
-                      "rescue_cost": _rescue_cost(c) if pstate == "active" else 0})
+                      "rescue_cost": _rescue_cost(c) if pstate == "active" else 0,
+                      "fert": (r["fert"] if "fert" in r.keys() else 0) == 1,
+                      "fert_cost": _fert_cost(c)})
     return {"plots": plots, "crops": _crops_public(_is_sub(user), pest_chance), "n_plots": n_plots,
             "sub": _is_sub(user), "seed_pct": int(SEED_PCT * 100), "seed_pct_sub": int(SEED_PCT_SUB * 100),
             "pest_chance": int(round(pest_chance * 100)),
             "pest_base_chance": int(PEST_CHANCE * 100),
             "pest_min_chance": int(PEST_MIN_CHANCE * 100),
-            "rescue_pct": int(PEST_RESCUE_PCT * 100)}
+            "rescue_pct": int(PEST_RESCUE_PCT * 100),
+            "fert_pct": int(FERT_PCT * 100)}
 
 
 def plant(conn, user, plot: int, crop_key: str) -> dict:
@@ -303,6 +313,44 @@ def rescue(conn, user, plot: int) -> dict:
     conn.commit()
     bal = conn.execute("SELECT points FROM users WHERE id = ?", (user["id"],)).fetchone()["points"]
     return {"ok": True, "cost": cost, "balance": bal, "name": c.get("name")}
+
+
+def fertilize(conn, user, plot: int) -> dict:
+    """Hnojivo: zkrátí ZBÝVAJÍCÍ čas růstu na polovinu. 1× na výsadbu, jen dokud roste.
+
+    Kupuje čas, ne výnos (výnos/XP beze změny) → čistý sink bez inflace faucetu.
+    Chrobáci co ještě nepřišli přijdou úměrně dřív — hnojivo je neobchází."""
+    from .deps import try_debit
+    r = conn.execute("SELECT * FROM garden WHERE user_id = ? AND plot = ?", (user["id"], plot)).fetchone()
+    if not r:
+        return {"ok": False, "error": "Prázdný záhon."}
+    now = datetime.now(timezone.utc)
+    if r["ready_at"] <= now_iso():
+        return {"ok": False, "error": "Už je dorostlá — rovnou sklízej. 🌾"}
+    if (r["fert"] if "fert" in r.keys() else 0):
+        return {"ok": False, "error": "Tenhle záhon už je pohnojený. 💩"}
+    c = _BY_KEY.get(r["crop"], {})
+    cost = _fert_cost(c)
+    # ATOMICKY: claim flagu (fert 0→1) – zaplatí a zrychlí jen request, který reálně přepnul (rowcount==1).
+    if conn.execute("UPDATE garden SET fert = 1 WHERE user_id = ? AND plot = ? AND fert = 0 AND ready_at > ?",
+                    (user["id"], plot, now.isoformat())).rowcount != 1:
+        conn.commit()
+        return {"ok": False, "error": "Tenhle záhon už je pohnojený. 💩"}
+    if not try_debit(conn, user["id"], cost, f"Hnojivo: {c.get('name', '?')} 💩"):
+        conn.execute("UPDATE garden SET fert = 0 WHERE user_id = ? AND plot = ?", (user["id"], plot))  # vrať
+        conn.commit()
+        return {"ok": False, "error": f"Nemáš dost sedláků na hnojivo ({cost})."}
+    new_ready = now + (datetime.fromisoformat(r["ready_at"]) - now) * FERT_REMAIN_MULT
+    sets, vals = ["ready_at = ?"], [new_ready.isoformat()]
+    pa = r["pest_at"]
+    if pa and pa > now.isoformat():   # chrobáci ještě nepřišli → zrychli i je (stejný poměr)
+        sets.append("pest_at = ?")
+        vals.append((now + (datetime.fromisoformat(pa) - now) * FERT_REMAIN_MULT).isoformat())
+    conn.execute(f"UPDATE garden SET {', '.join(sets)} WHERE user_id = ? AND plot = ?", (*vals, user["id"], plot))
+    conn.commit()
+    bal = conn.execute("SELECT points FROM users WHERE id = ?", (user["id"],)).fetchone()["points"]
+    return {"ok": True, "cost": cost, "balance": bal, "name": c.get("name"),
+            "seconds_left": max(0, int((new_ready - now).total_seconds()))}
 
 
 # ---- Dekorace zahrádky (cosmetic sink: kup → vlastníš → zdobí zahrádku) ----

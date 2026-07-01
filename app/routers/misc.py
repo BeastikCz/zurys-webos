@@ -1334,6 +1334,18 @@ def garden_rescue(data: GardenHarvestIn, user: sqlite3.Row = Depends(require_use
     return r
 
 
+@router.post("/garden/fertilize")
+def garden_fertilize(data: GardenHarvestIn, user: sqlite3.Row = Depends(require_user),
+                     conn: sqlite3.Connection = Depends(db_dep)):
+    """Hnojivo: zbývající čas růstu na polovinu (1× na výsadbu)."""
+    _garden_guard()
+    from .. import garden
+    r = garden.fertilize(conn, user, data.plot)
+    if not r.get("ok"):
+        raise HTTPException(status_code=400, detail=r.get("error", "Pohnojit se to teď nepodařilo."))
+    return r
+
+
 @router.get("/garden/decor")
 def garden_decor(user: sqlite3.Row = Depends(require_user),
                  conn: sqlite3.Connection = Depends(db_dep)):
