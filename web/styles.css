@@ -1874,3 +1874,16 @@ body::before { display: none !important; }
 .prof-level .pl-bar i { display: block; height: 100%; background: var(--accent-grad, var(--accent)); border-radius: 5px; }
 .prof-level .pl-xp { font-size: 11.5px; white-space: nowrap; }
 
+
+/* ---------- Panel „Máš k vyzvednutí" (homepage) + streak chip + porovnání profilů ---------- */
+.claims-panel { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 10px 0; padding: 12px 14px; }
+.claims-panel .cp-title { white-space: nowrap; }
+.streak-pill { gap: 4px; }
+@media (max-width: 560px) { .streak-pill { display: none; } }   /* na malém mobilu je topbar plný */
+.vs-input { background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.14); border-radius: 8px; color: inherit; padding: 7px 10px; max-width: 200px; }
+.vs-table { width: 100%; border-collapse: collapse; }
+.vs-table th, .vs-table td { padding: 9px 10px; text-align: center; border-bottom: 1px solid rgba(255,255,255,.07); }
+.vs-table thead th { font-size: 15px; }
+.vs-lbl { text-align: left !important; color: var(--muted, #9aa0b4); }
+.vs-win { color: var(--farm-green, #46d369); font-weight: 800; }
+.vs-verdict { margin-top: 12px; text-align: center; font-size: 15px; }

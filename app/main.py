@@ -19,6 +19,7 @@ from .order_cleanup import start_order_cleanup_daemon
 from .anniversary import start_anniversary_daemon
 from .garden_notify import start_garden_notify_daemon
 from .se_tips import start_se_tips_daemon
+from .wrapped_push import start_wrapped_push_daemon
 from .mines_anticheat import start_mines_anticheat_daemon
 from .config import WEB_DIR, UPLOAD_DIR, SESSION_COOKIE, STAFF_ROLES, TRUSTED_IPS
 from .db import init_db, get_conn, now_iso, get_setting, set_setting
@@ -70,6 +71,8 @@ start_anniversary_daemon()
 start_garden_notify_daemon()
 # StreamElements donaty → overlay alerty (no-op bez SE_JWT + SE_CHANNEL_ID secrets)
 start_se_tips_daemon()
+# Měsíční Wrapped: 1. den v měsíci push „Tvoje čísla za <měsíc>" všem subscriberům
+start_wrapped_push_daemon()
 # Mines anticheat: auto-ban při detekci bota (>25 her za 5 min)
 start_mines_anticheat_daemon()
 

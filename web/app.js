@@ -250,7 +250,7 @@ function render() {
     kosmetika: pageCosmetics, bj: pageBjRoom, zpravy: pageMessages, fair: pageFair, mines: pageMines, crews: pageCrews,
     connect: pageConnect, login: pageConnect, register: pageConnect, u: pageUserProfile,
     "mod-nabor": pageModApply, staty: pageGameStats, "sin-slavy": pageHallOfFame, zahrada: pageGarden,
-    statek: pageFarm,
+    statek: pageFarm, "moje-cisla": pageWrappedLink, vs: pageVs,
   };
   if (["statek", "crews"].includes(r.name) && !hasEarlyAccess(state.user)) {   // lišta viditelná všem, klik bez accessu → teaser
     pageEarlyAccess(r.name);
@@ -350,7 +350,9 @@ function renderHeader() {
   const notifBtn = u ? `<button class="icon-btn" data-action="open-notifs" title="Notifikace">🔔${u.notif_unread ? `<span class="cart-badge">${u.notif_unread}</span>` : ""}</button>` : "";
   let right;
   if (u) {
-    right = `<div class="pts-pill" title="Tvůj zůstatek"><span class="coin"></span><b class="pts-num">${Number(u.points).toLocaleString("cs-CZ")}</b><span class="lbl">sedláků</span></div>${u.level ? `<div class="lvl-pill"><b class="lvl-num">Lv ${u.level}</b><span class="lvl-bar"><i class="lvl-fill" style="width:${u.level_pct || 0}%"></i></span><div class="lvl-tip"><div class="lt-h">⭐ Level ${u.level} → ${u.level + 1}</div><div class="lt-bar"><i style="width:${u.level_pct || 0}%"></i></div><div class="lt-r"><span>${Number(u.level_into || 0).toLocaleString("cs-CZ")} / ${Number(u.level_span || 0).toLocaleString("cs-CZ")} XP</span><b>${u.level_pct || 0}%</b></div><div class="lt-m">Chybí <b>${Number(Math.max(0, (u.level_span || 0) - (u.level_into || 0))).toLocaleString("cs-CZ")}</b> XP do levelu ${u.level + 1}</div></div></div>` : ""}${cartBtn}${msgBtn}${notifBtn}
+    const streakN = claimsData ? (claimsData.streak || 0) : 0;
+    const streakChip = streakN > 0 ? `<div class="pts-pill streak-pill" title="Denní série: ${streakN}. den v řadě — vyzvedávej denní bonus každý den, ať o ni nepřijdeš!">🔥<b>${streakN}</b></div>` : "";
+    right = `${streakChip}<div class="pts-pill" title="Tvůj zůstatek"><span class="coin"></span><b class="pts-num">${Number(u.points).toLocaleString("cs-CZ")}</b><span class="lbl">sedláků</span></div>${u.level ? `<div class="lvl-pill"><b class="lvl-num">Lv ${u.level}</b><span class="lvl-bar"><i class="lvl-fill" style="width:${u.level_pct || 0}%"></i></span><div class="lvl-tip"><div class="lt-h">⭐ Level ${u.level} → ${u.level + 1}</div><div class="lt-bar"><i style="width:${u.level_pct || 0}%"></i></div><div class="lt-r"><span>${Number(u.level_into || 0).toLocaleString("cs-CZ")} / ${Number(u.level_span || 0).toLocaleString("cs-CZ")} XP</span><b>${u.level_pct || 0}%</b></div><div class="lt-m">Chybí <b>${Number(Math.max(0, (u.level_span || 0) - (u.level_into || 0))).toLocaleString("cs-CZ")}</b> XP do levelu ${u.level + 1}</div></div></div>` : ""}${cartBtn}${msgBtn}${notifBtn}
       <a href="#/profile" class="user-chip" title="Můj profil">${avatarHTML(u.username, u.avatar_url, "", cosF(u))}<div style="display:flex;flex-direction:column;line-height:1.15"><span class="uc-name ${cosN(u)}">${tagPre(u.username)}${esc(u.username)}</span><span class="uc-tier">${userTier(u.rank) ? "★ " + userTier(u.rank) : ""}</span></div></a>
       <button class="btn btn-ghost btn-sm logout-top" data-action="logout" title="Odhlásit">Odhlásit</button>`;
   } else {
@@ -410,6 +412,7 @@ function pageShop() {
   view.innerHTML = `
     <div class="ticker"><div class="ticker-track" id="tickerTrack"></div></div>
     <div id="dropBanner"></div>
+    <div id="claimsPanel"></div>
     <div id="shopAuctions"></div>
     <div class="da-head shop-hero"><img src="/sedlak-cut.png" class="hero-sedlak" alt="Sedlák" />
       <div><h1>Zurys <span class="accent">Shop</span></h1>
@@ -421,6 +424,7 @@ function pageShop() {
     <div class="da-filters" id="filters"></div>
     <div class="da-grid" id="prodGrid">${skeletonCards(8)}</div>
     <div style="text-align:center;margin-top:26px" id="loadMoreWrap"></div>`;
+  renderClaimsPanel();   // z cache hned (čerstvá data dotáhne refreshBonusDot)
   renderFilters();
   loadActivity();
   loadDropBanner();
@@ -1483,6 +1487,7 @@ async function pageUserProfile(nick) {
       </div>
       ${profileBioHTML(p, false)}
       ${canDM(state.user) && state.user.id !== p.id ? `<a href="#/zpravy/${p.id}" class="btn btn-primary" style="margin:16px 0 2px;display:inline-block">✉️ Napsat zprávu</a>` : ""}
+      ${state.user && state.user.id !== p.id ? `<a href="#/vs/${encodeURIComponent(p.username)}" class="btn btn-ghost" style="margin:16px 0 2px 8px;display:inline-block">⚔️ Porovnat</a>` : ""}
       <div class="stat-grid" style="margin-top:18px">
         ${statBox(fmtPts(p.points), "Sedláků teď", "accent")}
         ${statBox(fmtPts(p.earned_total), "Celkem vyděláno")}
@@ -2044,12 +2049,77 @@ async function showWrapped() {
   ov.addEventListener("click", () => ov.remove());
   document.body.appendChild(ov);
 }
+/* Deep link z push notifikace: #/moje-cisla → profil + rovnou Wrapped karta */
+function pageWrappedLink() { pageProfile(); if (state.user) showWrapped(); }
+
+/* ---------- Porovnání profilů (vyzvi kámoše) ---------- */
+async function pageVs(nick) {
+  if (!state.user) { navigate("connect"); return; }
+  const me = state.user.username;
+  const other = (nick ? decodeURIComponent(nick) : "").trim();
+  $("#view").innerHTML = `<div class="page-head"><h1>⚔️ Porovnání</h1><p class="muted">Kdo je větší sedlák? Porovnej svoje čísla s kýmkoli z komunity.</p></div>
+    <div class="panel claims-panel">
+      <b>${esc(me)}</b><span class="faint">vs</span>
+      <input id="vsNick" class="vs-input" placeholder="nick soupeře" value="${esc(other)}" maxlength="40">
+      <button class="btn btn-primary btn-sm" data-action="vs-go">Porovnat</button>
+      <button class="btn btn-ghost btn-sm" data-action="vs-share" title="Zkopíruje odkaz — kdo ho otevře, porovná se s TEBOU">🔗 Vyzvi kámoše</button>
+    </div>
+    <div id="vsBox"></div>`;
+  const inp = document.getElementById("vsNick");
+  if (inp) inp.addEventListener("keydown", (e) => { if (e.key === "Enter") vsGo(); });
+  if (other) loadVs(me, other);
+}
+function vsGo() {
+  const v = (document.getElementById("vsNick")?.value || "").trim();
+  if (!v) { toast("Zadej nick soupeře. ⚔️", "error"); return; }
+  navigate("vs/" + encodeURIComponent(v));
+}
+function vsShare() {
+  const url = location.origin + "/#/vs/" + encodeURIComponent(state.user.username);
+  (navigator.clipboard ? navigator.clipboard.writeText(url) : Promise.reject())
+    .then(() => toast("Odkaz zkopírován! Pošli ho kámošovi — porovná se s tebou. ⚔️", "success"))
+    .catch(() => toast(url, "info"));
+}
+async function loadVs(a, b) {
+  const box = document.getElementById("vsBox"); if (!box) return;
+  box.innerHTML = skeletonCards(1);
+  let pa, pb;
+  try {
+    [pa, pb] = await Promise.all([
+      api("/profile/public?nick=" + encodeURIComponent(a)),
+      api("/profile/public?nick=" + encodeURIComponent(b))]);
+  } catch (e) { box.innerHTML = `<div class="empty"><div class="big">🤷</div>${esc(e.message)}</div>`; return; }
+  const wr = (p) => (p.games_played ? Math.round((p.win_rate || 0) * 100) : 0);
+  const rows = [   // [label, hodnota A, hodnota B, fmtPts?, suffix, nižší vyhrává?]
+    ["⭐ Úroveň", pa.level, pb.level],
+    ["🌾 Nafarmeno celkem", pa.earned_total, pb.earned_total, true],
+    ["💰 Největší výhra", pa.biggest_win, pb.biggest_win, true],
+    ["🎮 Her odehráno", pa.games_played, pb.games_played],
+    ["🎯 Win-rate", wr(pa), wr(pb), false, " %"],
+    ["🔪 Vyhrané tomboly", pa.raffle_wins, pb.raffle_wins],
+    ["🔥 Denní série", pa.daily_streak, pb.daily_streak],
+    ["🏆 Pozice v žebříčku", pa.rank, pb.rank, false, "", true],
+  ];
+  const cell = (v, win, fmt, suf) => `<td class="${win ? "vs-win" : ""}">${fmt ? fmtPts(v || 0) : (v ?? 0)}${suf || ""}</td>`;
+  const body = rows.map(([l, va, vb, fmt, suf, low]) => {
+    const aw = low ? va < vb : va > vb, bw = low ? vb < va : vb > va;
+    return `<tr><td class="vs-lbl">${l}</td>${cell(va, aw, fmt, suf)}${cell(vb, bw, fmt, suf)}</tr>`;
+  }).join("");
+  const sa = rows.reduce((s, [, va, vb, , , low]) => s + ((low ? va < vb : va > vb) ? 1 : 0), 0);
+  const sb = rows.reduce((s, [, va, vb, , , low]) => s + ((low ? vb < va : vb > va) ? 1 : 0), 0);
+  const verdict = sa === sb ? "🤝 Vyrovnaný souboj!"
+    : `👑 <b>${esc(sa > sb ? pa.username : pb.username)}</b> vede ${Math.max(sa, sb)}:${Math.min(sa, sb)}!`;
+  box.innerHTML = `<div class="panel"><table class="vs-table">
+    <thead><tr><th></th><th>${esc(pa.username)}</th><th>${esc(pb.username)}</th></tr></thead>
+    <tbody>${body}</tbody></table>
+    <div class="vs-verdict">${verdict}</div></div>`;
+}
 function pageProfile() {
   if (!state.user) { navigate("connect"); return; }
   const u = state.user;
   const view = $("#view");
   view.innerHTML = `
-    <div class="page-head" style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap"><h1>👤 Můj profil</h1><button class="btn btn-accent btn-sm" data-action="my-wrapped">🎁 Moje čísla</button></div>
+    <div class="page-head" style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap"><h1>👤 Můj profil</h1><div style="display:flex;gap:8px"><a href="#/vs" class="btn btn-ghost btn-sm">⚔️ Porovnat</a><button class="btn btn-accent btn-sm" data-action="my-wrapped">🎁 Moje čísla</button></div></div>
     <div class="panel">
       <div class="profile-head">
         ${avatarHTML(u.username, u.avatar_url, "", cosF(u))}
@@ -3091,16 +3161,34 @@ async function claimPartnerLink(id, url) {
   } catch (e) { toast(e.message, "error"); }
 }
 
-/* ---------- Tečka „máš co vyzvednout" na záložce Bonusy (daily / spin / quest) ---------- */
+/* ---------- Tečky „máš co vyzvednout" + homepage panel + streak chip (1 request: /me/claims) ---------- */
+let claimsData = null;
 async function refreshBonusDot() {
-  if (!state.user) { bonusReady = false; questReady = false; return; }
+  if (!state.user) { bonusReady = false; questReady = false; claimsData = null; return; }
   try {
-    const [d, w, pl, qs] = await Promise.all([api("/daily/status"), api("/wheel/status"), api("/partner-links").catch(() => ({ links: [] })), api("/quests").catch(() => [])]);
-    const partnerReady = pl && Array.isArray(pl.links) && pl.links.some((l) => l.claimable);
-    bonusReady = !!(d.can_claim || w.can_spin || partnerReady);          // tečka na Bonusy
-    questReady = Array.isArray(qs) && qs.some((q) => q.completed && !q.claimed);   // tečka na Úkoly
+    const c = await api("/me/claims");
+    claimsData = c;
+    bonusReady = !!(c.daily || c.wheel || c.partner || c.battlepass || c.levelpass);   // tečka na Bonusy
+    questReady = c.quests > 0;                                                        // tečka na Úkoly
   } catch (e) { return; }
-  renderHeader();
+  renderHeader(); renderClaimsPanel();
+}
+function renderClaimsPanel() {
+  const box = document.getElementById("claimsPanel"); if (!box) return;
+  const c = claimsData;
+  if (!state.user || !c) { box.innerHTML = ""; return; }
+  const chip = (href, label) => `<a class="btn btn-ghost btn-sm" href="#/${href}">${label}</a>`;
+  const chips = [];
+  if (c.daily) chips.push(chip("bonusy", "📅 Denní bonus"));
+  if (c.wheel) chips.push(chip("bonusy", "🎡 Roztočit kolo"));
+  if (c.garden) chips.push(chip("zahrada", `🌾 Sklizeň ×${c.garden}`));
+  if (c.quests) chips.push(chip("ukoly", `📜 Úkoly ×${c.quests}`));
+  if (c.battlepass) chips.push(chip("bonusy", `🎟️ Battle Pass ×${c.battlepass}`));
+  if (c.levelpass) chips.push(chip("bonusy", `⭐ Level Pass ×${c.levelpass}`));
+  if (c.partner) chips.push(chip("bonusy", `🤝 Partneři ×${c.partner}`));
+  box.innerHTML = chips.length
+    ? `<div class="panel claims-panel"><b class="cp-title">🎁 Máš k vyzvednutí:</b>${chips.join("")}</div>`
+    : "";
 }
 async function loadProfTab(tab) {
   document.querySelectorAll('[data-action="prof-tab"]').forEach((b) => b.classList.toggle("active", b.dataset.tab === tab));
@@ -6068,6 +6156,8 @@ function handleAction(action, el) {
     case "bjr-double": bjrAct("double"); break;
     case "bjr-split": bjrAct("split"); break;
     case "my-wrapped": showWrapped(); break;
+    case "vs-go": vsGo(); break;
+    case "vs-share": vsShare(); break;
     case "crew-create": crewCreate(); break;
     case "crew-join": crewJoin(); break;
     case "crew-chat": crewChat(); break;

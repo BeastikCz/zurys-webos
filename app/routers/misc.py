@@ -1259,6 +1259,35 @@ def login_calendar_claim(data: LoginCalClaimIn, user: sqlite3.Row = Depends(requ
     return r
 
 
+@router.get("/me/claims")
+def my_claims(user: sqlite3.Row = Depends(require_user),
+              conn: sqlite3.Connection = Depends(db_dep)):
+    """Agregát „máš k vyzvednutí" — JEDEN request pro tečky v navu, homepage panel
+    a streak chip. Nahrazuje 4 paralelní cally (daily/wheel/partner-links/quests)."""
+    from .. import battlepass, levelpass
+    from ..partners import status_for_user
+    from ..quests import get_quests, QUESTS_ENABLED
+    now = datetime.now(timezone.utc)
+    streak, daily_can, _next = _daily_state(user, now)
+    wheel_can, _n = _wheel_state(user, now)
+    garden_ready = conn.execute(
+        "SELECT COUNT(*) c FROM garden WHERE user_id = ? AND ready_at <= ?",
+        (user["id"], now_iso())).fetchone()["c"]
+    quests = get_quests(conn, user["id"]) if QUESTS_ENABLED else []
+    bp = battlepass.status(conn, user)
+    lp = levelpass.status(conn, user)
+    return {
+        "daily": daily_can,
+        "wheel": wheel_can,
+        "partner": sum(1 for l in status_for_user(conn, user["id"])["links"] if l["claimable"]),
+        "quests": sum(1 for q in quests if q.get("completed") and not q.get("claimed")),
+        "garden": garden_ready,
+        "battlepass": bp["claimable"] + bp["claimable_premium"],
+        "levelpass": lp["claimable"],
+        "streak": streak,
+    }
+
+
 import os as _os
 GARDEN_OFF = _os.environ.get("WEBOS_GARDEN_OFF", "0") == "1"   # zahrádka mimo provoz (redesign); env ve fly.toml. Lokálně/testy = zapnutá.
 
