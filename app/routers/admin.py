@@ -2557,10 +2557,19 @@ def admin_auctions(conn: sqlite3.Connection = Depends(db_dep)):
 
 
 @router.get("/crews")
-def admin_crews(conn: sqlite3.Connection = Depends(db_dep)):
-    """Všechny party + členové (kdo s kým, role, contribution, sub/týdenní XP) pro admina/broadcastera."""
+def admin_crews(admin: sqlite3.Row = Depends(require_user), conn: sqlite3.Connection = Depends(db_dep)):
+    """Všechny party + členové. Ekonomické staty (XP/level/příspěvky/série/kód) vidí JEN admin —
+    broadcaster (a jiný staff) jen složení part: kdo s kým, role, odkdy."""
     from .. import crews
-    return crews.admin_list(conn)
+    out = crews.admin_list(conn)
+    if admin["role"] != ROLE_ADMIN:
+        for c in out:
+            for k in ("xp", "level", "streak", "best_streak", "code", "war_wins", "war_losses", "war_draws"):
+                c.pop(k, None)
+            for m in c["members"]:
+                for k in ("contributed", "sub_xp", "week_xp"):
+                    m.pop(k, None)
+    return out
 
 
 @router.post("/auctions")

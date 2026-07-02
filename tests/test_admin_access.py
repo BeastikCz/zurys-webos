@@ -259,6 +259,27 @@ def test_admin_crews_allowed(client, role):
     assert r.status_code == 200, f"{role} má vidět přehled part, dostal {r.status_code}"
 
 
+def test_admin_crews_broadcaster_redacted(client):
+    """Broadcaster vidí jen složení part (kdo s kým) — ekonomické staty (xp/level/příspěvky/kód) JEN admin."""
+    from app.db import get_conn, now_iso
+    from app import crews as crews_mod
+    conn = get_conn()
+    try:
+        s = secrets.token_hex(4)
+        uid = conn.execute("INSERT INTO users (kick_username, username, role, points, created_at) "
+                           "VALUES (?,?,?,?,?)", (f"cl_{s}", f"cl_{s}", "user", 50000, now_iso())).lastrowid
+        conn.commit()
+        crews_mod.create(conn, uid, f"cl_{s}", f"RedactParta_{s}", None)
+    finally:
+        conn.close()
+    a = _get(client, "/api/admin/crews", _login_as("admin")).json()
+    b = _get(client, "/api/admin/crews", _login_as("broadcaster")).json()
+    assert a and "xp" in a[0] and "code" in a[0] and "contributed" in a[0]["members"][0]   # admin vše
+    assert b and "xp" not in b[0] and "level" not in b[0] and "code" not in b[0]           # broadcaster bez ekonomiky
+    assert "contributed" not in b[0]["members"][0] and "week_xp" not in b[0]["members"][0]
+    assert b[0]["members"][0]["username"] and b[0]["member_count"] >= 1                     # složení vidí
+
+
 @pytest.mark.parametrize("role", ["mod", "predictor", "vip", "sub", "user"])
 def test_admin_crews_blocked(client, role):
     """BEZPEČNOST: mod / predictor / divák na přehled part NESMÍ (403)."""
