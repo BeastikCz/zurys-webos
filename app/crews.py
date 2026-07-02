@@ -43,6 +43,10 @@ def goal_for(members):
 # ne sedláky → žádný faucet. Týdenní počet subů party odvozený z týdenního sub XP (week_xp − week_farm)/5000.
 SUB_GOAL_PER_MEMBER = 1     # cílový počet subů/týden na člena
 SUB_GOAL_MIN = 2           # minimum (i malá parta má cíl)
+# Eskalace sub cíle (2.7.): po splnění další meta = jen VYŠŠÍ STATUS badge — žádné sedláky
+# (suby už platí XP + body gifterovi + crew sub bonus; další faucet by se stackoval).
+SUB_TIER_MULTS = (1, 2, 4)
+SUB_TIER_BADGES = ("Supporter parta ✓", "Supporter parta ×2 🔥", "Supporter parta ×3 👑")
 
 
 def sub_goal_for(members):
@@ -774,7 +778,10 @@ def _public(conn, crew_id, viewer_uid):
     goal_reached = total_week >= cur_goal
     lvl = _level(c["xp"])
     week_subs = week_sub_xp // XP_PER_SUB
-    sub_goal = sub_goal_for(len(members))
+    sub_goal_base = sub_goal_for(len(members))
+    sub_tier = sum(1 for mlt in SUB_TIER_MULTS if week_subs >= sub_goal_base * mlt)
+    # bar míří na další nesplněnou metu (maxnutá parta vidí poslední)
+    sub_goal = sub_goal_base * SUB_TIER_MULTS[min(sub_tier, len(SUB_TIER_MULTS) - 1)]
     streak = c["streak"] if c["streak_week"] in (week, _prev_week_id()) else 0   # živý jen pokud tento/minulý týden
     requests = []
     if is_leader:                                   # žádosti o vstup vidí jen vůdce
@@ -793,7 +800,9 @@ def _public(conn, crew_id, viewer_uid):
         "goal_all_claimed": all_claimed,
         "you_claimed": you_tier_done > 0,
         "can_claim_goal": bool(you_member and goal_reached and not all_claimed),
-        "week_subs": week_subs, "sub_goal": sub_goal, "sub_goal_reached": bool(week_subs >= sub_goal),
+        "week_subs": week_subs, "sub_goal": sub_goal, "sub_goal_reached": sub_tier >= 1,
+        "sub_tier": sub_tier, "sub_tiers_total": len(SUB_TIER_MULTS),
+        "sub_badge": SUB_TIER_BADGES[sub_tier - 1] if sub_tier else None,
         "streak": streak, "best_streak": c["best_streak"] or 0,
         "motd": c["motd"] or "", "private": bool(c["private"]),
         "achievements": _achievements(c, len(members), total_sub),

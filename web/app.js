@@ -6824,9 +6824,9 @@ function crewGoalHTML(d) {
     ${cta}
     ${d.streak > 0 ? `<div class="crew-streak-line">🔥 <b>${d.streak}</b> ${_weekWord(d.streak)} v řadě se splněným cílem${d.best_streak > d.streak ? ` · rekord ${d.best_streak}` : ""} — nepřeruš to!</div>` : ""}
     <div class="crew-subgoal">
-      <div class="crew-goal-top"><span>🎁 Sub cíl party ${d.sub_goal_reached ? '<span class="crew-supporter-badge">Supporter parta ✓</span>' : ""}</span><b>${d.week_subs || 0} / ${d.sub_goal} subů</b></div>
+      <div class="crew-goal-top"><span>🎁 Sub cíl party ${d.sub_tier > 0 ? `<span class="crew-supporter-badge">${esc(d.sub_badge || "Supporter parta ✓")}</span>` : ""}</span><b>${d.week_subs || 0} / ${d.sub_goal} subů</b></div>
       <div class="crew-goal-bar"><div class="crew-goal-fill sub" style="width:${subPct}%"></div></div>
-      <div class="crew-goal-hint">${d.sub_goal_reached ? "Parta tento týden nese — status Supporter parta 🎁" : "Subněte/giftněte společně → odznak Supporter parta + flex na žebříčku."}</div>
+      <div class="crew-goal-hint">${d.sub_tier >= (d.sub_tiers_total || 1) ? "Sub LEGENDA týdne — výš už to nejde 👑" : d.sub_tier > 0 ? `Status máte! Další meta <b>${d.sub_goal} subů</b> → vyšší odznak 🔥` : "Subněte/giftněte společně → odznak Supporter parta + flex na žebříčku."}</div>
     </div>`;
 }
 function crewWarHTML(d) {

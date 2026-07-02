@@ -234,8 +234,9 @@ def test_sub_goal_counts_weekly_subs(client):
         conn.close()
     d = _run(crews.state, u, st["id"])
     assert d["week_subs"] == 3                                     # odvozeno z week_xp − week_farm
-    assert d["sub_goal"] == crews.sub_goal_for(1)                  # 1 člen → minimum 2
-    assert d["sub_goal_reached"] is True                          # 3 ≥ 2
+    assert d["sub_goal_reached"] is True                          # 3 ≥ 2 (základ, tier 1)
+    assert d["sub_tier"] == 1 and d["sub_badge"] == crews.SUB_TIER_BADGES[0]
+    assert d["sub_goal"] == crews.sub_goal_for(1) * crews.SUB_TIER_MULTS[1]   # bar míří na tier 2 (2× základ = 4)
 
 
 def test_claim_goal_hop_proof(client):
