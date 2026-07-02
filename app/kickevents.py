@@ -177,6 +177,15 @@ def handle_event(conn, event_type: str, payload: dict) -> dict:
         gifter = (payload.get("gifter") or {}).get("username")   # None = anonym
         giftees = payload.get("giftees") or []
         n = len(giftees)
+        if n == 0:
+            # Kick občas pošle gifts event BEZ giftees (2.7.2026 2× „×0": ušlé body, sub statusy
+            # i subgoal tick — ručně kompenzováno). Zaloguj celý payload + Discord alert, ať
+            # u další takové rány vidíme reálný shape a umíme doparsovat i tuhle variantu.
+            raw = json.dumps(payload, ensure_ascii=False)[:1400]
+            print("[kick-webhook] gifts event BEZ giftees! payload:", raw)
+            from . import alerts
+            alerts.send("Kick gifts webhook bez giftees 🎁⚠️ (ušlé body/subgoal — zkontroluj)",
+                        raw, key="gifts-no-giftees", cooldown=60)
         mult = services.sub_points_mult(conn)   # happy-hour 2× na gift subs (jinak 1×)
         total = eco["eco_giftsub_pts"] * n * mult
         gifter_uid = None
