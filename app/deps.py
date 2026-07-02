@@ -1,4 +1,5 @@
 """Sdílené FastAPI závislosti: připojení k DB, aktuální uživatel, role, pomocníci."""
+import os
 import re
 import sqlite3
 from datetime import datetime, timezone, timedelta
@@ -26,19 +27,21 @@ def db_dep():
         conn.close()
 
 
+# CF-Connecting-IP je důvěryhodný JEN pokud origin_lock ověřil, že request přišel přes CF.
+# Bez WEBOS_ORIGIN_SECRET (fail-open) mohl request přijít přímo na Fly → header je spoofovatelný.
+_ORIGIN_LOCK_ACTIVE = bool(os.environ.get("WEBOS_ORIGIN_SECRET", ""))
+
+
 def client_ip(request: Request) -> str:
     """Reálná IP klienta.
 
-    BEZPEČNOST: za Cloudflare (před Fly) nese reálnou IP `CF-Connecting-IP` (CF ji nastaví
-    a klientskou hodnotu přepíše). Za Fly bez CF je důvěryhodná `Fly-Client-IP`. NAOPAK
-    první záznam `X-Forwarded-For` si pošle sám klient → tím by šly obejít IP bany /
-    anticheat, proto se na něj nespoléháme. Lokálně (bez proxy) bereme přímé spojení.
-    Pozn.: až poběží CF, je vhodné omezit Fly origin jen na Cloudflare IP rozsahy, ať
-    nejde `CF-Connecting-IP` podvrhnout přímým requestem na *.fly.dev.
+    BEZPEČNOST: CF-Connecting-IP bereme jen když je aktivní origin_lock (WEBOS_ORIGIN_SECRET),
+    čímž je zaručeno, že request prošel přes Cloudflare. Bez origin_lock fallback na Fly-Client-IP.
     """
-    cf = request.headers.get("cf-connecting-ip")
-    if cf:
-        return cf.strip()
+    if _ORIGIN_LOCK_ACTIVE:
+        cf = request.headers.get("cf-connecting-ip")
+        if cf:
+            return cf.strip()
     fly = request.headers.get("fly-client-ip")
     if fly:
         return fly.strip()

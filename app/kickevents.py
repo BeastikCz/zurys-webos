@@ -53,6 +53,13 @@ def _public_key():
         return None
 
 
+# Replay guard: dedup (webhook_seen) drží message_id 3 dny, replay tedy projde až PO prune.
+# Stačí proto odmítat podpisy starší než 24 h (< 3 dny) – díra zavřená, a přitom je okno
+# tolerantní ke Kick retryům (nesou PŮVODNÍ podepsaný timestamp) i delšímu výpadku appky.
+# POZOR: 5min okno by při >5min downtime zahodilo retryované eventy (Kick by nás mohl odhlásit).
+_WEBHOOK_SKEW_SEC = 86400
+
+
 def verify(message_id: str, timestamp: str, body_bytes: bytes, signature_b64: str) -> bool:
     """Ověří podpis webhooku. Podepisuje se `message_id.timestamp.raw_body`."""
     pub = _public_key()
@@ -61,9 +68,20 @@ def verify(message_id: str, timestamp: str, body_bytes: bytes, signature_b64: st
     try:
         signed = (str(message_id) + "." + str(timestamp) + ".").encode("utf-8") + (body_bytes or b"")
         rsa.verify(signed, base64.b64decode(signature_b64), pub)  # raises VerificationError když nesedí
-        return True
     except Exception:
         return False
+    # Čerstvost podepsaného timestampu (viz _WEBHOOK_SKEW_SEC výš). Odmítnutí LOGUJ –
+    # jinak by systémová chyba (např. jiný formát timestampu) tiše zabila všechny eventy.
+    try:
+        event_time = datetime.fromisoformat(str(timestamp).replace("Z", "+00:00"))
+        age = abs((datetime.now(timezone.utc) - event_time).total_seconds())
+        if age > _WEBHOOK_SKEW_SEC:
+            print(f"[kickevents] webhook odmítnut: timestamp starý {age:.0f}s (limit {_WEBHOOK_SKEW_SEC}s): {timestamp!r}")
+            return False
+    except Exception as e:
+        print(f"[kickevents] webhook odmítnut: neparsovatelný timestamp {timestamp!r}: {e}")
+        return False
+    return True
 
 
 def _award_kick_user(conn, kick_username, points, reason, set_sub=None, sub_expires_at=None, log_event=False, crew_bonus=False):

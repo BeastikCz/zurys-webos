@@ -8,6 +8,8 @@ Daemon vlákno jako backup.py / autodrop.py – stdlib + get_conn. Aktivní jen 
 je nastavený Discord webhook (jinak no-op). Stav (kdy naposled posláno) v
 app_settings (klíč `digest_last_date`), takže se neposílá víckrát za den.
 """
+import shutil
+import sqlite3
 import threading
 import time
 import traceback
@@ -170,7 +172,20 @@ def send_offsite_backup() -> bool:
         if p.exists():
             kb = p.stat().st_size // 1024
             today = datetime.now(timezone.utc).date().isoformat()
-            alerts.send_file(p, caption=f"💾 Off-site záloha DB · {today} · {kb} kB")
+            # ponytail: scrub credentials before Discord upload; on-disk backup stays complete
+            tmp = p.with_suffix(".discord.tmp")
+            try:
+                shutil.copy2(p, tmp)
+                c = sqlite3.connect(str(tmp))
+                c.isolation_level = None
+                c.execute("DELETE FROM sessions")
+                c.execute("DELETE FROM bot_tokens")
+                c.execute("VACUUM")
+                c.close()
+                alerts.send_file(tmp, caption=f"💾 Off-site záloha DB · {today} · {kb} kB")
+            finally:
+                if tmp.exists():
+                    tmp.unlink()
             return True
     except Exception:
         traceback.print_exc()

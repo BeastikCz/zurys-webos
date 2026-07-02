@@ -29,11 +29,14 @@ from .. import kickbot
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
-# Reálný Kick OAuth jen na PRODUKCI (Fly nastavuje FLY_APP_NAME). Lokálně (bez FLY_APP_NAME)
-# je OAUTH_ENABLED vždy False → běží DEMO login (přihlášení jen nickem, pro vývoj). Demo endpoint
-# /kick/connect je navíc gated `if OAUTH_ENABLED` níž, takže na produkci (kde je FLY_APP_NAME +
-# KICK_CLIENT_ID v env) zůstává zablokovaný. Prod login se NEMĚNÍ.
-OAUTH_ENABLED = bool(KICK_CLIENT_ID and KICK_CLIENT_SECRET and os.environ.get("FLY_APP_NAME"))
+IS_PRODUCTION = bool(os.environ.get("FLY_APP_NAME"))
+# Na produkci musí být OAuth creds kompletní – jinak by chybějící secret otevřel demo login.
+if IS_PRODUCTION and not (KICK_CLIENT_ID and KICK_CLIENT_SECRET):
+    raise RuntimeError(
+        "PROD: chybí KICK_CLIENT_ID nebo KICK_CLIENT_SECRET – "
+        "app odmítla start, aby nedošlo k otevření demo loginu na produkci."
+    )
+OAUTH_ENABLED = bool(KICK_CLIENT_ID and KICK_CLIENT_SECRET and IS_PRODUCTION)
 
 
 # ---------------- Session ----------------
@@ -111,10 +114,10 @@ def _find_or_create_kick_user(conn: sqlite3.Connection, kick_username: str,
 @router.get("/kick/status")
 def kick_status():
     """Frontend podle toho zvolí reálný OAuth vs. demo modal."""
-    return {
-        "mode": "oauth" if OAUTH_ENABLED else "demo",
-        "demo_admin": (ADMIN_KICK_USERNAMES[0] if ADMIN_KICK_USERNAMES else "admin"),
-    }
+    result: dict = {"mode": "oauth" if OAUTH_ENABLED else "demo"}
+    if not IS_PRODUCTION:
+        result["demo_admin"] = ADMIN_KICK_USERNAMES[0] if ADMIN_KICK_USERNAMES else "admin"
+    return result
 
 
 # ---------------- DEMO připojení (bez OAuth) ----------------
@@ -123,9 +126,9 @@ def kick_connect(data: KickConnectIn, request: Request, response: Response,
                  conn: sqlite3.Connection = Depends(db_dep)):
     """Demo režim: propojení Kick účtu jen přes uživatelské jméno."""
     rate_limit(f"connect:{client_ip(request)}", 12, 60)  # max 12 / min z jedné IP
-    if OAUTH_ENABLED:
-        raise HTTPException(status_code=400,
-                            detail="Je zapnuté reálné Kick OAuth – použij tlačítko Připojit přes Kick.")
+    if OAUTH_ENABLED or IS_PRODUCTION:
+        # Na produkci (FLY_APP_NAME) je demo login zakázaný vždy, i kdyby chyběly OAuth creds.
+        raise HTTPException(status_code=404, detail="Not found")
     handle = data.username.strip().lstrip("@")
     if len(handle) < 2:
         raise HTTPException(status_code=400, detail="Zadej platný Kick nick.")

@@ -10,24 +10,41 @@ _EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 _B64URL_RE = re.compile(r"^[A-Za-z0-9_\-]+=*$")
 
 
+# Povolené push-service domény (suffix match). Přidat, pokud prohlížeč používá jinou.
+_PUSH_ALLOWED_SUFFIXES = (
+    ".googleapis.com",          # Chrome / Chromium
+    ".push.services.mozilla.com",  # Firefox
+    ".notify.windows.com",      # Edge / Windows
+    ".wns.windows.com",
+    ".push.apple.com",          # Safari 16.4+ / iOS
+)
+_PUSH_ALLOWED_EXACT = {
+    "fcm.googleapis.com",
+    "updates.push.services.mozilla.com",
+    "web.push.apple.com",
+}
+
+
 def _validate_push_endpoint(v: str) -> str:
-    """SSRF guard: https:// only, no private/loopback IP literals."""
+    """SSRF guard: https:// only, no private IPs, allowlist of known push services."""
     parsed = urlparse(v)
     if parsed.scheme != "https":
         raise ValueError("endpoint must use https://")
     host = parsed.hostname or ""
     if not host:
         raise ValueError("endpoint has no host")
-    if host.lower() in ("localhost",) or host.lower().endswith(".local"):
-        raise ValueError("endpoint: private host not allowed")
     try:
         addr = ipaddress.ip_address(host)
     except ValueError:
-        pass  # hostname, not an IP literal — accept
+        pass  # hostname, not an IP literal — check allowlist below
     else:
         if not addr.is_global:
             raise ValueError("endpoint: private/loopback IP not allowed")
-    return v
+        return v  # public IP literal — pass (exotic but valid push services can use these)
+    h = host.lower()
+    if h in _PUSH_ALLOWED_EXACT or any(h.endswith(s) for s in _PUSH_ALLOWED_SUFFIXES):
+        return v
+    raise ValueError("endpoint: nepodporovaný push-service hostname")
 
 
 def _normalize_email(value: str) -> str:
