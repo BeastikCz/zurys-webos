@@ -1311,10 +1311,14 @@ async function pageLeaderboard() {
     const myBar = myRow
       ? `<div class="lb-mybar"><div class="lb-mybar-av">${avatarHTML(myRow.username, myRow.avatar_url, "", cosF(myRow))}</div><div class="lb-mybar-body"><div class="lb-mybar-top">📍 Tvoje pozice: <b>#${myRow.rank}</b></div>${(predskok || myDelta) ? `<div class="lb-mybar-sub">${predskok}${myDelta}</div>` : ""}</div>${tierChip(myRow.rank)}</div>`
       : (myName ? `<div class="lb-mybar" style="justify-content:center">Zatím nejsi v TOP ${rows.length} – sbírej sedláky! 🌾</div>` : "");
-    const list = rest.length ? lbSectioned(rest, isMe) : "";
+    const list = rest.length ? (rest.length > 10
+      ? `<div class="lb-collapse" id="lbCollapse">${lbSectioned(rest, isMe)}</div><button class="btn btn-ghost btn-sm" id="lbMore" style="display:block;width:100%;margin-top:6px">Zobrazit celý TOP ${rows.length} ▾</button>`
+      : lbSectioned(rest, isMe)) : "";
     const legend = rows.length ? `<div class="lb-legend">${TIERS.slice().reverse().map((t, i, a) => `<span style="color:${TIER_COLOR[t[3]] || "#8b93a3"}">${t[1]} ${t[2][0] + t[2].slice(1).toLowerCase()}</span>${i < a.length - 1 ? '<span class="lb-leg-sep">›</span>' : ""}`).join("")}</div>` : "";
     $("#lb").innerHTML = (rows.length ? `<div class="lb-meta">🌾 TOP ${rows.length} diváků</div>` : "") + podium + myBar + list + legend + (rows.length ? "" : `<div class="empty">Zatím žádní uživatelé.</div>`) + `<div id="crewTop"></div><div id="seasonEarners"></div><div id="weeklyEarners"></div><div id="chatLeaders"></div>`;
     animateCounts($("#lb"));
+    const more = document.getElementById("lbMore");
+    if (more) more.onclick = () => { document.getElementById("lbCollapse").classList.add("open"); more.remove(); };
     loadCrewTop();
     loadSeasonEarners();
     loadWeeklyEarners();
@@ -1346,12 +1350,12 @@ async function loadWeeklyEarners() {
     const rows = (d && d.rows) || [];
     if (!rows.length) { box.innerHTML = ""; return; }
     const myName = state.user && state.user.username;
-    box.innerHTML = `<div class="section-title" style="margin-top:28px">📅 Tento týden — nejvíc nasbíráno <span class="faint" style="font-weight:400;font-size:13px">— kdo tento týden vydělal nejvíc sedláků farmením a podporou (sázky/hry se nepočítají · zůstatky se NEresetují) 🌾</span></div>
+    box.innerHTML = `<details class="lb-fold"><summary class="section-title">📅 Tento týden — nejvíc nasbíráno <span class="faint" style="font-weight:400;font-size:13px">— kdo tento týden vydělal nejvíc sedláků farmením a podporou (sázky/hry se nepočítají · zůstatky se NEresetují) 🌾</span></summary>
       <div class="lb-list">${rows.slice(0, 15).map((r, i) => {
         const rk = i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : (i + 1);
         const mine = !!myName && r.username === myName;
         return `<div class="lb-row${mine ? " me" : ""}"><span class="lb-rank">${rk}</span>${avatarHTML(r.username, r.avatar_url, "", cosF(r))}<div class="lb-id"><a class="uname prof-link ${cosN(r)}" href="#/u/${encodeURIComponent(r.username)}">${tagPre(r.username)}${esc(r.username)}</a> ${roleBadge(r.role)}</div><span class="pts" style="color:#46d369">+${fmtPts(r.gained)}</span></div>`;
-      }).join("")}</div>`;
+      }).join("")}</div></details>`;
   } catch (e) { box.innerHTML = ""; }
 }
 
@@ -1362,12 +1366,12 @@ async function loadSeasonEarners() {
     const rows = (d && d.rows) || [];
     if (!rows.length) { box.innerHTML = ""; return; }
     const myName = state.user && state.user.username;
-    box.innerHTML = `<div class="section-title" style="margin-top:28px">🏆 Sezóna ${esc(d.season || "")} — TOP sběrači <span class="faint" style="font-weight:400;font-size:13px">— kdo tento měsíc vydělal nejvíc sedláků farmením a podporou (sázky/hry se nepočítají · reset 1. dne) 🌾</span></div>
+    box.innerHTML = `<details class="lb-fold"><summary class="section-title">🏆 Sezóna ${esc(d.season || "")} — TOP sběrači <span class="faint" style="font-weight:400;font-size:13px">— kdo tento měsíc vydělal nejvíc sedláků farmením a podporou (sázky/hry se nepočítají · reset 1. dne) 🌾</span></summary>
       <div class="lb-list">${rows.slice(0, 15).map((r, i) => {
         const rk = i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : (i + 1);
         const mine = !!myName && r.username === myName;
         return `<div class="lb-row${mine ? " me" : ""}"><span class="lb-rank">${rk}</span>${avatarHTML(r.username, r.avatar_url, "", cosF(r))}<div class="lb-id"><a class="uname prof-link ${cosN(r)}" href="#/u/${encodeURIComponent(r.username)}">${tagPre(r.username)}${esc(r.username)}</a> ${roleBadge(r.role)}</div><span class="pts" style="color:var(--accent)">+${fmtPts(r.gained)}</span></div>`;
-      }).join("")}</div>`;
+      }).join("")}</div></details>`;
   } catch (e) { box.innerHTML = ""; }
 }
 
@@ -1377,11 +1381,11 @@ async function loadChatLeaders() {
     let rows = await api("/top-chatters?period=day"), label = "dne";
     if (!rows.length) { rows = await api("/top-chatters?period=week"); label = "týdne"; }
     if (!rows.length) { box.innerHTML = ""; return; }
-    box.innerHTML = `<div class="section-title" style="margin-top:28px">🗣️ Top Chatteři ${label} <span class="faint" style="font-weight:400;font-size:13px">— nejaktivnější v chatu · TOP 3 dne berou bonus 🌾</span></div>
+    box.innerHTML = `<details class="lb-fold"><summary class="section-title">🗣️ Top Chatteři ${label} <span class="faint" style="font-weight:400;font-size:13px">— nejaktivnější v chatu · TOP 3 dne berou bonus 🌾</span></summary>
       <div class="lb-list">${rows.map((r, i) => {
         const rk = i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : (i + 1);
         return `<div class="lb-row"><span class="lb-rank">${rk}</span>${avatarHTML(r.username, r.avatar_url)}<div class="lb-id">${uLink(r.username)}</div><span class="pts">${r.msgs} 💬</span></div>`;
-      }).join("")}</div>`;
+      }).join("")}</div></details>`;
   } catch (e) { box.innerHTML = ""; }
 }
 

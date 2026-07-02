@@ -1889,3 +1889,13 @@ body::before { display: none !important; }
 .vs-verdict { margin-top: 12px; text-align: center; font-size: 15px; }
 .lb-vs { opacity: .35; text-decoration: none; font-size: 14px; padding: 2px 4px; transition: opacity .15s, transform .15s; }
 .lb-row:hover .lb-vs, .lb-vs:hover { opacity: 1; transform: scale(1.2); }
+
+/* Žebříček — kompaktní režim: hlavní list sbalený s fade, vedlejší sekce v <details> */
+.lb-collapse { max-height: 560px; overflow: hidden; position: relative; }
+.lb-collapse::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 90px; background: linear-gradient(transparent, var(--bg)); pointer-events: none; }
+.lb-collapse.open { max-height: none; }
+.lb-collapse.open::after { display: none; }
+.lb-fold > summary.section-title { cursor: pointer; list-style: none; display: flex; align-items: center; gap: 8px; margin-top: 28px; user-select: none; }
+.lb-fold > summary.section-title::-webkit-details-marker { display: none; }
+.lb-fold > summary.section-title::after { content: "▸"; margin-left: auto; color: var(--muted); transition: transform .15s; }
+.lb-fold[open] > summary.section-title::after { transform: rotate(90deg); }
