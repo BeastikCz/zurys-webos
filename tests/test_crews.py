@@ -250,12 +250,13 @@ def test_claim_goal_hop_proof(client):
         conn.close()
     h = _mk_user(100000); b = _run(crews.create, h, "h", "HopB", "HPB")
     _run(crews.join, u, "u", b["code"])                           # přidej se do B
-    _set_week_xp(u, crews.goal_for(2) + 100)                      # B splní cíl
+    _set_week_xp(u, crews.goal_for(2) + 100)                      # B splní ZÁKLADNÍ cíl
     try:
         _run(crews.claim_goal, u)
-        assert False, "hop nesmí umožnit druhý claim za týden"
+        assert False, "hop nesmí umožnit druhý claim tieru 1 za týden"
     except ValueError as e:
-        assert "vyzvednut" in str(e).lower()                     # gate na users → hop-proof
+        # gate na users → hop-proof: tier 1 už má, v B by šel až tier 2 (2× cíl), který B nemá
+        assert "tier 2" in str(e).lower() and "není splněn" in str(e).lower()
 
 
 def test_kick_removes_member(client):
@@ -532,13 +533,25 @@ def test_claim_goal_rewards(client):
     assert _points(u) == before + crews.GOAL_REWARD
 
 
-def test_claim_goal_double_rejected(client):
+def test_claim_goal_tiers_escalate_and_stop(client):
+    """Tiery: 1× základ → +1500, 2× → +750, 4× → +400; stejný tier 2× nejde, po 3. konec."""
     u = _mk_user(100000); _run(crews.create, u, "u", "GoalTwice", "GO2")
-    _set_week_xp(u, crews.goal_for(1) + 100)
-    _run(crews.claim_goal, u)
+    base = crews.goal_for(1)
+    _set_week_xp(u, base + 100)
+    assert _run(crews.claim_goal, u)["claimed_now"] == crews.GOAL_TIERS[0][1]   # tier 1
+    try:
+        _run(crews.claim_goal, u)                                # tier 2 (2× základ) ještě nesplněný
+        assert False, "tier 2 bez XP nejde"
+    except ValueError as e:
+        assert "není splněn" in str(e).lower()
+    _set_week_xp(u, base * 4 + 100)                              # splněné všechny tiery
+    assert _run(crews.claim_goal, u)["claimed_now"] == crews.GOAL_TIERS[1][1]   # tier 2
+    out = _run(crews.claim_goal, u)                              # tier 3
+    assert out["claimed_now"] == crews.GOAL_TIERS[2][1]
+    assert out["goal_all_claimed"] and not out["can_claim_goal"]
     try:
         _run(crews.claim_goal, u)
-        assert False, "2× výběr za týden nejde"
+        assert False, "4. claim za týden nejde"
     except ValueError as e:
         assert "vyzvednut" in str(e).lower()
 

@@ -909,6 +909,7 @@ _MIGRATIONS = [
     ("crews", "streak", "INTEGER NOT NULL DEFAULT 0"),
     ("crews", "streak_week", "TEXT"),
     ("crews", "best_streak", "INTEGER NOT NULL DEFAULT 0"),
+    ("users", "crew_goal_tier", "INTEGER NOT NULL DEFAULT 0"),   # kolik tierů týdenního crew cíle už vyzvedl (platí s crew_goal_week)
     # Parta měsíce: měsíční sub contribution party (YYYY-MM lazy reset) → měsíční supporter race + koruna.
     ("crews", "month_sub_xp", "INTEGER NOT NULL DEFAULT 0"),
     ("crews", "month", "TEXT"),
@@ -972,6 +973,11 @@ def init_db() -> None:
         conn.execute(
             "UPDATE garden SET pest_at = planted_at, pest = 0 "
             "WHERE pest = 1 AND pest_at IS NULL"
+        )
+        # Crew goal tiery (2.7.): dřívější claim (crew_goal_week nastaven, tier 0) = vyzvednutý
+        # tier 1. Idempotentní – nový claim vždy zapisuje tier ≥ 1, takže se to týká jen starých řádků.
+        conn.execute(
+            "UPDATE users SET crew_goal_tier = 1 WHERE crew_goal_week IS NOT NULL AND crew_goal_tier = 0"
         )
         # výchozí anticheat pravidla (idempotentně)
         for r in ANTICHEAT_RULES:

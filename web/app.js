@@ -6811,13 +6811,15 @@ function crewChatHTML(d) {
 function _weekWord(n) { return n === 1 ? "týden" : (n >= 2 && n <= 4 ? "týdny" : "týdnů"); }
 function crewGoalHTML(d) {
   const pct = Math.min(100, Math.round((d.week_xp || 0) / Math.max(1, d.goal) * 100));
+  const tierLbl = d.goal_tiers_total > 1 ? ` · tier ${d.goal_tier}/${d.goal_tiers_total}` : "";
   let cta;
   if (!d.is_member) cta = `<div class="crew-goal-hint">Přidej se a farmařte spolu → odměna pro všechny členy.</div>`;
-  else if (d.can_claim_goal) cta = `<button class="btn btn-accent btn-sm crew-goal-claim" data-action="crew-claim">🎁 Vyzvednout odměnu +${fmtPts(d.goal_reward)}</button>`;
-  else if (d.you_claimed) cta = `<div class="crew-goal-hint">✔ Odměnu +${fmtPts(d.goal_reward)} máš tento týden vyzvednutou.</div>`;
-  else cta = `<div class="crew-goal-hint">Splňte cíl společně → každý člen dostane <b>+${fmtPts(d.goal_reward)}</b> 🌾</div>`;
+  else if (d.can_claim_goal) cta = `<button class="btn btn-accent btn-sm crew-goal-claim" data-action="crew-claim">🎁 Vyzvednout tier ${d.goal_tier} +${fmtPts(d.goal_reward)}</button>`;
+  else if (d.goal_all_claimed) cta = `<div class="crew-goal-hint">✔ Všechny tiery tento týden vyzvednuté — v pondělí se jede nanovo. 🌾</div>`;
+  else cta = `<div class="crew-goal-hint">${d.you_claimed ? `Cíl pokračuje! Splňte tier ${d.goal_tier}` : "Splňte cíl společně"} → každý člen dostane <b>+${fmtPts(d.goal_reward)}</b> 🌾</div>`;
   const subPct = Math.min(100, Math.round((d.week_subs || 0) / Math.max(1, d.sub_goal) * 100));
-  return `<div class="crew-goal-top"><span>🎯 Týdenní cíl party ${d.goal_reached ? '<span class="crew-goal-done">✅ SPLNĚNO</span>' : ""}</span><b>${Number(d.week_xp).toLocaleString("cs-CZ")} / ${Number(d.goal).toLocaleString("cs-CZ")} XP</b></div>
+  const doneBadge = d.goal_all_claimed ? '<span class="crew-goal-done">✅ VŠE VYZVEDNUTO</span>' : (d.goal_reached ? '<span class="crew-goal-done">✅ SPLNĚNO</span>' : "");
+  return `<div class="crew-goal-top"><span>🎯 Týdenní cíl party${tierLbl} ${doneBadge}</span><b>${Number(d.week_xp).toLocaleString("cs-CZ")} / ${Number(d.goal).toLocaleString("cs-CZ")} XP</b></div>
     <div class="crew-goal-bar"><div class="crew-goal-fill${d.goal_reached ? " done" : ""}" style="width:${pct}%"></div></div>
     ${cta}
     ${d.streak > 0 ? `<div class="crew-streak-line">🔥 <b>${d.streak}</b> ${_weekWord(d.streak)} v řadě se splněným cílem${d.best_streak > d.streak ? ` · rekord ${d.best_streak}` : ""} — nepřeruš to!</div>` : ""}
