@@ -240,6 +240,38 @@ def handle_event(conn, event_type: str, payload: dict) -> dict:
         content = payload.get("content") or ""
         res = economy.award_chat_by_kick(conn, uname)   # cooldown + násobič řeší ekonomika
         reply = kickcommands.handle(conn, uname, content)   # !sedláci/!leaderboard/… → text (pošle webhook)
+        if not reply:                                   # příkaz má přednost, ping ho nepřebíjí
+            reply = _ghost_claim_ping(conn, uname)
         return {"ok": True, "type": event_type, "user": uname, "chat": res, "reply": reply}
 
     return {"ok": False, "ignored": event_type}
+
+
+# --- Ghost kampaň: „máš u nás sedláky, vyzvedni si je" -------------------------------
+GHOST_PING_MIN_PTS = 1000    # ping jen ghostům, u kterých je co vyzvednout (endowment efekt)
+GHOST_PING_GAP_S = 600       # globální rozestup mezi pingy – bot nesmí spamovat chat
+_ghost_ping_last = 0.0
+
+
+def _ghost_claim_ping(conn, kick_username):
+    """Ghost účet (nikdy nepřihlášený, kick_id NULL) s nasbíranými sedláky právě napsal do
+    chatu → bot ho 1× ZA ŽIVOT pozve, ať se přihlásí a body si vyzvedne. Vrací text pro bota
+    nebo None. ponytail: globální 10min rozestup + per-user flag; žádná fronta, žádný daemon."""
+    global _ghost_ping_last
+    key = (kick_username or "").strip().lstrip("@").lower()
+    if not key:
+        return None
+    now = time.time()
+    if now - _ghost_ping_last < GHOST_PING_GAP_S:
+        return None
+    row = conn.execute(
+        "SELECT id, username, points FROM users WHERE kick_username = ? AND kick_id IS NULL "
+        "AND banned = 0 AND ghost_pinged_at IS NULL AND points >= ?",
+        (key, GHOST_PING_MIN_PTS)).fetchone()
+    if not row:
+        return None
+    conn.execute("UPDATE users SET ghost_pinged_at = ? WHERE id = ?", (now_iso(), row["id"]))
+    _ghost_ping_last = now
+    pts = f"{row['points']:,}".replace(",", " ")
+    return (f"@{row['username']} máš na zurys.live už {pts} sedláků z giftů a aktivity 🌾 "
+            f"Přihlas se přes Kick a jsou tvoje!")

@@ -3211,8 +3211,15 @@ function renderClaimsPanel() {
   if (c.battlepass) chips.push(chip("bonusy", `🎟️ Battle Pass ×${c.battlepass}`));
   if (c.levelpass) chips.push(chip("bonusy", `⭐ Level Pass ×${c.levelpass}`));
   if (c.partner) chips.push(chip("bonusy", `🤝 Partneři ×${c.partner}`));
-  box.innerHTML = chips.length
-    ? `<div class="panel claims-panel"><b class="cp-title">🎁 Máš k vyzvednutí:</b>${chips.join("")}</div>`
+  // Denní ritual: až 3 rozdělané denní questy (nejblíž dokončení první) → důvod se vracet
+  const qd = (c.quests_detail || []).filter((q) => !q.completed && !q.claimed)
+    .sort((a, b) => b.progress / b.target - a.progress / a.target).slice(0, 3);
+  const qRows = qd.map((q) => `<a class="cp-quest" href="#/ukoly" title="${esc(q.desc)} · +${q.reward} 🌾">
+      <span class="cp-q-name">📋 ${esc(q.name)}</span>
+      <span class="cp-q-bar"><i style="width:${Math.min(100, Math.round(q.progress * 100 / q.target))}%"></i></span>
+      <span class="cp-q-num">${q.progress}/${q.target}</span></a>`).join("");
+  box.innerHTML = (chips.length || qRows)
+    ? `<div class="panel claims-panel">${chips.length ? `<b class="cp-title">🎁 Máš k vyzvednutí:</b>${chips.join("")}` : `<b class="cp-title">📋 Dnešní úkoly:</b>`}${qRows ? `<span class="cp-quests">${qRows}</span>` : ""}</div>`
     : "";
 }
 async function loadProfTab(tab) {

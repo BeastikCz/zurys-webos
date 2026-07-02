@@ -106,6 +106,42 @@ def push_to_user(conn, user_id, title, body="", url="/", icon="/sedlak-cut.png")
         conn.commit()
 
 
+def broadcast_async(title: str, body: str = "", url: str = "/") -> None:
+    """Web push VŠEM subscriptions (broadcast, např. „predikce právě běží"). Běží v BACKGROUND
+    threadu s vlastním conn – síťové push nesmí blokovat handler (1 worker + 1 SQLite writer).
+    Mrtvé subscriptions smaže. Best-effort."""
+    if not enabled():
+        return
+    import threading
+
+    def _run():
+        import traceback
+        from .db import get_conn
+        try:
+            conn = get_conn()
+            try:
+                subs = conn.execute("SELECT id, endpoint, p256dh, auth FROM push_subs").fetchall()
+                dead = []
+                for s in subs:
+                    info = {"endpoint": s["endpoint"], "keys": {"p256dh": s["p256dh"], "auth": s["auth"]}}
+                    try:
+                        send(info, title, body, url)
+                    except DeadSubscription:
+                        dead.append(s["id"])
+                    except Exception:
+                        pass
+                for d in dead:
+                    conn.execute("DELETE FROM push_subs WHERE id = ?", (d,))
+                if dead:
+                    conn.commit()
+            finally:
+                conn.close()
+        except Exception:
+            traceback.print_exc()
+
+    threading.Thread(target=_run, name="webpush-broadcast", daemon=True).start()
+
+
 def notify_raffle_draw(product_name, winner_id, winner_name, entrant_ids) -> None:
     """Po vylosování tomboly: in-app notif + web push VŠEM účastníkům. Běží v BACKGROUND threadu
     (síťové push by jinak blokovaly handler – 1 worker + 1 SQLite writer)."""

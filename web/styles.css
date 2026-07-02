@@ -1878,6 +1878,12 @@ body::before { display: none !important; }
 /* ---------- Panel „Máš k vyzvednutí" (homepage) + streak chip + porovnání profilů ---------- */
 .claims-panel { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 10px 0; padding: 12px 14px; }
 .claims-panel .cp-title { white-space: nowrap; }
+.cp-quests { display: inline-flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.cp-quest { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: inherit; text-decoration: none; opacity: .9; }
+.cp-quest:hover { opacity: 1; }
+.cp-q-bar { width: 58px; height: 6px; border-radius: 4px; background: rgba(255,255,255,.12); overflow: hidden; }
+.cp-q-bar i { display: block; height: 100%; border-radius: 4px; background: var(--accent, #ff9d2e); }
+.cp-q-num { font-variant-numeric: tabular-nums; opacity: .75; }
 .streak-pill { gap: 4px; }
 @media (max-width: 560px) { .streak-pill { display: none; } }   /* na malém mobilu je topbar plný */
 .vs-input { background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.14); border-radius: 8px; color: inherit; padding: 7px 10px; max-width: 200px; }

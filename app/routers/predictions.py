@@ -20,7 +20,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Request
 
 from ..config import STAFF_ROLES
-from ..db import now_iso
+from ..db import now_iso, get_setting, set_setting
 from ..deps import (db_dep, require_user, get_current_user, add_points, try_debit,
                     record_audit, can_access, require_can_gamble, check_wager_limit)
 from ..models import PredictionCreateIn, PredictionBetIn, PredictionResolveIn
@@ -41,6 +41,26 @@ def _get_pred(conn, pid):
     if not p:
         raise HTTPException(status_code=404, detail="Predikce nenalezena.")
     return p
+
+
+# Web push jen na PRVNÍ predikci za okno – běžně vzniká ~30 predikcí/den (po kolech CS2),
+# push na každou by odběratele vyhnal. 1 push = „na streamu se právě predikuje, přijď".
+PREDPUSH_COOLDOWN_S = 6 * 3600
+
+
+def _maybe_push_new_pred(conn, question: str) -> bool:
+    """Broadcast web push na novou predikci, max 1× za PREDPUSH_COOLDOWN_S. Vrátí, zda se poslal."""
+    from .. import webpush
+    last = get_setting(conn, "predpush_last", "") or ""
+    try:
+        if last and (datetime.now(timezone.utc) - datetime.fromisoformat(last)).total_seconds() < PREDPUSH_COOLDOWN_S:
+            return False
+    except ValueError:
+        pass                                   # rozbitý timestamp → chovej se jako bez cooldownu
+    set_setting(conn, "predpush_last", now_iso())
+    conn.commit()
+    webpush.broadcast_async("🔮 Predikce právě běží!", f"{question} — pojď si vsadit na zurys.live!", "#/predikce")
+    return True
 
 
 def _pred_public(conn, p, me_id: Optional[int]) -> dict:
@@ -228,6 +248,7 @@ def create_prediction(data: PredictionCreateIn, request: Request,
         _pred_announce(f"🎯 Nová predikce: {q} — sázej na zurys.live! Sázky se zavřou za {mins} min. ⏳🌾")
     else:
         _pred_announce(f"🎯 Nová predikce: {q} — sázej na zurys.live! 🌾")
+    _maybe_push_new_pred(conn, q)
     return _pred_public(conn, _get_pred(conn, pid), staff["id"])
 
 

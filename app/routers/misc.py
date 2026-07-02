@@ -1281,6 +1281,13 @@ def my_claims(user: sqlite3.Row = Depends(require_user),
         "wheel": wheel_can,
         "partner": sum(1 for l in status_for_user(conn, user["id"])["links"] if l["claimable"]),
         "quests": sum(1 for q in quests if q.get("completed") and not q.get("claimed")),
+        # denní questy s postupem pro homepage panel (data už spočtená výš – žádný extra dotaz)
+        "quests_detail": [
+            {"key": q["key"], "name": q["name"], "desc": q["desc"], "reward": q["reward"],
+             "progress": q["progress"], "target": q["target"],
+             "completed": q["completed"], "claimed": q["claimed"]}
+            for q in quests if q["period"] == "daily"
+        ],
         "garden": garden_ready,
         "battlepass": bp["claimable"] + bp["claimable_premium"],
         "levelpass": lp["claimable"],
