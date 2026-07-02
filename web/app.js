@@ -6777,7 +6777,7 @@ function renderCrewLobby(lb) {
       </div>
     </div>
     <div class="panel" style="margin-bottom:14px">
-      <div class="section-title" style="margin-top:0">➕ Založ partu <span class="faint" style="font-size:12px;font-weight:400">· 25 000 sedláků</span></div>
+      <div class="section-title" style="margin-top:0">➕ Založ partu <span class="faint" style="font-size:12px;font-weight:400">· 5 000 sedláků</span></div>
       <div class="toolbar" style="gap:8px;flex-wrap:wrap">
         <input class="input" id="crewName" placeholder="Název party" maxlength="32" style="flex:1;min-width:150px">
         <input class="input" id="crewTag" placeholder="TAG (nepovinný)" maxlength="4" style="max-width:130px">
