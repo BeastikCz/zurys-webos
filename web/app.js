@@ -1313,12 +1313,30 @@ async function pageLeaderboard() {
       : (myName ? `<div class="lb-mybar" style="justify-content:center">Zatím nejsi v TOP ${rows.length} – sbírej sedláky! 🌾</div>` : "");
     const list = rest.length ? lbSectioned(rest, isMe) : "";
     const legend = rows.length ? `<div class="lb-legend">${TIERS.slice().reverse().map((t, i, a) => `<span style="color:${TIER_COLOR[t[3]] || "#8b93a3"}">${t[1]} ${t[2][0] + t[2].slice(1).toLowerCase()}</span>${i < a.length - 1 ? '<span class="lb-leg-sep">›</span>' : ""}`).join("")}</div>` : "";
-    $("#lb").innerHTML = (rows.length ? `<div class="lb-meta">🌾 TOP ${rows.length} diváků</div>` : "") + podium + myBar + list + legend + (rows.length ? "" : `<div class="empty">Zatím žádní uživatelé.</div>`) + `<div id="seasonEarners"></div><div id="weeklyEarners"></div><div id="chatLeaders"></div>`;
+    $("#lb").innerHTML = (rows.length ? `<div class="lb-meta">🌾 TOP ${rows.length} diváků</div>` : "") + podium + myBar + list + legend + (rows.length ? "" : `<div class="empty">Zatím žádní uživatelé.</div>`) + `<div id="crewTop"></div><div id="seasonEarners"></div><div id="weeklyEarners"></div><div id="chatLeaders"></div>`;
     animateCounts($("#lb"));
+    loadCrewTop();
     loadSeasonEarners();
     loadWeeklyEarners();
     loadChatLeaders();
   } catch (e) { $("#lb").innerHTML = `<div class="empty">${esc(e.message)}</div>`; }
+}
+
+async function loadCrewTop() {
+  const box = document.getElementById("crewTop"); if (!box) return;
+  try {
+    const lb = await api("/crews/leaderboard");   // bez early-access grantu vrátí 403 → sekce se neukáže
+    const rows = (lb && lb.crews || []).slice(0, 5);
+    if (!rows.length) { box.innerHTML = ""; return; }
+    box.innerHTML = `<div class="section-title" style="margin-top:28px">🤝 TOP 5 part <span class="faint" style="font-weight:400;font-size:13px">— týdenní XP celé party (týden ${esc(lb.week || "")}) 🌾</span></div>
+      <div class="lb-list">${rows.map((c) => `
+        <a class="crew-row${c.id === lb.my_crew_id ? " crew-champ" : ""}" href="#/crews/${c.id}">
+          <span class="crew-rank">#${c.rank}</span><span class="crew-emblem">${c.emblem}</span>
+          <span class="crew-name"><b>${esc(c.name)}</b>${c.tag ? ` <span class="crew-tag">[${esc(c.tag)}]</span>` : ""}${c.at_war ? ' <span class="crew-war-badge" title="Právě ve válce">⚔️</span>' : ""}</span>
+          <span class="crew-meta">⭐${c.level} · ${c.members} 👤 · <b>${Number(c.week_xp).toLocaleString("cs-CZ")}</b> XP</span>
+        </a>`).join("")}</div>
+      <div style="margin-top:8px"><a class="btn btn-ghost btn-sm" href="#/crews">Celý žebříček part →</a></div>`;
+  } catch (e) { box.innerHTML = ""; }
 }
 
 async function loadWeeklyEarners() {
