@@ -1328,7 +1328,7 @@ async function loadCrewTop() {
     const lb = await api("/crews/leaderboard");   // bez early-access grantu vrátí 403 → sekce se neukáže
     const rows = (lb && lb.crews || []).slice(0, 5);
     if (!rows.length) { box.innerHTML = ""; return; }
-    box.innerHTML = `<div class="section-title" style="margin-top:28px">🤝 TOP 5 part <span class="faint" style="font-weight:400;font-size:13px">— týdenní XP celé party (týden ${esc(lb.week || "")}) 🌾</span></div>
+    box.innerHTML = `<div class="section-title" style="margin-top:28px">🤝 TOP 5 crew <span class="faint" style="font-weight:400;font-size:13px">— týdenní XP celé party (týden ${esc(lb.week || "")}) 🌾</span></div>
       <div class="lb-list">${rows.map((c) => `
         <a class="crew-row${c.id === lb.my_crew_id ? " crew-champ" : ""}" href="#/crews/${c.id}">
           <span class="crew-rank">#${c.rank}</span><span class="crew-emblem">${c.emblem}</span>
