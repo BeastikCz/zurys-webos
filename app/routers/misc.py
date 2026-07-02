@@ -12,7 +12,7 @@ from ..anticheat import (check_or_block, is_new_account, new_account_redeem_pts,
                           NEW_ACCOUNT_MAX_REDEEM_PTS, GIFT_MIN_AGE_HOURS)
 from ..config import ORDER_PENDING, UNLIMITED_STOCK, ROLE_ADMIN
 from ..db import now_iso, get_setting
-from ..deps import (db_dep, require_user, require_early_access, add_points, try_debit, record_audit, client_ip,
+from ..deps import (db_dep, require_user, require_farm_access, add_points, try_debit, record_audit, client_ip,
                     user_rank, tier_for_rank, self_excluded_until, level_info, classify_xp)
 from ..models import (RedeemIn, TradeUrlIn, GiftIn, QuestClaimIn, CosmeticIn, FairSeedIn, SelfExcludeIn,
                       ProfileBioIn, WagerLimitIn, ModApplyIn, BattlePassClaimIn, LoginCalClaimIn,
@@ -1414,7 +1414,7 @@ def garden_decor_buy(data: DecorBuyIn, user: sqlite3.Row = Depends(require_user)
 
 # ---------------- Statek (mini-farma) ----------------
 @router.get("/farm")
-def farm_status(user: sqlite3.Row = Depends(require_early_access),
+def farm_status(user: sqlite3.Row = Depends(require_farm_access),
                 conn: sqlite3.Connection = Depends(db_dep)):
     """Statek: stav slotů (prázdný / zvíře hladové / roste / hotovo) + katalog zvířat."""
     from .. import farm
@@ -1422,7 +1422,7 @@ def farm_status(user: sqlite3.Row = Depends(require_early_access),
 
 
 @router.post("/farm/buy")
-def farm_buy(data: FarmBuyIn, user: sqlite3.Row = Depends(require_early_access),
+def farm_buy(data: FarmBuyIn, user: sqlite3.Row = Depends(require_farm_access),
              conn: sqlite3.Connection = Depends(db_dep)):
     """Koupí zvíře do volného slotu (sink). Nové zvíře je hladové."""
     from .. import farm
@@ -1433,7 +1433,7 @@ def farm_buy(data: FarmBuyIn, user: sqlite3.Row = Depends(require_early_access),
 
 
 @router.post("/farm/feed")
-def farm_feed(data: FarmSlotIn, user: sqlite3.Row = Depends(require_early_access),
+def farm_feed(data: FarmSlotIn, user: sqlite3.Row = Depends(require_farm_access),
               conn: sqlite3.Connection = Depends(db_dep)):
     """Nakrmí hladové zvíře (sink) → spustí produkční cyklus."""
     from .. import farm
@@ -1444,7 +1444,7 @@ def farm_feed(data: FarmSlotIn, user: sqlite3.Row = Depends(require_early_access
 
 
 @router.post("/farm/collect")
-def farm_collect(data: FarmSlotIn, user: sqlite3.Row = Depends(require_early_access),
+def farm_collect(data: FarmSlotIn, user: sqlite3.Row = Depends(require_farm_access),
                  conn: sqlite3.Connection = Depends(db_dep)):
     """Sebere hotový produkt → odměna (XP + sedláci), zvíře zhladoví."""
     from .. import farm
@@ -1455,7 +1455,7 @@ def farm_collect(data: FarmSlotIn, user: sqlite3.Row = Depends(require_early_acc
 
 
 @router.post("/farm/collect-all")
-def farm_collect_all(user: sqlite3.Row = Depends(require_early_access),
+def farm_collect_all(user: sqlite3.Row = Depends(require_farm_access),
                      conn: sqlite3.Connection = Depends(db_dep)):
     """Sebere všechny hotové produkty naráz."""
     from .. import farm
@@ -1463,7 +1463,7 @@ def farm_collect_all(user: sqlite3.Row = Depends(require_early_access),
 
 
 @router.post("/farm/sell")
-def farm_sell(data: FarmSlotIn, user: sqlite3.Row = Depends(require_early_access),
+def farm_sell(data: FarmSlotIn, user: sqlite3.Row = Depends(require_farm_access),
               conn: sqlite3.Connection = Depends(db_dep)):
     """Prodá zvíře ze slotu (část ceny zpět, uvolní slot). Sbírka zůstává."""
     from .. import farm

@@ -329,7 +329,7 @@ def require_staff(user: sqlite3.Row = Depends(require_user)) -> sqlite3.Row:
 
 
 def has_early_access(user) -> bool:
-    """Vidí early-access featury (Crew + Statek)? Admin vždy + ručně grantnutý flag."""
+    """Vidí early-access featury (Crew)? Admin vždy + ručně grantnutý flag."""
     try:
         if user["role"] == ROLE_ADMIN:
             return True
@@ -339,9 +339,16 @@ def has_early_access(user) -> bool:
 
 
 def require_early_access(user: sqlite3.Row = Depends(require_user)) -> sqlite3.Row:
-    """Gate pro early-access featury (Crew + Statek) – soft launch jen pro grantnuté + admina."""
+    """Gate pro early-access featury (Crew) – soft launch jen pro grantnuté + admina."""
     if not has_early_access(user):
         raise HTTPException(status_code=403, detail="Tahle featura je zatím v early access. 🎫")
+    return user
+
+
+def require_farm_access(user: sqlite3.Row = Depends(require_user)) -> sqlite3.Row:
+    """Gate pro Statek – zatím JEN admin (early_access grant otvírá pouze Crew)."""
+    if user["role"] != ROLE_ADMIN:
+        raise HTTPException(status_code=403, detail="Statek je zatím v testování. 🚜🎫")
     return user
 
 

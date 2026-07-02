@@ -152,7 +152,7 @@ const ADMIN_SECTIONS = {
   modnabor: ["broadcaster"], gifts: ["broadcaster"],
 };
 function isStaff(u) { return !!u && ["admin", "broadcaster", "mod", "predictor"].includes(u.role); }
-function hasEarlyAccess(u) { return !!u && (u.early_access || u.role === "admin"); }   // Crew + Statek = early access (admin grantuje)
+function hasEarlyAccess(u) { return !!u && (u.early_access || u.role === "admin"); }   // Crew = early access (admin grantuje); Statek zatím JEN admin
 function canDM(u) { return !!u && ["admin", "broadcaster"].includes(u.role); }   // PM jen broadcaster+admin (mod NE)
 function canSection(u, sec) { return !!u && (u.role === "admin" || (ADMIN_SECTIONS[sec] || []).includes(u.role)); }
 
@@ -252,7 +252,8 @@ function render() {
     "mod-nabor": pageModApply, staty: pageGameStats, "sin-slavy": pageHallOfFame, zahrada: pageGarden,
     statek: pageFarm, "moje-cisla": pageWrappedLink, vs: pageVs,
   };
-  if (["statek", "crews"].includes(r.name) && !hasEarlyAccess(state.user)) {   // lišta viditelná všem, klik bez accessu → teaser
+  if ((r.name === "crews" && !hasEarlyAccess(state.user))
+    || (r.name === "statek" && !(state.user && state.user.role === "admin"))) {   // lišta viditelná všem, klik bez accessu → teaser; Statek zatím jen admin
     pageEarlyAccess(r.name);
     window.scrollTo({ top: 0, behavior: "instant" in window ? "instant" : "auto" });
     return;
