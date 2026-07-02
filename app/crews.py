@@ -15,7 +15,7 @@ from .deps import try_debit, notify, add_points, XP_PER_SUB
 from .security import new_code
 
 FOUND_COST = 25000        # založení party = sink sedláků (brzdí spam-party)
-MEMBER_CAP = 25
+MEMBER_CAP = 6            # max členů party (2.7. sníženo z 25 — malé těsné party > mega-zergy)
 WEEK_XP_CAP = 10000       # max příspěvek 1 člena do crew XP za týden
 CHAT_TAIL = 40
 EMBLEM_COST = 5000        # změna emblému party = sink sedláků (kosmetika, vůdce only)

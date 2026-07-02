@@ -683,7 +683,7 @@ CREATE TABLE IF NOT EXISTS crews (
     tag         TEXT UNIQUE,                      -- [TAG] u nicku, NEPOVINNÝ (NULL = bez tagu), max 4 libovolné znaky
     emblem      TEXT NOT NULL DEFAULT '🌾',
     leader_id   INTEGER NOT NULL,
-    member_cap  INTEGER NOT NULL DEFAULT 25,
+    member_cap  INTEGER NOT NULL DEFAULT 6,
     xp          INTEGER NOT NULL DEFAULT 0,        -- all-time crew XP (pro level v P2)
     code        TEXT NOT NULL UNIQUE,              -- join kód (do pozvánky)
     created_at  TEXT NOT NULL
