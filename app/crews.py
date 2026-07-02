@@ -47,10 +47,11 @@ def sub_goal_for(members):
 
 
 def _level(xp):
-    """Crew level z all-time crew XP (sqrt křivka, STRMÁ – level je prestige, ne pro každého).
-    BEZ stropu (open = trvalá hierarchie, vždy jen jedna #1 parta). Bonus stropuje dřív:
-    Lvl 11 = 4 mil XP (farm +5 % max), Lvl 21 = 16 mil XP (sub +40 % max) ≈ jen absolutní špička."""
-    return 1 + int(((xp or 0) / 40000.0) ** 0.5)
+    """Crew level z all-time crew XP (sqrt křivka). BEZ stropu (open = trvalá hierarchie,
+    vždy jen jedna #1 parta). Základ 8000 (změkčeno 2.7. z 40000 — lvl 10 byl ~rok i pro
+    aktivní partu): lvl 5 = 128k, lvl 10 = 648k (~2,5 měsíce pro aktivní střední partu),
+    lvl 21 = 3,2M (sub +40 % max, prestige pro top party). Bonus stropy viz níže."""
+    return 1 + int(((xp or 0) / 8000.0) ** 0.5)
 
 
 # ── Crew level → bonus sedláků (motivace levelovat partu; streamer profituje ze subů) ──

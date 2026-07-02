@@ -187,7 +187,7 @@ def test_earn_bonus_scales_and_sub_beats_farm(client):
         assert crews.earn_bonus(conn, u, "sub") == 1.0 and crews.earn_bonus(conn, u, "farm") == 1.0   # lvl1 = bez bonusu
     finally:
         conn.close()
-    _set_crew_xp(u, 360000)                                         # → level 4 (strmá křivka /40000)
+    _set_crew_xp(u, 72000)                                          # → level 4 (křivka /8000: 9×8000)
     conn = get_conn()
     try:
         assert abs(crews.earn_bonus(conn, u, "sub") - 1.06) < 1e-9    # lvl4 → +6 % sub
