@@ -409,13 +409,14 @@ def admin_guard(request: Request, user: sqlite3.Row = Depends(require_user)) -> 
 XP_DIV = 900   # earned_total → level: level = 1 + floor(sqrt(earned_total / XP_DIV)). 900 (zvýšeno z 300, 3× pomalejší levelování – aby se nelevelovalo moc rychle; lvl 100 ≈ 8,8 mil XP)
 
 
-def level_info(earned_total) -> dict:
-    """Level + progress v levelu z celkově nafarmeného (earned_total). Level nikdy neklesá."""
+def level_info(earned_total, div=XP_DIV) -> dict:
+    """Level + progress v levelu z celkově nafarmeného (earned_total). Level nikdy neklesá.
+    div = základ křivky (default hráč XP_DIV; crew předá CREW_LEVEL_BASE)."""
     import math
     e = max(0, int(earned_total or 0))
-    level = 1 + int(math.floor((e / XP_DIV) ** 0.5))
-    cur_at = XP_DIV * (level - 1) ** 2
-    next_at = XP_DIV * level ** 2
+    level = 1 + int(math.floor((e / div) ** 0.5))
+    cur_at = div * (level - 1) ** 2
+    next_at = div * level ** 2
     span = next_at - cur_at
     into = e - cur_at
     pct = int(round(into * 100 / span)) if span > 0 else 0
