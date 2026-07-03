@@ -61,6 +61,16 @@ def sub_goal_for(members):
 CREW_LEVEL_BASE = 12000   # základ level křivky (2.7. laděno na MEMBER_CAP=6)
 
 
+CAP_LVL_STEP = 5          # každých 5 crew levelů = +1 místo v partě (lvl 5 → 7, lvl 10 → 8…)
+
+
+def cap_for(crew):
+    """Efektivní kapacita party: základ (sloupec member_cap) + 1 místo za každých
+    CAP_LVL_STEP levelů. Sloupec zůstává BASE — bonus se počítá dynamicky z crews.xp,
+    takže levelování otvírá místa bez update hooků (a level nikdy neklesá → cap taky ne)."""
+    return crew["member_cap"] + _level(crew["xp"]) // CAP_LVL_STEP
+
+
 def _level(xp):
     """Crew level z all-time crew XP (sqrt křivka). BEZ stropu (open = trvalá hierarchie,
     vždy jen jedna #1 parta). Základ 12000 (2.7. laděno na MEMBER_CAP=6: plná aktivní parta
@@ -268,7 +278,7 @@ def _insert_member(conn, crew, uid):
         cur = conn.execute(
             "INSERT INTO crew_members (crew_id, user_id, role, week_xp, week, joined_at) "
             "SELECT ?,?,'member',0,?,? WHERE (SELECT COUNT(*) FROM crew_members WHERE crew_id=?) < ?",
-            (crew["id"], uid, local_week_id(), now_iso(), crew["id"], crew["member_cap"]))
+            (crew["id"], uid, local_week_id(), now_iso(), crew["id"], cap_for(crew)))
     except sqlite3.IntegrityError:
         raise ValueError("Už jsi v partě.")
     if cur.rowcount == 0:
@@ -718,7 +728,7 @@ def admin_list(conn):
                             "week_xp": m["week_xp"] or 0, "joined_at": m["joined_at"]})
         out.append({"id": c["id"], "name": c["name"], "tag": c["tag"] or "", "emblem": c["emblem"],
                     "level": _level(c["xp"]), "xp": c["xp"] or 0, "member_count": len(members),
-                    "member_cap": c["member_cap"], "private": bool(c["private"]), "streak": c["streak"] or 0,
+                    "member_cap": cap_for(c), "private": bool(c["private"]), "streak": c["streak"] or 0,
                     "best_streak": c["best_streak"] or 0, "motd": c["motd"] or "", "code": c["code"],
                     "war_wins": c["war_wins"] or 0, "war_losses": c["war_losses"] or 0, "war_draws": c["war_draws"] or 0,
                     "created_at": c["created_at"], "members": members})
@@ -737,7 +747,7 @@ def _achievements(c, members_count, sub_total):
         (sub_total >= 200 * XP_PER_SUB, "🏆", "200 subů"),
         (best >= 4, "🔥", "4 týdny v řadě"),
         (best >= 12, "💎", "12 týdnů v řadě"),
-        (members_count >= MEMBER_CAP, "👥", "Plná parta"),
+        (members_count >= cap_for(c), "👥", "Plná parta"),
     ]
     return [{"icon": ic, "name": nm} for ok, ic, nm in defs if ok]
 
@@ -809,7 +819,8 @@ def _public(conn, crew_id, viewer_uid):
             (crew_id,)).fetchall()]
     return {
         "id": c["id"], "name": c["name"], "tag": c["tag"], "emblem": c["emblem"],
-        "leader_id": c["leader_id"], "member_cap": c["member_cap"], "members_count": len(members),
+        "leader_id": c["leader_id"], "member_cap": cap_for(c), "members_count": len(members),
+        "next_slot_level": (lvl // CAP_LVL_STEP + 1) * CAP_LVL_STEP,   # na tomhle lvl se otevře další místo
         "xp": c["xp"], "level": lvl,
         "level_into": _lp["into"], "level_span": _lp["span"], "level_pct": _lp["pct"],
         "sub_bonus_pct": round(_bonus_frac(lvl, "sub") * 100),

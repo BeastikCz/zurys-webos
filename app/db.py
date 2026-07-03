@@ -850,6 +850,8 @@ _MIGRATIONS = [
     ("users", "is_og", "INTEGER NOT NULL DEFAULT 0"),
     ("users", "early_access", "INTEGER NOT NULL DEFAULT 0"),   # early access: vidí Crew + Statek (admin grantuje ručně)
     ("users", "ghost_pinged_at", "TEXT"),                      # ghost kampaň: kdy bot v chatu zval k vyzvednutí sedláků (1× za život)
+    ("users", "streak_lost", "INTEGER NOT NULL DEFAULT 0"),    # denní streak ztracený posledním resetem (nabídka obnovy; maže další claim)
+    ("users", "streak_restore_month", "TEXT"),                 # YYYY-MM kdy naposled použil obnovu streaku (1×/měsíc)
     ("users", "sub_expires_at", "TEXT"),
     ("sessions", "ip", "TEXT"),
     ("sessions", "user_agent", "TEXT"),

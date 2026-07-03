@@ -417,6 +417,7 @@ function pageShop() {
     <div class="da-head shop-hero"><img src="/sedlak-cut.png" class="hero-sedlak" alt="Sedlák" />
       <div><h1>Zurys <span class="accent">Shop</span></h1>
       <p>Utrať nasbírané sedláky za prémiové skiny a odměny — instantní odměny, limitky i tomboly. 🌾</p></div></div>
+    <div id="onbCard"></div>
     <div id="happyBanner"></div>
     <div id="soldFeed"></div>
     <div id="shopHero"></div>
@@ -424,6 +425,7 @@ function pageShop() {
     <div class="da-filters" id="filters"></div>
     <div class="da-grid" id="prodGrid">${skeletonCards(8)}</div>
     <div style="text-align:center;margin-top:26px" id="loadMoreWrap"></div>`;
+  renderOnbCard();      // z cache (claimsData); čerstvá data dorenderuje refreshBonusDot
   renderFilters();
   loadActivity();
   loadDropBanner();
@@ -2890,6 +2892,9 @@ async function loadBattlePass() {
       dailyHtml = daily.can_claim
         ? `<button class="btn btn-primary btn-block" data-action="bp-daily" style="margin:0 0 14px">🔥 Vyzvednout denní bonus: +${fmtPts(rew)} (den ${daily.day}/7)</button>`
         : `<div class="bp-daily-done">🔥 Denní bonus dnes vyzvednut (den ${daily.day}/7) · vrať se zítra</div>`;
+      if (daily.streak_lost > 0 && daily.restore_available)   // zmeškal den → nabídka koupit streak zpět (do dalšího claimu, 1×/měsíc)
+        dailyHtml += `<div class="bp-restore">💔 Přišel jsi o streak <b>${daily.streak_lost} dní</b>!
+          <button class="btn btn-sm btn-ghost" data-action="daily-restore" data-cost="${daily.restore_cost}">Obnovit za ${fmtPts(daily.restore_cost)} 🌾</button></div>`;
     }
     const nodes = bp.tiers.map((t) => {
       const cls = t.claimed ? "bp-claimed" : (t.reached ? "bp-ready" : "bp-locked");
@@ -2978,8 +2983,21 @@ async function claimBpDaily() {     // denní bonus folded do Battle Passu (reus
     const r = await api("/daily/claim", { method: "POST" });
     if (state.user) state.user.points = r.balance;
     toast(r.message, "success");
+    if (r.streak_lost > 0 && r.restore_available)
+      toast(`💔 Streak ${r.streak_lost} dní ztracen — dole ho můžeš obnovit za ${fmtPts(r.restore_cost)} 🌾`, "error");
     try { confettiBurst(); } catch (e) {}
     renderHeader(); loadBattlePass();
+  } catch (e) { toast(e.message, "error"); }
+}
+
+async function restoreDailyStreak(cost) {
+  if (!confirm(`Obnovit ztracený streak za ${fmtPts(cost)} sedláků? (1× za měsíc)`)) return;
+  try {
+    const r = await api("/daily/restore", { method: "POST" });
+    if (state.user) state.user.points = r.balance;
+    toast(r.message, "success");
+    try { confettiBurst(); } catch (e) {}
+    renderHeader(); loadBattlePass(); refreshBonusDot();
   } catch (e) { toast(e.message, "error"); }
 }
 
@@ -3195,6 +3213,33 @@ async function refreshBonusDot() {
     questReady = c.quests > 0;                                                        // tečka na Úkoly
   } catch (e) { return; }
   renderHeader();
+  renderOnbCard();
+}
+
+/* ---------- Onboarding checklist pro nováčky (≤14 dní, homepage) ---------- */
+function renderOnbCard() {
+  const box = document.getElementById("onbCard"); if (!box) return;
+  const c = claimsData;
+  if (!state.user || !c || !c.is_new || localStorage.getItem("onb_done")) { box.innerHTML = ""; return; }
+  const questDone = (c.quests_detail || []).some((q) => q.claimed || q.completed);
+  const steps = [
+    { done: !c.daily, icon: "🔥", txt: "Vyzvedni denní bonus", href: "#/bonusy" },
+    { done: !c.wheel, icon: "🎡", txt: "Zatoč kolem štěstí", href: "#/bonusy" },
+    { done: c.onb_planted, icon: "🌱", txt: "Zasaď první semínko", href: "#/zahrada" },
+    { done: questDone, icon: "📋", txt: "Splň denní úkol", href: "#/ukoly" },
+  ];
+  const doneN = steps.filter((s) => s.done).length;
+  if (doneN === steps.length) { localStorage.setItem("onb_done", "1"); box.innerHTML = ""; return; }   // vše hotovo → panel navždy pryč
+  box.innerHTML = `<div class="panel onb-panel">
+    <div class="row-between" style="margin-bottom:8px">
+      <div class="section-title" style="margin:0">👋 Vítej na farmě! <span class="faint" style="font-weight:400;font-size:12.5px">první kroky · ${doneN}/${steps.length}</span></div>
+      <button class="btn btn-sm btn-ghost" data-action="onb-hide" title="Už nezobrazovat">✕</button>
+    </div>
+    <p class="muted" style="font-size:12.5px;margin:0 0 10px">Sleduješ stream a chatuješ? <b>Sedláci ti už tečou.</b> Tyhle kroky ti dají první bonusy navrch:</p>
+    <div class="onb-steps">${steps.map((s) => s.done
+      ? `<span class="onb-step onb-done">✓ ${s.txt}</span>`
+      : `<a class="onb-step" href="${s.href}">${s.icon} ${s.txt} →</a>`).join("")}</div>
+  </div>`;
 }
 async function loadProfTab(tab) {
   document.querySelectorAll('[data-action="prof-tab"]').forEach((b) => b.classList.toggle("active", b.dataset.tab === tab));
@@ -6085,6 +6130,8 @@ function handleAction(action, el) {
     case "lp-claim": claimLevelPass(el.dataset.level); break;
     case "user-sort": setUserSort(el.dataset.sort); break;
     case "bp-daily": claimBpDaily(); break;
+    case "daily-restore": restoreDailyStreak(parseInt(el.dataset.cost, 10) || 0); break;
+    case "onb-hide": localStorage.setItem("onb_done", "1"); renderOnbCard(); break;
     case "grd-pick": grdPick(el.dataset.crop); break;
     case "grd-plant": grdPlant(el.dataset.plot); break;
     case "grd-plant-all": grdPlantAll(); break;
@@ -6866,7 +6913,7 @@ function renderCrewDetail(d) {
     <div class="panel crew-hero" style="margin-bottom:14px">
       <div class="crew-hero-l"><span class="crew-hero-emblem">${d.emblem}</span>
         <div><div class="crew-hero-name">${esc(d.name)} <span class="crew-tag">[${esc(d.tag)}]</span>${d.streak > 0 ? ` <span class="crew-streak">🔥 ${d.streak}</span>` : ""}</div>
-          <div class="muted" style="font-size:12.5px">⭐ Lvl ${d.level} · ${d.members_count}/${d.member_cap} členů · <b style="color:var(--text)">${Number(d.week_xp).toLocaleString("cs-CZ")}</b> XP tento týden</div>
+          <div class="muted" style="font-size:12.5px">⭐ Lvl ${d.level} · ${d.members_count}/${d.member_cap} členů · <b style="color:var(--text)">${Number(d.week_xp).toLocaleString("cs-CZ")}</b> XP tento týden${d.next_slot_level ? ` · <span title="Každých 5 levelů party = +1 místo">🔓 +1 místo na Lvl ${d.next_slot_level}</span>` : ""}</div>
           <div class="prof-level" style="margin-top:5px" title="XP party do dalšího levelu">
             <span class="pl-bar"><i style="width:${d.level_pct || 0}%"></i></span>
             <span class="faint pl-xp">${Number(d.level_into || 0).toLocaleString("cs-CZ")} / ${Number(d.level_span || 0).toLocaleString("cs-CZ")} XP do Lvl ${(d.level || 1) + 1}</span>

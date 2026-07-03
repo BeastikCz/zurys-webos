@@ -11,7 +11,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from ..anticheat import (check_or_block, is_new_account, new_account_redeem_pts,
                           NEW_ACCOUNT_MAX_REDEEM_PTS, GIFT_MIN_AGE_HOURS)
 from ..config import ORDER_PENDING, UNLIMITED_STOCK, ROLE_ADMIN
-from ..db import now_iso, get_setting
+from ..db import now_iso, get_setting, local_date
 from ..deps import (db_dep, require_user, require_farm_access, add_points, try_debit, record_audit, client_ip,
                     user_rank, tier_for_rank, self_excluded_until, level_info, classify_xp)
 from ..models import (RedeemIn, TradeUrlIn, GiftIn, QuestClaimIn, CosmeticIn, FairSeedIn, SelfExcludeIn,
@@ -1169,6 +1169,26 @@ DAILY_LADDER = [10, 20, 30, 40, 50, 75, 200]  # PTS za den 1..7
 DAILY_COOLDOWN_H = 20    # jak často lze vyzvednout
 DAILY_RESET_H = 48       # po výpadku se cyklus resetuje
 
+# Obnova streaku: zmeškal den → za sedláky si streak koupí zpět (retence + SINK do horké ekonomiky).
+# 1×/měsíc, jen streak ≥ MIN (obnovovat 2 dny nedává smysl), cena roste se streakem (víc dní = víc stojí).
+STREAK_RESTORE_MIN_DAYS = 3
+STREAK_RESTORE_PER_DAY = 20
+STREAK_RESTORE_COST_MIN = 100
+STREAK_RESTORE_COST_MAX = 2000   # ponytail: strop, ať 100denní streak nestojí majlant
+
+
+def _restore_cost(lost):
+    return min(STREAK_RESTORE_COST_MAX, max(STREAK_RESTORE_COST_MIN, lost * STREAK_RESTORE_PER_DAY))
+
+
+def _restore_offer(user):
+    """(streak_lost, cost, available) pro status/claim response. Nabídka žije v users.streak_lost
+    (zapsal ji claim co streak resetnul) a zmizí dalším claimem."""
+    lost = (user["streak_lost"] if "streak_lost" in user.keys() else 0) or 0
+    used = (user["streak_restore_month"] if "streak_restore_month" in user.keys() else "") or ""
+    available = lost > 0 and used != local_date()[:7]
+    return lost, _restore_cost(lost), available
+
 
 def _daily_state(user: sqlite3.Row, now: datetime):
     """(streak, can_claim, next_in_s) s ohledem na reset cyklu."""
@@ -1188,6 +1208,7 @@ def daily_status(user: sqlite3.Row = Depends(require_user),
                  conn: sqlite3.Connection = Depends(db_dep)):
     now = datetime.now(timezone.utc)
     streak, can, next_in = _daily_state(user, now)
+    lost, cost, avail = _restore_offer(user)
     done = streak % 7  # vybráno v aktuálním týdnu
     rank = user_rank(conn, user["points"], user["username"])
     return {
@@ -1200,6 +1221,7 @@ def daily_status(user: sqlite3.Row = Depends(require_user),
         "reward_now": DAILY_LADDER[done],
         "next_in_seconds": next_in,
         "streak_total": user["daily_streak"] or 0,
+        "streak_lost": lost, "restore_cost": cost, "restore_available": avail,
     }
 
 
@@ -1218,14 +1240,18 @@ def daily_claim(user: sqlite3.Row = Depends(require_user),
     # Při souběhu (16 requestů) přepne řádek jen první z nich – zbytek má WHERE last_daily=prev nesplněno
     # (rowcount==0) → odmítnut, takže odměnu i streak připíše právě jeden request, ne všechny.
     prev = user["last_daily"]
+    # reset právě proběhl (streak z _daily_state je 0, ale v DB ještě žije starý) → ulož ho
+    # pro nabídku obnovy; normální pokračování naopak starou nabídku maže (okno = do dalšího claimu)
+    lost = (user["daily_streak"] or 0) if (prev is not None and streak == 0) else 0
+    lost = lost if lost >= STREAK_RESTORE_MIN_DAYS else 0
     if prev is None:
         claimed = conn.execute(
-            "UPDATE users SET last_daily = ?, daily_streak = ? WHERE id = ? AND last_daily IS NULL",
-            (now.isoformat(), streak + 1, user["id"]))
+            "UPDATE users SET last_daily = ?, daily_streak = ?, streak_lost = ? WHERE id = ? AND last_daily IS NULL",
+            (now.isoformat(), streak + 1, lost, user["id"]))
     else:
         claimed = conn.execute(
-            "UPDATE users SET last_daily = ?, daily_streak = ? WHERE id = ? AND last_daily = ?",
-            (now.isoformat(), streak + 1, user["id"], prev))
+            "UPDATE users SET last_daily = ?, daily_streak = ?, streak_lost = ? WHERE id = ? AND last_daily = ?",
+            (now.isoformat(), streak + 1, lost, user["id"], prev))
     if claimed.rowcount == 0:
         conn.commit()
         raise HTTPException(status_code=400, detail="Denní bonus už sis dnes vyzvedl. ⏳")
@@ -1234,10 +1260,40 @@ def daily_claim(user: sqlite3.Row = Depends(require_user),
     _mark_cal(conn, user["id"])     # login kalendář: označ dnešní den jako aktivní
     conn.commit()
     fresh = conn.execute("SELECT points FROM users WHERE id = ?", (user["id"],)).fetchone()
+    used = (user["streak_restore_month"] if "streak_restore_month" in user.keys() else "") or ""
     return {
         "ok": True, "reward": reward, "mult": mult, "day": idx + 1, "streak": streak + 1,
         "balance": fresh["points"], "message": f"🔥 Den {idx + 1}/7 — získáváš +{reward} sedláků (×{mult} liga)!",
+        "streak_lost": lost, "restore_cost": _restore_cost(lost),
+        "restore_available": lost > 0 and used != local_date()[:7],
     }
+
+
+@router.post("/daily/restore")
+def daily_restore(user: sqlite3.Row = Depends(require_user),
+                  conn: sqlite3.Connection = Depends(db_dep)):
+    """Obnoví streak ztracený posledním resetem (uložený v users.streak_lost). Zaplatí sedláky
+    (sink), 1×/měsíc. Okno nabídky trvá do dalšího claimu (ten streak_lost přepíše)."""
+    lost, cost, avail = _restore_offer(user)
+    if lost <= 0:
+        raise HTTPException(status_code=400, detail="Není co obnovovat — streak ti běží. 🔥")
+    if not avail:
+        raise HTTPException(status_code=400, detail="Obnovu streaku můžeš použít jen 1× za měsíc. ⏳")
+    if not try_debit(conn, user["id"], cost, "Obnova streaku 🔥"):
+        raise HTTPException(status_code=400, detail=f"Na obnovu potřebuješ {cost} sedláků. 🌾")
+    month = local_date()[:7]
+    # atomický gate na streak_lost → dvojklik/race obnoví jen jednou, druhému vrátíme debit
+    cur = conn.execute(
+        "UPDATE users SET daily_streak = daily_streak + ?, streak_lost = 0, streak_restore_month = ? "
+        "WHERE id = ? AND streak_lost = ?", (lost, month, user["id"], lost))
+    if cur.rowcount == 0:
+        add_points(conn, user["id"], cost, "Vrácení – obnova streaku 🔥", xp=False)
+        conn.commit()
+        raise HTTPException(status_code=400, detail="Obnova už proběhla. 🔥")
+    conn.commit()
+    fresh = conn.execute("SELECT points, daily_streak FROM users WHERE id = ?", (user["id"],)).fetchone()
+    return {"ok": True, "streak": fresh["daily_streak"], "cost": cost, "balance": fresh["points"],
+            "message": f"🔥 Streak obnoven! Pokračuješ na {fresh['daily_streak']} dnech (−{cost} sedláků)."}
 
 
 @router.get("/login-calendar")
@@ -1276,7 +1332,15 @@ def my_claims(user: sqlite3.Row = Depends(require_user),
     quests = get_quests(conn, user["id"]) if QUESTS_ENABLED else []
     bp = battlepass.status(conn, user)
     lp = levelpass.status(conn, user)
+    try:                              # nováček (≤ 14 dní od registrace) → onboarding checklist na homepage
+        is_new = (now - datetime.fromisoformat(user["created_at"])).days <= 14
+    except (ValueError, TypeError):
+        is_new = False
+    onb_planted = bool(is_new and conn.execute(
+        "SELECT 1 FROM points_log WHERE user_id = ? AND reason LIKE 'Zasazení:%' LIMIT 1",
+        (user["id"],)).fetchone())    # „už někdy zasadil" — jen pro nováčky (levný EXISTS po user_id indexu)
     return {
+        "is_new": is_new, "onb_planted": onb_planted,
         "daily": daily_can,
         "wheel": wheel_can,
         "partner": sum(1 for l in status_for_user(conn, user["id"])["links"] if l["claimable"]),

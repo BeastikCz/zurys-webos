@@ -102,6 +102,30 @@ def test_join_and_duplicate(client):
         pass
 
 
+def test_cap_grows_every_5_levels(client):
+    """Lvl 5 → 7 míst, lvl 10 → 8 míst (cap_for = member_cap + level//5)."""
+    h = _mk_user(100000); st = _run(crews.create, h, "host", "SlotParta", "SLT")
+    for i in range(crews.MEMBER_CAP - 1):                  # doplň na základní cap 6
+        _run(crews.join, _mk_user(1000), "m%d" % i, st["code"])
+    extra = _mk_user(1000)
+    try:
+        _run(crews.join, extra, "extra", st["code"])
+        assert False, "na lvl 1 je 6/6 plno"
+    except ValueError as e:
+        assert "plná" in str(e)
+    conn = get_conn()                                      # vylevluj partu na lvl 5 (sqrt křivka)
+    conn.execute("UPDATE crews SET xp=? WHERE id=?", (16 * crews.CREW_LEVEL_BASE, st["id"]))
+    conn.commit(); conn.close()
+    st2 = _run(crews.join, extra, "extra", st["code"])     # lvl 5 → 7. místo otevřené
+    assert st2["level"] == 5 and st2["member_cap"] == crews.MEMBER_CAP + 1
+    assert st2["members_count"] == 7 and st2["next_slot_level"] == 10
+    try:
+        _run(crews.join, _mk_user(1000), "extra2", st["code"])
+        assert False, "7/7 zase plno"
+    except ValueError:
+        pass
+
+
 def test_join_bad_code(client):
     p = _mk_user(100000)
     try:

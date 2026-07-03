@@ -32,6 +32,7 @@ _RULES = [
     ("garden_s",    "🌱", "Zahrádka – semínka",  "sink",     ["zasazení:"]),
     ("garden_d",    "🪴", "Zahrádka – dekorace", "sink",     ["dekorace zahrádky"]),
     ("prestige",    "🔥", "Prestige (spáleno)",  "sink",     ["prestige"]),
+    ("streak_r",    "🔥", "Obnova streaku",      "sink",     ["obnova streaku"]),   # chytá debit i refund (net sedí)
     ("predictions", "🎯", "Predikce",            "transfer", ["predikce"]),
     ("blackjack",   "🃏", "Blackjack",           "transfer", ["blackjack"]),
     ("mines",       "💣", "Mines",               "transfer", ["mines"]),

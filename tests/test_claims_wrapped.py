@@ -49,6 +49,29 @@ def test_me_claims_requires_login(client):
     assert client.get("/api/me/claims").status_code == 401
 
 
+def test_me_claims_onboarding_fields(client):
+    """is_new: čerstvý účet ano, starý ne; onb_planted po zasazení (dle points_log)."""
+    from app.db import get_conn, now_iso
+    from datetime import datetime, timezone, timedelta
+    conn = get_conn()
+    try:
+        uid, tok = _mk_session(conn)
+        d = client.get("/api/me/claims", cookies={"webos_session": tok}).json()
+        assert d["is_new"] is True and d["onb_planted"] is False
+
+        conn.execute("INSERT INTO points_log (user_id, change, reason, created_at) VALUES (?,?,?,?)",
+                     (uid, -20, "Zasazení: mrkev (záhon 1)", now_iso()))
+        conn.commit()
+        assert client.get("/api/me/claims", cookies={"webos_session": tok}).json()["onb_planted"] is True
+
+        old = (datetime.now(timezone.utc) - timedelta(days=30)).isoformat()
+        conn.execute("UPDATE users SET created_at=? WHERE id=?", (old, uid))
+        conn.commit()
+        assert client.get("/api/me/claims", cookies={"webos_session": tok}).json()["is_new"] is False
+    finally:
+        conn.close()
+
+
 def test_wrapped_push_tick_once_per_month(client, monkeypatch):
     """Flag zaručí 1× za měsíc; mimo 1. den se nic neděje."""
     import datetime as dt

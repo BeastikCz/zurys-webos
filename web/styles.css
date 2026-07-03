@@ -1776,6 +1776,7 @@ body::before { display: none !important; }
 
 /* denní bonus folded v Battle Passu */
 .bp-daily-done { font-size: 12.5px; font-weight: 700; color: var(--farm-green); background: rgba(126,217,87,.08); border: 1px solid rgba(126,217,87,.28); border-radius: 12px; padding: 9px 12px; margin: 0 0 14px; text-align: center; }
+.bp-restore { display: flex; align-items: center; justify-content: center; gap: 10px; flex-wrap: wrap; font-size: 12.5px; background: rgba(224,122,122,.08); border: 1px solid rgba(224,122,122,.28); border-radius: 12px; padding: 9px 12px; margin: 0 0 14px; }
 
 /* 4) Farmářský Battle Pass dráha */
 .bp-prog { height: 8px; border-radius: 999px; background: rgba(255,255,255,.08); overflow: hidden; margin-bottom: 14px; }
@@ -1874,6 +1875,13 @@ body::before { display: none !important; }
 .prof-level .pl-bar i { display: block; height: 100%; background: var(--accent-grad, var(--accent)); border-radius: 5px; }
 .prof-level .pl-xp { font-size: 11.5px; white-space: nowrap; }
 
+
+/* ---------- Onboarding checklist pro nováčky (homepage) ---------- */
+.onb-panel { margin: 14px 0; border-color: rgba(255,157,46,.35); }
+.onb-steps { display: flex; gap: 8px; flex-wrap: wrap; }
+.onb-step { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; padding: 7px 11px; border-radius: 10px; background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.14); color: inherit; text-decoration: none; }
+a.onb-step:hover { border-color: var(--accent, #ff9d2e); background: rgba(255,157,46,.10); }
+.onb-step.onb-done { opacity: .55; text-decoration: line-through; border-style: dashed; }
 
 /* ---------- Streak chip + porovnání profilů ---------- */
 .streak-pill { gap: 4px; }
