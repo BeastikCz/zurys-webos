@@ -222,6 +222,16 @@ def test_sub_goal_scales(client):
     assert crews.sub_goal_for(1) == crews.SUB_GOAL_MIN            # malá parta → minimum
 
 
+def test_level_bar_matches_level():
+    # level bar (level_info s CREW_LEVEL_BASE) MUSÍ dát stejný level jako _level (bonusy) → jinak ⭐ ≠ bar
+    from app.deps import level_info
+    for xp in (0, 11999, 12000, 47999, 108000, 191999, 1_000_000):
+        li = level_info(xp, crews.CREW_LEVEL_BASE)
+        assert li["level"] == crews._level(xp)
+        assert 0 <= li["pct"] <= 100
+        assert li["into"] + (crews.CREW_LEVEL_BASE * (li["level"] - 1) ** 2) == xp   # into = xp − floor
+
+
 def test_sub_goal_counts_weekly_subs(client):
     from app.deps import add_points
     u = _mk_user(100000); st = _run(crews.create, u, "u", "SubGoalParta", "SGP")
@@ -535,24 +545,24 @@ def test_claim_goal_rewards(client):
 
 
 def test_claim_goal_tiers_escalate_and_stop(client):
-    """Tiery: 1× základ → +1500, 2× → +750, 4× → +400; stejný tier 2× nejde, po 3. konec."""
+    """Tiery eskalují (GOAL_TIERS ×1/×2/×4/×8); stejný tier 2× nejde, po posledním konec."""
     u = _mk_user(100000); _run(crews.create, u, "u", "GoalTwice", "GO2")
     base = crews.goal_for(1)
     _set_week_xp(u, base + 100)
     assert _run(crews.claim_goal, u)["claimed_now"] == crews.GOAL_TIERS[0][1]   # tier 1
     try:
-        _run(crews.claim_goal, u)                                # tier 2 (2× základ) ještě nesplněný
-        assert False, "tier 2 bez XP nejde"
+        _run(crews.claim_goal, u)                                # vyšší tier ještě nesplněný
+        assert False, "vyšší tier bez XP nejde"
     except ValueError as e:
         assert "není splněn" in str(e).lower()
-    _set_week_xp(u, base * 4 + 100)                              # splněné všechny tiery
-    assert _run(crews.claim_goal, u)["claimed_now"] == crews.GOAL_TIERS[1][1]   # tier 2
-    out = _run(crews.claim_goal, u)                              # tier 3
-    assert out["claimed_now"] == crews.GOAL_TIERS[2][1]
+    _set_week_xp(u, base * crews.GOAL_TIERS[-1][0] + 100)        # splněné všechny tiery
+    for i in range(1, len(crews.GOAL_TIERS)):                    # doclaimuj zbylé tiery po pořádku
+        out = _run(crews.claim_goal, u)
+        assert out["claimed_now"] == crews.GOAL_TIERS[i][1]
     assert out["goal_all_claimed"] and not out["can_claim_goal"]
     try:
         _run(crews.claim_goal, u)
-        assert False, "4. claim za týden nejde"
+        assert False, "claim po posledním tieru za týden nejde"
     except ValueError as e:
         assert "vyzvednut" in str(e).lower()
 
@@ -698,6 +708,44 @@ def test_war_finalize_draw():
     pub2 = _run(crews._public, st2["id"], l2)
     assert pub1["war_draws"] == 1 and pub2["war_draws"] == 1
     assert pub1["war_wins"] == 0 and pub1["war_losses"] == 0
+
+
+def _crew_xp(uid):
+    conn = get_conn()
+    try:
+        return conn.execute("SELECT c.xp FROM crews c JOIN crew_members m ON m.crew_id=c.id "
+                            "WHERE m.user_id=?", (uid,)).fetchone()["xp"]
+    finally:
+        conn.close()
+
+
+def test_claim_goal_level_bonus_scales(client):
+    """Splněný tier přidá XP do crews.xp (level party) = 5 % z prahu tieru → škáluje s tierem (×1/×2/×4/×8)."""
+    u = _mk_user(100000); _run(crews.create, u, "u", "LvlBonus", "LVB")
+    base = crews.goal_for(1)
+    _set_week_xp(u, base * crews.GOAL_TIERS[-1][0] + 100)          # splněné všechny tiery
+    gains = []
+    prev = _crew_xp(u)
+    for mult, _reward in crews.GOAL_TIERS:
+        _run(crews.claim_goal, u)
+        now = _crew_xp(u)
+        assert now - prev == int(base * mult * crews.GOAL_XP_BONUS_FRAC)   # 5 % z prahu daného tieru
+        gains.append(now - prev); prev = now
+    assert gains == sorted(gains) and gains[0] < gains[-1]         # roste s tierem (násobí se)
+
+
+def test_claim_goal_level_bonus_once_per_crew(client):
+    """Level bonus = 1× per parta/tier: druhý člen claimující týž tier ho nepřidá znovu (no abuse)."""
+    h = _mk_user(100000); st = _run(crews.create, h, "h", "OnceBonus", "ONB")
+    p = _mk_user(100000); _run(crews.join, p, "p", st["code"])
+    goal = crews.goal_for(2)
+    _set_week_xp(h, goal); _set_week_xp(p, goal)                   # součet party ≥ tier 1 cíl
+    before = _crew_xp(h)
+    _run(crews.claim_goal, h)                                      # 1. člen → bonus
+    after_first = _crew_xp(h)
+    _run(crews.claim_goal, p)                                      # 2. člen týž tier → BEZ bonusu
+    assert after_first - before == int(goal * crews.GOAL_XP_BONUS_FRAC)   # 1× přičteno
+    assert _crew_xp(h) == after_first                             # 2. claim nepřidal (gate per parta)
 
 
 def test_member_activity_visible_only_to_leader():

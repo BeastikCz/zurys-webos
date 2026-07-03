@@ -11,7 +11,7 @@ import sqlite3
 from datetime import datetime, timedelta
 
 from .db import now_iso, local_week_id, local_date
-from .deps import try_debit, notify, add_points, XP_PER_SUB
+from .deps import try_debit, notify, add_points, XP_PER_SUB, level_info
 from .security import new_code
 
 FOUND_COST = 5000         # založení party = sink sedláků (brzdí spam-party)
@@ -31,8 +31,13 @@ GOAL_BASE = 8000          # základ týdenního crew cíle
 GOAL_PER_MEMBER = 3500    # + za každého člena (větší parta = větší cíl)
 GOAL_REWARD = 1500        # odměna za tier 1 (základní cíl), per člen
 # Eskalace (2.7.): po splnění cíl POKRAČUJE — vyšší meta za menší odměnu, ať má parta co honit
-# celý týden. Faucet zůstává capnutý: max 1500+750+400 = 2650/člen/týden.
-GOAL_TIERS = [(1, GOAL_REWARD), (2, 750), (4, 400)]   # (násobek základního cíle, odměna/člen)
+# celý týden. 4. tier ×8 (3.7.) pro silné 6-party, co ×4 přeteklou 1. den. Faucet capnutý:
+# max 1500+750+400+250 = 2900/člen/týden.
+GOAL_TIERS = [(1, GOAL_REWARD), (2, 750), (4, 400), (8, 250)]   # (násobek základního cíle, odměna/člen)
+# Level bonus za splněný tier → XP do crews.xp (level party). 5 % z PRAHU tieru (goal×mult), ne fixní
+# faucet: bonus nikdy nepředběhne reálný výkon party. Vyšší tiery jdou jen s reálnými suby (farm je
+# capnutý WEEK_XP_CAP), takže velký level boost = jen parta co reálně přivedla $. 1×/tier/parta/týden.
+GOAL_XP_BONUS_FRAC = 0.05
 
 
 def goal_for(members):
@@ -53,12 +58,15 @@ def sub_goal_for(members):
     return max(SUB_GOAL_MIN, members * SUB_GOAL_PER_MEMBER)
 
 
+CREW_LEVEL_BASE = 12000   # základ level křivky (2.7. laděno na MEMBER_CAP=6)
+
+
 def _level(xp):
     """Crew level z all-time crew XP (sqrt křivka). BEZ stropu (open = trvalá hierarchie,
     vždy jen jedna #1 parta). Základ 12000 (2.7. laděno na MEMBER_CAP=6: plná aktivní parta
     dá ~67k/týden → lvl 5 = 192k ≈ 3 týdny, lvl 10 = 972k ≈ 3,5 měsíce, lvl 21 = 4,8M
     (sub +40 % max) ≈ 1,4 roku = prestige). Bonus stropy viz níže."""
-    return 1 + int(((xp or 0) / 12000.0) ** 0.5)
+    return 1 + int(((xp or 0) / float(CREW_LEVEL_BASE)) ** 0.5)
 
 
 # ── Crew level → bonus sedláků (motivace levelovat partu; streamer profituje ze subů) ──
@@ -510,6 +518,16 @@ def claim_goal(conn, uid):
     add_points(conn, uid, reward, label, xp=False)
     _log(conn, crew_id, "goal", uid, _uname(conn, uid),
          detail=f"+{reward} sedláků (týdenní cíl{'' if done == 0 else f' tier {done + 1}'})")
+    # Level bonus do crews.xp: 1× per tier per parta/týden (atomický crew gate → hop ani víc členů claimujících
+    # týž tier ho nezmnoží). Bonus = zlomek prahu tieru → neabusovatelné (vyšší tiery = jen s reálnými suby).
+    xp_bonus = int(goal_for(_count(conn, crew_id)) * mult * GOAL_XP_BONUS_FRAC)
+    if xp_bonus > 0 and conn.execute(
+            "UPDATE crews SET goal_bonus_tier=?, goal_bonus_week=? WHERE id=? "
+            "AND (goal_bonus_week IS NULL OR goal_bonus_week<>? OR goal_bonus_tier<?)",
+            (done + 1, week, crew_id, week, done + 1)).rowcount:
+        conn.execute("UPDATE crews SET xp = xp + ? WHERE id=?", (xp_bonus, crew_id))
+        _log(conn, crew_id, "goal_xp", uid, _uname(conn, uid),
+             detail=f"+{xp_bonus} XP partě do levelu (tier {done + 1})")
     conn.commit()
     out = _public(conn, crew_id, uid)
     out["claimed_now"] = reward
@@ -777,6 +795,7 @@ def _public(conn, crew_id, viewer_uid):
     cur_goal = goal * cur_mult                      # cíl AKTUÁLNÍHO tieru diváka (bar míří na něj)
     goal_reached = total_week >= cur_goal
     lvl = _level(c["xp"])
+    _lp = level_info(c["xp"], CREW_LEVEL_BASE)   # progress pro level bar (kolik XP do dalšího lvl)
     week_subs = week_sub_xp // XP_PER_SUB
     sub_goal_base = sub_goal_for(len(members))
     sub_tier = sum(1 for mlt in SUB_TIER_MULTS if week_subs >= sub_goal_base * mlt)
@@ -792,10 +811,12 @@ def _public(conn, crew_id, viewer_uid):
         "id": c["id"], "name": c["name"], "tag": c["tag"], "emblem": c["emblem"],
         "leader_id": c["leader_id"], "member_cap": c["member_cap"], "members_count": len(members),
         "xp": c["xp"], "level": lvl,
+        "level_into": _lp["into"], "level_span": _lp["span"], "level_pct": _lp["pct"],
         "sub_bonus_pct": round(_bonus_frac(lvl, "sub") * 100),
         "farm_bonus_pct": round(_bonus_frac(lvl, "farm") * 100, 1),
         "week_xp": total_week, "week": week,
         "goal": cur_goal, "goal_base": goal, "goal_reached": goal_reached, "goal_reward": cur_reward,
+        "goal_xp_bonus": int(cur_goal * GOAL_XP_BONUS_FRAC),   # XP do levelu party za claim aktuálního tieru (1×/parta)
         "goal_tier": min(you_tier_done + 1, tiers_n), "goal_tiers_total": tiers_n,
         "goal_all_claimed": all_claimed,
         "you_claimed": you_tier_done > 0,

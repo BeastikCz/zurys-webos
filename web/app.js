@@ -413,7 +413,6 @@ function pageShop() {
   view.innerHTML = `
     <div class="ticker"><div class="ticker-track" id="tickerTrack"></div></div>
     <div id="dropBanner"></div>
-    <div id="claimsPanel"></div>
     <div id="shopAuctions"></div>
     <div class="da-head shop-hero"><img src="/sedlak-cut.png" class="hero-sedlak" alt="Sedlák" />
       <div><h1>Zurys <span class="accent">Shop</span></h1>
@@ -425,7 +424,6 @@ function pageShop() {
     <div class="da-filters" id="filters"></div>
     <div class="da-grid" id="prodGrid">${skeletonCards(8)}</div>
     <div style="text-align:center;margin-top:26px" id="loadMoreWrap"></div>`;
-  renderClaimsPanel();   // z cache hned (čerstvá data dotáhne refreshBonusDot)
   renderFilters();
   loadActivity();
   loadDropBanner();
@@ -3196,31 +3194,7 @@ async function refreshBonusDot() {
     bonusReady = !!(c.daily || c.wheel || c.partner || c.battlepass || c.levelpass);   // tečka na Bonusy
     questReady = c.quests > 0;                                                        // tečka na Úkoly
   } catch (e) { return; }
-  renderHeader(); renderClaimsPanel();
-}
-function renderClaimsPanel() {
-  const box = document.getElementById("claimsPanel"); if (!box) return;
-  const c = claimsData;
-  if (!state.user || !c) { box.innerHTML = ""; return; }
-  const chip = (href, label) => `<a class="btn btn-ghost btn-sm" href="#/${href}">${label}</a>`;
-  const chips = [];
-  if (c.daily) chips.push(chip("bonusy", "📅 Denní bonus"));
-  if (c.wheel) chips.push(chip("bonusy", "🎡 Roztočit kolo"));
-  if (c.garden) chips.push(chip("zahrada", `🌾 Sklizeň ×${c.garden}`));
-  if (c.quests) chips.push(chip("ukoly", `📜 Úkoly ×${c.quests}`));
-  if (c.battlepass) chips.push(chip("bonusy", `🎟️ Battle Pass ×${c.battlepass}`));
-  if (c.levelpass) chips.push(chip("bonusy", `⭐ Level Pass ×${c.levelpass}`));
-  if (c.partner) chips.push(chip("bonusy", `🤝 Partneři ×${c.partner}`));
-  // Denní ritual: až 3 rozdělané denní questy (nejblíž dokončení první) → důvod se vracet
-  const qd = (c.quests_detail || []).filter((q) => !q.completed && !q.claimed)
-    .sort((a, b) => b.progress / b.target - a.progress / a.target).slice(0, 3);
-  const qRows = qd.map((q) => `<a class="cp-quest" href="#/ukoly" title="${esc(q.desc)} · +${q.reward} 🌾">
-      <span class="cp-q-name">📋 ${esc(q.name)}</span>
-      <span class="cp-q-bar"><i style="width:${Math.min(100, Math.round(q.progress * 100 / q.target))}%"></i></span>
-      <span class="cp-q-num">${q.progress}/${q.target}</span></a>`).join("");
-  box.innerHTML = (chips.length || qRows)
-    ? `<div class="panel claims-panel">${chips.length ? `<b class="cp-title">🎁 Máš k vyzvednutí:</b>${chips.join("")}` : `<b class="cp-title">📋 Dnešní úkoly:</b>`}${qRows ? `<span class="cp-quests">${qRows}</span>` : ""}</div>`
-    : "";
+  renderHeader();
 }
 async function loadProfTab(tab) {
   document.querySelectorAll('[data-action="prof-tab"]').forEach((b) => b.classList.toggle("active", b.dataset.tab === tab));
@@ -6843,9 +6817,9 @@ function crewGoalHTML(d) {
   const tierLbl = d.goal_tiers_total > 1 ? ` · tier ${d.goal_tier}/${d.goal_tiers_total}` : "";
   let cta;
   if (!d.is_member) cta = `<div class="crew-goal-hint">Přidej se a farmařte spolu → odměna pro všechny členy.</div>`;
-  else if (d.can_claim_goal) cta = `<button class="btn btn-accent btn-sm crew-goal-claim" data-action="crew-claim">🎁 Vyzvednout tier ${d.goal_tier} +${fmtPts(d.goal_reward)}</button>`;
+  else if (d.can_claim_goal) cta = `<button class="btn btn-accent btn-sm crew-goal-claim" data-action="crew-claim">🎁 Vyzvednout tier ${d.goal_tier} +${fmtPts(d.goal_reward)}${d.goal_xp_bonus > 0 ? ` · parta +${d.goal_xp_bonus.toLocaleString("cs-CZ")} XP` : ""}</button>`;
   else if (d.goal_all_claimed) cta = `<div class="crew-goal-hint">✔ Všechny tiery tento týden vyzvednuté — v pondělí se jede nanovo. 🌾</div>`;
-  else cta = `<div class="crew-goal-hint">${d.you_claimed ? `Cíl pokračuje! Splňte tier ${d.goal_tier}` : "Splňte cíl společně"} → každý člen dostane <b>+${fmtPts(d.goal_reward)}</b> 🌾</div>`;
+  else cta = `<div class="crew-goal-hint">${d.you_claimed ? `Cíl pokračuje! Splňte tier ${d.goal_tier}` : "Splňte cíl společně"} → každý člen dostane <b>+${fmtPts(d.goal_reward)}</b> 🌾${d.goal_xp_bonus > 0 ? ` + parta <b>+${d.goal_xp_bonus.toLocaleString("cs-CZ")} XP</b> do levelu ⬆️` : ""}</div>`;
   const subPct = Math.min(100, Math.round((d.week_subs || 0) / Math.max(1, d.sub_goal) * 100));
   const doneBadge = d.goal_all_claimed ? '<span class="crew-goal-done">✅ VŠE VYZVEDNUTO</span>' : (d.goal_reached ? '<span class="crew-goal-done">✅ SPLNĚNO</span>' : "");
   return `<div class="crew-goal-top"><span>🎯 Týdenní cíl party${tierLbl} ${doneBadge}</span><b>${Number(d.week_xp).toLocaleString("cs-CZ")} / ${Number(d.goal).toLocaleString("cs-CZ")} XP</b></div>
@@ -6893,6 +6867,10 @@ function renderCrewDetail(d) {
       <div class="crew-hero-l"><span class="crew-hero-emblem">${d.emblem}</span>
         <div><div class="crew-hero-name">${esc(d.name)} <span class="crew-tag">[${esc(d.tag)}]</span>${d.streak > 0 ? ` <span class="crew-streak">🔥 ${d.streak}</span>` : ""}</div>
           <div class="muted" style="font-size:12.5px">⭐ Lvl ${d.level} · ${d.members_count}/${d.member_cap} členů · <b style="color:var(--text)">${Number(d.week_xp).toLocaleString("cs-CZ")}</b> XP tento týden</div>
+          <div class="prof-level" style="margin-top:5px" title="XP party do dalšího levelu">
+            <span class="pl-bar"><i style="width:${d.level_pct || 0}%"></i></span>
+            <span class="faint pl-xp">${Number(d.level_into || 0).toLocaleString("cs-CZ")} / ${Number(d.level_span || 0).toLocaleString("cs-CZ")} XP do Lvl ${(d.level || 1) + 1}</span>
+          </div>
           <div class="crew-bonus-line">🎁 +${d.sub_bonus_pct}% sedláků za sub · ⛏️ +${d.farm_bonus_pct}% za farm <span class="faint" style="font-weight:400">— bonus všem členům</span></div></div>
       </div>
       ${d.is_member

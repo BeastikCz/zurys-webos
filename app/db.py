@@ -929,6 +929,10 @@ _MIGRATIONS = [
     ("crews", "war_wins", "INTEGER NOT NULL DEFAULT 0"),
     ("crews", "war_losses", "INTEGER NOT NULL DEFAULT 0"),
     ("crews", "war_draws", "INTEGER NOT NULL DEFAULT 0"),
+    # Level bonus za splněný týdenní tier: gate „1× per tier per parta/týden" (goal_bonus_tier = nejvyšší
+    # tier, co už letos v tomto týdnu přidal XP do crews.xp) → hop ani víc členů ho nezmnoží.
+    ("crews", "goal_bonus_week", "TEXT"),
+    ("crews", "goal_bonus_tier", "INTEGER NOT NULL DEFAULT 0"),
 ]
 
 
