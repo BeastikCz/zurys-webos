@@ -171,7 +171,7 @@ def expire_subs(conn) -> int:
                "Obnov sub na Kicku a vrať se farmit sedláky! 🌾", "/")
     conn.commit()
     for uid in lapsed:                      # best-effort web push (po commitu; push_to_user nikdy nehodí)
-        webpush.push_to_user(conn, uid, "Sub vypršel 💜", "Statek tě čeká – obnov sub a vrať se! 🌾", "/")
+        webpush.push_to_user(conn, uid, "Sub vypršel 💜", "Statek na tebe čeká, obnov sub a vrať se! 🌾", "/")
     return cur.rowcount
 
 
@@ -273,5 +273,5 @@ def _ghost_claim_ping(conn, kick_username):
     conn.execute("UPDATE users SET ghost_pinged_at = ? WHERE id = ?", (now_iso(), row["id"]))
     _ghost_ping_last = now
     pts = f"{row['points']:,}".replace(",", " ")
-    return (f"@{row['username']} máš na zurys.live už {pts} sedláků z giftů a aktivity 🌾 "
+    return (f"@{row['username']} na zurys.live na tebe čeká {pts} sedláků z giftů a aktivity 🌾 "
             f"Přihlas se přes Kick a jsou tvoje!")

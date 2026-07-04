@@ -46,7 +46,7 @@ def _drop(conn) -> str:
         return "Právě neběží žádný drop – sleduj chat, ať ti neuteče! 👀"
     taken = conn.execute("SELECT COUNT(*) AS c FROM drop_claims WHERE drop_id = ?", (d["id"],)).fetchone()["c"]
     left = max(0, d["max_winners"] - taken)
-    return f"🎁 Drop právě běží! {_fmt(d['points'])} sedláků, zbývá {left} míst – zadej kód z chatu na zurys.live! ⚡"
+    return f"🎁 Drop běží! {_fmt(d['points'])} sedláků, zbývá {left} míst. Hoď kód z chatu na zurys.live! ⚡"
 
 
 def _prediction(conn) -> str:

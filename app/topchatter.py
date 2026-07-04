@@ -74,7 +74,7 @@ def maybe_payout(conn) -> int:
             from . import kickbot
             medal = ["🥇", "🥈", "🥉"]
             parts = " · ".join(f"{medal[i]} {w[0]} (+{w[1]})" for i, w in enumerate(winners))
-            kickbot.send_message(conn, f"🗣️ TOP CHATTEŘI VČEREJŠKA: {parts} – děkujeme za skvěle rozjetý chat! 💬🌾",
+            kickbot.send_message(conn, f"🗣️ TOP CHATTEŘI VČEREJŠKA: {parts}. Dík, že jste chat tak rozjeli! 💬🌾",
                                  kind="system")
         except Exception:
             import traceback
@@ -126,7 +126,7 @@ def pay_today(conn) -> dict:
             from . import kickbot
             medal = ["🥇", "🥈", "🥉"]
             parts = " · ".join(f"{medal[i]} {w[0]} (+{w[1]})" for i, w in enumerate(winners))
-            kickbot.send_message(conn, f"🗣️ TOP CHATTEŘI DNE: {parts} – děkujeme za skvěle rozjetý chat! 💬🌾", kind="system")
+            kickbot.send_message(conn, f"🗣️ TOP CHATTEŘI DNE: {parts}. Dík, že jste chat tak rozjeli! 💬🌾", kind="system")
         except Exception:
             import traceback
             traceback.print_exc()

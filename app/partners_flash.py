@@ -92,8 +92,8 @@ def _announce(conn, window_min: int) -> None:
         if not links:
             return
         top = max(int(r["reward"] or 0) for r in links)
-        msg = (f"⚡ FLASH BONUS! Partneři na webu se právě obnovili — skoč na "
-               f"{SITE} → 🎁 Bonusy, klikni a hrabni si až +{top} sedláků! Jen {window_min} min! 🌾")
+        msg = (f"⚡ FLASH BONUS! Partneři na webu se obnovili, skoč na "
+               f"{SITE} → 🎁 Bonusy, klikni a shrábni až +{top} sedláků. Jen {window_min} min! 🌾")
         kickbot.send_message(conn, msg, kind="system")
     except Exception:
         traceback.print_exc()

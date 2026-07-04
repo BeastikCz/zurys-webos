@@ -300,7 +300,7 @@ def _settle(conn, cfg) -> None:
         tier_rw = tier * rs
         if newly:
             who = "gifter" if len(newly) == 1 else "gifterů"
-            _announce_async(f"🟣 SUB CÍL — TIER {tier}! {len(newly)} {who} odměněno (+{tier_rw} za tier, věrní berou i předchozí kumulativně)! "
-                            f"Další tier = {nxt}. 🎁🌾")
+            _announce_async(f"🟣 SUB CÍL, TIER {tier}! Odměněno {len(newly)} {who} (+{tier_rw} za tier, věrní berou i předchozí). "
+                            f"Další meta = {nxt}. 🎁🌾")
         else:
-            _announce_async(f"🟣 SUB CÍL — TIER {tier} odemčen! Kdo teď giftne, bere +{tier_rw}. Další tier = {nxt}. 🎁")
+            _announce_async(f"🟣 SUB CÍL, TIER {tier} odemčen! Kdo teď giftne, bere +{tier_rw}. Další meta = {nxt}. 🎁")

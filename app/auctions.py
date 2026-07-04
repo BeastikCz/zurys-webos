@@ -43,8 +43,8 @@ def _finalize_expired(conn) -> None:
             notify(conn, fa["winner_id"], "🏆", "Vyhrál jsi aukci! 🔨",
                    f"Vyhrál jsi „{fa['title']}\" za {fa['current_bid']} sedláků! Admin ti pošle skin. 🎉", "#/shop")
             if fa["chat_announce"]:
-                _announce_async(f"🏆 AUKCE SKONČILA! „{fa['title']}\" vydražil {_username(conn, fa['winner_id'])} "
-                                f"za {fa['current_bid']} sedláků! 🔨🌾")
+                _announce_async(f"🏆 AUKCE DOKLEPNUTÁ! „{fa['title']}\" bere {_username(conn, fa['winner_id'])} "
+                                f"za {fa['current_bid']} sedláků. 🔨🌾")
 
 
 def _public(a, viewer_id=None) -> dict:
@@ -103,7 +103,7 @@ def list_public(conn) -> dict:
                             (a["id"],)).rowcount == 1:
                 conn.commit()
                 _announce_async(f"⏳ POSLEDNÍ VTEŘINY na „{a['title']}\"! Vede {_username(conn, a['current_bidder_id'])} "
-                                f"za {a['current_bid']}! Kdo přebije?! 🔨🔥")
+                                f"za {a['current_bid']}. Kdo přebije?! 🔨🔥")
         bids = [{"username": _username(conn, b["user_id"]), "amount": b["amount"], "created_at": b["created_at"]}
                 for b in conn.execute("SELECT user_id, amount, created_at FROM auction_bids "
                                       "WHERE auction_id = ? ORDER BY id DESC LIMIT 6", (a["id"],))]

@@ -27,11 +27,11 @@ def _scan(conn) -> None:
         (now_iso(),)).fetchall():
         c = garden._BY_KEY.get(r["crop"], {})
         notify(conn, r["user_id"], "🌾", "Úroda dozrála!",
-               f"{c.get('icon', '')} {c.get('name', 'Plodina')} je připravená ke sklizni.", "#/zahrada")
+               f"{c.get('icon', '')} {c.get('name', 'Plodina')} je zralá, běž ji sklidit.", "#/zahrada")
         conn.execute("UPDATE garden SET notified = notified | 1 WHERE user_id = ? AND plot = ?",
                      (r["user_id"], r["plot"]))
         push_queue.append((r["user_id"], "Úroda dozrála! 🌾",
-                           f"{c.get('name', 'Plodina')} je připravená ke sklizni.", "#/zahrada"))
+                           f"{c.get('name', 'Plodina')} je zralá, běž ji sklidit.", "#/zahrada"))
 
     # 2) CHROBÁCI – aktivní okno a ještě neoznámeni (bit 2); incoming/eaten/none přeskoč
     for r in conn.execute(
@@ -42,11 +42,11 @@ def _scan(conn) -> None:
             continue
         c = garden._BY_KEY.get(r["crop"], {})
         notify(conn, r["user_id"], "🐛", "Chrobáci v zahrádce!",
-               f"Zachraň {c.get('name', 'plodinu')} než ti sežerou půlku úrody. 🚜", "#/zahrada")
+               f"Zachraň {c.get('name', 'plodinu')}, než ti sežerou půlku úrody. 🚜", "#/zahrada")
         conn.execute("UPDATE garden SET notified = notified | 2 WHERE user_id = ? AND plot = ?",
                      (r["user_id"], r["plot"]))
         push_queue.append((r["user_id"], "Chrobáci v zahrádce! 🐛",
-                           f"Zachraň {c.get('name', 'plodinu')} než ti sežerou půlku úrody.", "#/zahrada"))
+                           f"Zachraň {c.get('name', 'plodinu')}, než ti sežerou půlku úrody.", "#/zahrada"))
 
     conn.commit()  # ← write lock uvolněna PŘED síťovými voláními
 

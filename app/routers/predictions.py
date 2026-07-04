@@ -59,7 +59,7 @@ def _maybe_push_new_pred(conn, question: str) -> bool:
         pass                                   # rozbitý timestamp → chovej se jako bez cooldownu
     set_setting(conn, "predpush_last", now_iso())
     conn.commit()
-    webpush.broadcast_async("🔮 Predikce právě běží!", f"{question} — pojď si vsadit na zurys.live!", "#/predikce")
+    webpush.broadcast_async("🔮 Predikce právě běží!", f"{question} Pojď si tipnout na zurys.live!", "#/predikce")
     return True
 
 
@@ -245,9 +245,9 @@ def create_prediction(data: PredictionCreateIn, request: Request,
     q = data.question.strip()
     if data.lock_seconds > 0:
         mins = max(1, round(data.lock_seconds / 60))
-        _pred_announce(f"🎯 Nová predikce: {q} — sázej na zurys.live! Sázky se zavřou za {mins} min. ⏳🌾")
+        _pred_announce(f"🎯 Nová predikce: {q} Sázej na zurys.live, zavírá se za {mins} min. ⏳🌾")
     else:
-        _pred_announce(f"🎯 Nová predikce: {q} — sázej na zurys.live! 🌾")
+        _pred_announce(f"🎯 Nová predikce: {q} Šup si tipnout na zurys.live. 🌾")
     _maybe_push_new_pred(conn, q)
     return _pred_public(conn, _get_pred(conn, pid), staff["id"])
 
@@ -336,9 +336,9 @@ def resolve_prediction(pid: int, data: PredictionResolveIn, request: Request,
     conn.commit()
     if total > 0:
         if win_pool == 0:
-            _pred_announce(f"🎯 Výsledek: {p['question']} → ✅ {opt['label']}! Nikdo netipnul správně — vklady jsme vrátili. 🪙")
+            _pred_announce(f"🎯 Výsledek: {p['question']} → ✅ {opt['label']}! Netrefil to nikdo, tak jsme vklady vrátili. 🪙")
         else:
-            _pred_announce(f"🎯 Výsledek: {p['question']} → ✅ {opt['label']}! {paid_winners} výherců si rozdělilo {total} sedláků. 🌾")
+            _pred_announce(f"🎯 Výsledek: {p['question']} → ✅ {opt['label']}! Sedláky ({total}) si rozdělilo {paid_winners} výherců. 🌾")
     return _pred_public(conn, _get_pred(conn, pid), staff["id"])
 
 

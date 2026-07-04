@@ -172,7 +172,7 @@ def scan_rankups(conn) -> int:
         for uname, league in announces[:5]:        # max 5/cyklus, ať to nespamuje chat
             try:
                 kickbot.send_message(
-                    conn, f"🏆 {uname} právě postoupil do ligy {_LEAGUE_LABEL.get(league, league)}! Gratulujeme! 🎉",
+                    conn, f"🏆 {uname} se právě prokousal do ligy {_LEAGUE_LABEL.get(league, league)}! Gratulace! 🎉",
                     kind="system")
             except Exception:
                 traceback.print_exc()
