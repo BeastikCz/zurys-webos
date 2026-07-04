@@ -140,14 +140,45 @@ def _reset_cgoal_on_stream_end(conn) -> None:
         traceback.print_exc()
 
 
+RESET_GRACE_MIN = 60     # reset cílů jen když byl stream offline DÉLE — pád+restart uvnitř večera nemaže
+
+
+def _reset_goals_on_stream_start(conn) -> None:
+    """START streamu → vynuluj chat + sub cíl (nový stream = čistá lišta). Nahrazuje dřívější
+    reset na KONCI streamu (4.7. vypnut po pádech streamu, co mazaly progres uprostřed večera).
+    GRACE: resetuje se jen když offline trvalo > RESET_GRACE_MIN — krátký pád + znovu-nahození
+    progres podrží. Přepínatelné *_reset_on_stream_start (default ON). Nikdy nesmí shodit _check."""
+    off_at = get_setting(conn, "live_went_offline_at", "") or ""
+    if off_at:
+        try:
+            off_min = (datetime.now(timezone.utc) - datetime.fromisoformat(off_at)).total_seconds() / 60
+            if off_min < RESET_GRACE_MIN:
+                return                            # krátký výpadek → jede se dál, progres drží
+        except (ValueError, TypeError):
+            pass                                  # rozbitý timestamp → radši resetni (čistá lišta)
+    if (get_setting(conn, "cgoal_reset_on_stream_start", "1") or "1") == "1":
+        try:
+            from . import community_goal
+            community_goal.reset(conn)
+        except Exception:
+            traceback.print_exc()
+    if (get_setting(conn, "subgoal_reset_on_stream_start", "1") or "1") == "1":
+        try:
+            from . import subgoal
+            subgoal.reset(conn)
+        except Exception:
+            traceback.print_exc()
+
+
 def _check(conn) -> None:
-    # Přechody live↔offline trackujeme VŽDY (nezávisle na livehappy toggle) – aby reset SUB cíle
-    # na konci streamu jel i s vyplým auto-Happy-Hour. Gated je jen samotná HH akce.
+    # Přechody live↔offline trackujeme VŽDY (nezávisle na livehappy toggle) – aby reset cílů
+    # jel i s vyplým auto-Happy-Hour. Gated je jen samotná HH akce.
     is_live = live.is_live(conn)
     was = (get_setting(conn, "live_was_live", "0") or "0") == "1"
     if is_live and not was:
         # přechod offline → LIVE
         set_setting(conn, "live_was_live", "1")
+        _reset_goals_on_stream_start(conn)       # čistá lišta pro nový stream (pád uprostřed večera nemaže)
         announce = None
         if _enabled(conn):                       # Happy Hour na startu streamu (jen když auto-režim zapnutý)
             mins, mult = _minutes(conn), _mult(conn)
@@ -162,8 +193,9 @@ def _check(conn) -> None:
             except Exception:
                 traceback.print_exc()
     elif not is_live and was:
-        # přechod LIVE → offline (konec streamu)
+        # přechod LIVE → offline (konec streamu) — zapamatuj KDY (grace okno pro reset na startu)
         set_setting(conn, "live_was_live", "0")
+        set_setting(conn, "live_went_offline_at", datetime.now(timezone.utc).isoformat())
         _reset_subgoal_on_stream_end(conn)
         _reset_cgoal_on_stream_end(conn)
         conn.commit()
