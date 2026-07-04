@@ -5,3 +5,4 @@ uvicorn==0.48.0
 rsa==4.9                # ověření RSA-SHA256 podpisu Kick webhooků
 tzdata                  # IANA časové zóny pro zoneinfo (Europe/Prague) – „den" v ČR čase
 pywebpush==2.3.0        # Web Push (chrobáci → notifikace do mobilu); táhne cryptography, http-ece, py-vapid
+sentry-sdk==2.20.0      # error monitoring (stacktrace neošetřených výjimek); no-op bez SENTRY_DSN secret

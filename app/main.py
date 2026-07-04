@@ -326,6 +326,24 @@ finally:
 # Na Fly (produkce) vypneme veřejné API docs/schema – ať se útočníkovi nenabízí mapa API.
 # Lokálně (bez FLY_APP_NAME) zůstávají zapnuté pro vývoj.
 _PROD = bool(os.environ.get("FLY_APP_NAME"))
+
+# Sentry: neošetřené výjimky se stacktrace + kontextem requestu (doplněk k Discord 500 alertu,
+# co je jen 1 řádek a má cooldown). No-op bez SENTRY_DSN (Fly secret) → lokál/testy nedotčené.
+# Revert = smaž secret (init se přeskočí) nebo řádek v requirements. Chyba initu NESMÍ shodit boot.
+_sentry = None
+if os.environ.get("SENTRY_DSN"):
+    try:
+        import sentry_sdk as _sentry
+        _sentry.init(
+            dsn=os.environ["SENTRY_DSN"],
+            environment="prod" if _PROD else "dev",
+            traces_sample_rate=0.0,        # jen chyby, ne perf tracing (šetří kvótu free tieru)
+            send_default_pii=False,        # neposílej IP/cookies → GDPR klid
+            max_request_body_size="small",
+        )
+    except Exception as _e:                # chybná DSN / chybějící balík nesmí zabít money-appku
+        print("[sentry] init selhal, běžím bez něj:", _e)
+        _sentry = None
 app = FastAPI(
     title="WebOS – bodový shop",
     docs_url=None if _PROD else "/api/docs",
@@ -547,6 +565,8 @@ async def origin_lock(request: Request, call_next):
 # Alert na neošetřené chyby (500) → Discord (pokud je webhook), pak vrátí čistý 500.
 @app.exception_handler(Exception)
 async def _on_unhandled(request: Request, exc: Exception):
+    if _sentry:                          # plný stacktrace + kontext do Sentry (Discord má jen sumář)
+        _sentry.capture_exception(exc)
     msg = str(exc)[:400]
     locked = "database is locked" in msg.lower()
     # „database is locked" je přechodná + při zátěži zasáhne víc cest naráz → jeden hrubý
