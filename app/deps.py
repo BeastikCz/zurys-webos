@@ -385,6 +385,8 @@ _SECTION_BY_PREFIX = [
     ("/api/admin/security", "security"),
     ("/api/admin/backup", "security"),
     ("/api/admin/drops", "drops"),
+    ("/api/admin/live-happy", "drops"),   # Happy Hour (start streamu) žije v „drops" tabu → broadcaster ho ovládá sám
+    ("/api/admin/egg", "drops"),          # easter egg admin je taky v „drops" tabu (jinak by Promise.all shodil tab broadcasterovi)
     ("/api/admin/games", "games"),
     ("/api/admin/bot", "bot"),
     ("/api/admin/news", "news"),

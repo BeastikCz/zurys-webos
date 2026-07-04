@@ -285,3 +285,28 @@ def test_admin_crews_blocked(client, role):
     """BEZPEČNOST: mod / predictor / divák na přehled part NESMÍ (403)."""
     r = _get(client, "/api/admin/crews", _login_as(role))
     assert r.status_code == 403, f"{role} dostal {r.status_code} na /admin/crews – má být 403"
+
+
+# ---------------- Happy Hour (start streamu): broadcaster si to řídí sám ----------------
+# HH panel žije v „drops" tabu → broadcaster (co má sekci drops) musí projít i na /live-happy a /egg,
+# jinak mu Promise.all celý tab shodí. Sekce drops = broadcaster-only (mod/predictor NE).
+
+@pytest.mark.parametrize("role", ["admin", "broadcaster"])
+@pytest.mark.parametrize("path", ["/api/admin/live-happy", "/api/admin/egg"])
+def test_happy_hour_broadcaster_allowed(client, role, path):
+    """Broadcaster i admin řídí Happy Hour + egg sám (200)."""
+    r = _get(client, path, _login_as(role))
+    assert r.status_code == 200, f"{role} {path} -> {r.status_code} (měl by 200 — drops tab)"
+
+
+def test_happy_hour_start_broadcaster(client):
+    """Broadcaster smí ručně spustit Happy Hour TEĎ (POST /live-happy/start)."""
+    r = _post(client, "/api/admin/live-happy/start", _login_as("broadcaster"))
+    assert r.status_code == 200, f"broadcaster má moct spustit HH, dostal {r.status_code}: {r.text}"
+
+
+@pytest.mark.parametrize("role", ["mod", "predictor", "vip", "sub", "user"])
+def test_happy_hour_blocked_for_others(client, role):
+    """BEZPEČNOST: mod / predictor / divák Happy Hour NEovládají (403)."""
+    r = _get(client, "/api/admin/live-happy", _login_as(role))
+    assert r.status_code == 403, f"{role} dostal {r.status_code} na /admin/live-happy – má být 403"
