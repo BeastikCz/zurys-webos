@@ -61,14 +61,20 @@ def sub_goal_for(members):
 CREW_LEVEL_BASE = 12000   # základ level křivky (2.7. laděno na MEMBER_CAP=6)
 
 
-CAP_LVL_STEP = 5          # každých 5 crew levelů = +1 místo v partě (lvl 5 → 7, lvl 10 → 8…)
+CAP_FIRST_LVL = 5         # první bonusové místo na lvl 5 (6 → 7)
+CAP_LVL_STEP = 10         # pak +1 místo každých 10 levelů → sloty na lvl 5, 15, 25, 35… (řidší = exkluzivní velké party)
+
+
+def _slot_bonus(level):
+    """Kolik bonusových míst má parta na daném levelu. Sloty: 5, 15, 25, 35… (první na 5, pak po 10)."""
+    return 0 if level < CAP_FIRST_LVL else (level - CAP_FIRST_LVL) // CAP_LVL_STEP + 1
 
 
 def cap_for(crew):
-    """Efektivní kapacita party: základ (sloupec member_cap) + 1 místo za každých
-    CAP_LVL_STEP levelů. Sloupec zůstává BASE — bonus se počítá dynamicky z crews.xp,
-    takže levelování otvírá místa bez update hooků (a level nikdy neklesá → cap taky ne)."""
-    return crew["member_cap"] + _level(crew["xp"]) // CAP_LVL_STEP
+    """Efektivní kapacita party: základ (sloupec member_cap) + bonusová místa za level.
+    Sloupec zůstává BASE — bonus se počítá dynamicky z crews.xp, takže levelování otvírá
+    místa bez update hooků (a level nikdy neklesá → cap taky ne)."""
+    return crew["member_cap"] + _slot_bonus(_level(crew["xp"]))
 
 
 def _level(xp):
@@ -820,7 +826,7 @@ def _public(conn, crew_id, viewer_uid):
     return {
         "id": c["id"], "name": c["name"], "tag": c["tag"], "emblem": c["emblem"],
         "leader_id": c["leader_id"], "member_cap": cap_for(c), "members_count": len(members),
-        "next_slot_level": (lvl // CAP_LVL_STEP + 1) * CAP_LVL_STEP,   # na tomhle lvl se otevře další místo
+        "next_slot_level": CAP_FIRST_LVL + max(0, lvl - CAP_FIRST_LVL + CAP_LVL_STEP) // CAP_LVL_STEP * CAP_LVL_STEP,   # další slot: 5,15,25…
         "xp": c["xp"], "level": lvl,
         "level_into": _lp["into"], "level_span": _lp["span"], "level_pct": _lp["pct"],
         "sub_bonus_pct": round(_bonus_frac(lvl, "sub") * 100),

@@ -102,8 +102,8 @@ def test_join_and_duplicate(client):
         pass
 
 
-def test_cap_grows_every_5_levels(client):
-    """Lvl 5 → 7 míst, lvl 10 → 8 míst (cap_for = member_cap + level//5)."""
+def test_cap_slots_schedule(client):
+    """Sloty: lvl 5 → 7 míst, další až lvl 15 (pak 25). Řidší = exkluzivní velké party."""
     h = _mk_user(100000); st = _run(crews.create, h, "host", "SlotParta", "SLT")
     for i in range(crews.MEMBER_CAP - 1):                  # doplň na základní cap 6
         _run(crews.join, _mk_user(1000), "m%d" % i, st["code"])
@@ -118,12 +118,18 @@ def test_cap_grows_every_5_levels(client):
     conn.commit(); conn.close()
     st2 = _run(crews.join, extra, "extra", st["code"])     # lvl 5 → 7. místo otevřené
     assert st2["level"] == 5 and st2["member_cap"] == crews.MEMBER_CAP + 1
-    assert st2["members_count"] == 7 and st2["next_slot_level"] == 10
+    assert st2["members_count"] == 7 and st2["next_slot_level"] == 15   # další slot až lvl 15 (ne 10)
     try:
         _run(crews.join, _mk_user(1000), "extra2", st["code"])
-        assert False, "7/7 zase plno"
+        assert False, "7/7 zase plno (lvl 10 už NEotvírá slot)"
     except ValueError:
         pass
+    conn = get_conn()                                      # lvl 15 → 8. místo
+    conn.execute("UPDATE crews SET xp=? WHERE id=?", (196 * crews.CREW_LEVEL_BASE, st["id"]))
+    conn.commit(); conn.close()
+    st3 = _run(crews.join, _mk_user(1000), "eightth", st["code"])
+    assert st3["level"] == 15 and st3["member_cap"] == crews.MEMBER_CAP + 2
+    assert st3["members_count"] == 8 and st3["next_slot_level"] == 25
 
 
 def test_join_bad_code(client):
