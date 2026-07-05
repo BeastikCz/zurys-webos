@@ -473,7 +473,8 @@ QUEST_XP_FACTOR = 0.5      # denní/týdenní úkoly („Úkol: …"): bonus za 
 _XP_ZERO_KW = ("battle pass", "mines", "blackjack", "coinflip", "duel", "predikce", "piškvor",
                "kostky", "stůl – win", "sázka", "výhra v", "zrušen", "zrušená", "vrácen", "vráceno",
                "vypršel", "vypršelá", "remíza", "storno", "refund", "výzv", "hra #", "dar od",
-               "dar pro", "dar →", "úprava adminem", "chat cíl", "sub cíl", "komunitní", "botrix")
+               "dar pro", "dar →", "úprava adminem", "chat cíl", "sub cíl", "komunitní", "botrix",
+               "crew válka")   # odměna za výhru crew války = status/spendable, ne do žebříčků
 _XP_HALF_KW = ("kolo", "drop", "partner", "flash")     # náhoda/promo → půlka XP
 
 
