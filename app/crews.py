@@ -21,7 +21,7 @@ CHAT_TAIL = 40
 EMBLEM_COST = 5000        # změna emblému party = sink sedláků (kosmetika, vůdce only)
 LEAVE_COOLDOWN_H = 6      # po odchodu z party musíš počkat X h než vstoupíš jinam (anti-churn/hop)
 MOTD_MAX = 200           # max délka crew popisu/MOTD
-WAR_HOURS = 72           # Crew War trvá 3 dny; odměna = STATUS (war_wins/losses/draws), ŽÁDNÉ sedláky (no faucet)
+WAR_HOURS = 24           # Crew War trvá 1 den; odměna = STATUS (war_wins/losses/draws), ŽÁDNÉ sedláky (no faucet)
 EMBLEMS = ["🌾", "🚜", "🐮", "🐔", "🌽", "🥕", "🍺", "⚔️", "🔥", "👑", "🛠️", "🥔",
            "🐺", "🦅", "🐗", "🐉", "🦁", "🐂", "🏰", "🛡️", "🏹", "💀", "⭐", "🍻",
            "🌻", "🐝", "🐴", "🍎", "🪓", "🎯"]
