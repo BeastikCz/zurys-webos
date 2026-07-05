@@ -1,0 +1,146 @@
+/* Statek — premium game dashboard. Hybrid: artwork background + živé HTML/CSS overlay.
+   Funguje i bez reálných assetů (gradient + emoji fallback); po vložení .webp se prohodí. */
+:root {
+  --stk-gold: var(--accent, #ffac20);
+  --stk-gold-2: #ffd75e;
+  --stk-ink: #211503;
+  --stk-panel: rgba(24, 18, 11, .92);
+  --stk-border: #4a371d;
+  --stk-glow: rgba(255, 172, 32, .34);
+}
+
+.stk-wrap { display: flex; flex-direction: column; gap: 14px; }
+
+/* ---- Header ---- */
+.stk-head {
+  display: flex; align-items: center; gap: 16px;
+  padding: 18px 22px; border-radius: 18px;
+  background: linear-gradient(105deg, rgba(30,22,12,.96), rgba(18,13,8,.9));
+  border: 1px solid var(--stk-border); box-shadow: 0 18px 42px -26px #000, inset 0 1px rgba(255,255,255,.03);
+}
+.stk-head-ic { width: 60px; height: 60px; flex: none; filter: drop-shadow(0 8px 12px rgba(0,0,0,.6)); object-fit: contain; }
+.stk-head h1 { margin: 0; font-size: clamp(26px, 3vw, 38px); font-weight: 900; letter-spacing: -.03em;
+  background: linear-gradient(180deg, #fff7e6, var(--stk-gold)); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
+.stk-head p { margin: 4px 0 0; color: var(--text-dim, #b9aa8d); font-size: 13.5px; }
+.stk-head p b { color: var(--stk-gold-2); }
+
+/* ---- Status bar (sbírka + krmivo) ---- */
+.stk-status {
+  display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+  padding: 12px 18px; border-radius: 14px; font-size: 13px;
+  background: var(--stk-panel); border: 1px solid var(--stk-border); box-shadow: inset 0 1px rgba(255,255,255,.02);
+}
+.stk-status .stk-s-l { display: flex; align-items: center; gap: 9px; }
+.stk-status .stk-s-l b { color: #f6eedc; }
+.stk-chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 9px;
+  background: rgba(255,172,32,.09); border: 1px solid rgba(255,172,32,.24); color: var(--stk-gold-2); font-weight: 700; }
+.stk-chip.ok { background: rgba(120,233,88,.1); border-color: rgba(120,233,88,.3); color: #8ee86f; }
+.stk-status .stk-s-r { margin-left: auto; display: flex; align-items: center; gap: 14px; color: var(--text-dim,#b9aa8d); }
+
+/* ---- Scéna (artwork + overlay) ---- */
+.stk-scene {
+  position: relative; overflow: hidden; border-radius: 20px;
+  aspect-ratio: 128 / 45; min-height: 240px;
+  border: 1px solid #5a4322; box-shadow: 0 26px 60px -30px #000, inset 0 0 0 1px rgba(255,215,94,.06), inset 0 -60px 90px -40px rgba(0,0,0,.6);
+  /* Fallback gradient VŽDY vespod; artwork nahoře (když existuje, překryje) */
+  background-image: var(--stk-hero, none),
+    radial-gradient(120% 80% at 78% 30%, rgba(255,180,90,.5), transparent 55%),
+    linear-gradient(180deg, #26305a 0%, #3e3a66 42%, #8a5570 68%, #d98a52 100%);
+  background-size: cover, cover, cover; background-position: center, center, center;
+}
+.stk-scene::after {   /* jemný spodní vignette pro čitelnost tokenů */
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(180deg, transparent 45%, rgba(8,6,4,.55) 100%);
+}
+.stk-pasture {
+  position: absolute; inset: auto 0 8%; z-index: 2;
+  display: flex; align-items: flex-end; justify-content: center; gap: clamp(18px, 6vw, 84px);
+  padding: 0 5%;
+}
+.stk-animal {
+  position: relative; display: flex; flex-direction: column; align-items: center; gap: 6px;
+  cursor: pointer; transition: transform .18s ease, filter .18s ease;
+}
+.stk-animal[data-action] { cursor: pointer; }
+.stk-animal:hover { transform: translateY(-4px) scale(1.03); filter: drop-shadow(0 10px 14px rgba(0,0,0,.5)); }
+.stk-animal.stk-empty { cursor: default; opacity: .72; }
+.stk-animal.stk-empty:hover { transform: none; filter: none; }
+
+.stk-a-img { width: clamp(70px, 9vw, 128px); height: clamp(70px, 9vw, 128px); object-fit: contain;
+  filter: drop-shadow(0 12px 12px rgba(0,0,0,.45)); }
+.stk-a-emoji { font-size: clamp(46px, 6vw, 78px); line-height: 1; filter: drop-shadow(0 10px 10px rgba(0,0,0,.5)); }
+.stk-empty .stk-a-emoji { font-size: clamp(34px, 4vw, 54px); opacity: .5; }
+
+/* plovoucí badge nad zvířetem */
+.stk-badge { position: absolute; top: -14px; left: 50%; transform: translateX(-50%);
+  white-space: nowrap; font-size: 12.5px; font-weight: 800; padding: 5px 11px; border-radius: 11px;
+  box-shadow: 0 8px 20px -8px #000; border: 1px solid transparent; backdrop-filter: blur(4px); }
+.stk-badge.ready { background: linear-gradient(180deg, #7be0a0, #46d369); color: #06340f;
+  border-color: #9cf0b8; box-shadow: 0 0 22px rgba(70,211,105,.55), 0 8px 20px -8px #000; animation: stkPulse 1.3s ease-in-out infinite; }
+.stk-badge.time { background: rgba(12,10,7,.82); color: #f0e6cf; border-color: rgba(255,215,94,.25); font-variant-numeric: tabular-nums; }
+.stk-badge.hungry { background: linear-gradient(180deg, #ffcf6a, #ff9d18); color: var(--stk-ink); border-color: #ffe0a0; }
+.stk-badge.util { background: rgba(146,110,255,.9); color: #fff; border-color: #b79dff; }
+@keyframes stkPulse { 0%,100% { transform: translateX(-50%) scale(1); } 50% { transform: translateX(-50%) scale(1.06); } }
+
+.stk-a-name { font-size: 12.5px; font-weight: 700; color: #fff; text-shadow: 0 2px 4px rgba(0,0,0,.8); display: flex; align-items: center; gap: 5px; }
+.stk-a-lvl { color: var(--stk-gold-2); font-size: 11.5px; }
+.stk-a-sell { position: absolute; top: -8px; right: -8px; z-index: 3; width: 20px; height: 20px; border-radius: 50%;
+  display: none; align-items: center; justify-content: center; font-size: 11px; line-height: 1;
+  background: rgba(20,14,9,.9); border: 1px solid #6a4f28; color: #d9c6a0; cursor: pointer; }
+.stk-animal:hover .stk-a-sell { display: flex; }
+.stk-a-sell:hover { background: #b4413a; color: #fff; }
+
+/* ---- CTA ---- */
+.stk-cta {
+  display: inline-flex; align-items: center; justify-content: center; gap: 10px;
+  width: 100%; max-width: 460px; margin: 2px auto 0; padding: 15px 26px;
+  font-size: 16px; font-weight: 800; letter-spacing: .01em; border: 0; border-radius: 14px; cursor: pointer;
+  color: var(--stk-ink); background: linear-gradient(135deg, var(--stk-gold-2), var(--stk-gold) 70%, #ef7d0d);
+  box-shadow: 0 14px 30px -12px var(--stk-glow), inset 0 1px rgba(255,255,255,.4); transition: transform .15s, filter .15s;
+}
+.stk-cta:hover { transform: translateY(-2px); filter: brightness(1.07); }
+.stk-cta .stk-cta-ic { font-size: 18px; }
+
+/* ---- Info řádek ---- */
+.stk-info { font-size: 12px; color: var(--text-dim, #9e8a69); line-height: 1.6; margin: 2px 2px 0; }
+.stk-info b { color: #d5c6a9; }
+
+/* ---- Shop grid ---- */
+.stk-shop-title { display: flex; align-items: center; gap: 8px; margin: 8px 2px 2px; font-size: 15px; font-weight: 800; color: #f6eedc; letter-spacing: .03em; }
+.stk-shop { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 12px; }
+.stk-card {
+  position: relative; display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 16px 12px 14px;
+  border-radius: 16px; text-align: center; cursor: pointer; overflow: hidden;
+  background: linear-gradient(180deg, #1c150d, #140f0a); border: 1px solid #3f301c;
+  box-shadow: 0 14px 30px -22px #000, inset 0 1px rgba(255,255,255,.02); transition: transform .16s, border-color .16s, box-shadow .16s;
+}
+.stk-card:hover:not(:disabled) { transform: translateY(-3px); border-color: var(--stk-gold); box-shadow: 0 20px 40px -22px #000, 0 0 0 1px rgba(255,172,32,.3); }
+.stk-card:disabled { opacity: .5; cursor: not-allowed; }
+.stk-card.owned { border-color: rgba(120,233,88,.55); box-shadow: 0 0 0 1px rgba(120,233,88,.25), 0 16px 34px -22px #000; }
+.stk-card.owned::before { content: "✓"; position: absolute; top: 8px; right: 10px; color: #8ee86f; font-weight: 900; font-size: 14px; }
+.stk-card-img { width: 68px; height: 68px; object-fit: contain; filter: drop-shadow(0 8px 10px rgba(0,0,0,.4)); }
+.stk-card-emoji { font-size: 46px; line-height: 1; filter: drop-shadow(0 6px 8px rgba(0,0,0,.4)); }
+.stk-card-name { font-size: 14.5px; font-weight: 800; color: #f6eedc; }
+.stk-card-name .stk-sub { color: #b79dff; font-size: 12px; }
+.stk-card-cost { font-size: 13px; font-weight: 800; color: var(--stk-gold-2); }
+.stk-card-det { font-size: 11px; color: #9e8a69; line-height: 1.4; }
+.stk-card-lock { position: absolute; top: 8px; left: 10px; font-size: 11px; color: #b79dff; }
+
+/* ---- Responzivita ---- */
+@media (max-width: 1080px) {
+  .stk-shop { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@media (max-width: 720px) {
+  .stk-scene { aspect-ratio: auto; min-height: 300px; }
+  .stk-pasture { gap: 14px; flex-wrap: wrap; justify-content: center; inset: auto 0 6%; }
+  .stk-shop { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .stk-status { font-size: 12px; }
+  .stk-status .stk-s-r { width: 100%; margin-left: 0; }
+}
+@media (max-width: 440px) {
+  .stk-head { padding: 14px; gap: 11px; }
+  .stk-head-ic { width: 46px; height: 46px; }
+  .stk-shop { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; }
+  .stk-card { padding: 12px 8px; }
+  .stk-card-name { font-size: 13px; }
+}
