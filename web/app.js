@@ -252,8 +252,7 @@ function render() {
     "mod-nabor": pageModApply, staty: pageGameStats, "sin-slavy": pageHallOfFame, zahrada: pageGarden,
     statek: pageFarm, "moje-cisla": pageWrappedLink, vs: pageVs,
   };
-  if ((r.name === "crews" && !hasEarlyAccess(state.user))
-    || (r.name === "statek" && !(state.user && state.user.role === "admin"))) {   // lišta viditelná všem, klik bez accessu → teaser; Statek zatím jen admin
+  if (r.name === "statek" && !(state.user && state.user.role === "admin")) {   // Crew je veřejný (5.7.); Statek zatím jen admin → teaser
     pageEarlyAccess(r.name);
     window.scrollTo({ top: 0, behavior: "instant" in window ? "instant" : "auto" });
     return;

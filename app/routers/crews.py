@@ -3,13 +3,14 @@ import sqlite3
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from ..deps import db_dep, require_user, require_early_access
+from ..deps import db_dep, require_user
 from ..models import (CrewCreateIn, CrewJoinIn, CrewChatIn, CrewMemberIn, CrewRoleIn,
                       CrewEmblemIn, CrewMotdIn, CrewPrivateIn, CrewWarDeclareIn)
 from .. import crews
 
-# early access gate: celý Crew router je zatím jen pro grantnuté + admina (soft launch)
-router = APIRouter(prefix="/crews", tags=["crews"], dependencies=[Depends(require_early_access)])
+# Crew je VEŘEJNÝ (5.7.2026 sundán early-access gate) – přístupný všem přihlášeným (require_user
+# na endpointech). Zpět za gate = dependencies=[Depends(require_early_access)] + import.
+router = APIRouter(prefix="/crews", tags=["crews"])
 
 
 def _do(fn, conn, uid, *a):

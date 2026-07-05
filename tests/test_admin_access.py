@@ -227,20 +227,16 @@ def _login_early(early: int = 1) -> str:
         conn.close()
 
 
-@pytest.mark.parametrize("path", ["/api/crews/mine", "/api/farm"])
-def test_early_access_blocks_normal_user(client, path):
-    """BEZPEČNOST: běžný uživatel bez early_access NEVIDÍ Crew ani Statek (403)."""
-    r = _get(client, path, _login_early(early=0))
-    assert r.status_code == 403, f"bez early_access má být 403 na {path}, dostal {r.status_code}"
+def test_crew_public_for_everyone(client):
+    """Crew je VEŘEJNÝ (5.7. sundán gate) – vidí ho každý přihlášený, i bez early_access."""
+    r = _get(client, "/api/crews/mine", _login_early(early=0))
+    assert r.status_code == 200, f"Crew má být veřejný (200) i bez early_access, dostal {r.status_code}: {r.text}"
 
 
-def test_early_access_granted_user_allowed(client):
-    """Grantnutý uživatel (early_access=1) vidí Crew (200) — Statek NE (ten je zatím jen admin)."""
-    tok = _login_early(early=1)
-    r = _get(client, "/api/crews/mine", tok)
-    assert r.status_code == 200, f"s early_access má být 200 na crews, dostal {r.status_code}: {r.text}"
-    r2 = _get(client, "/api/farm", tok)
-    assert r2.status_code == 403, f"Statek má být i pro grantnuté 403 (jen admin), dostal {r2.status_code}"
+def test_farm_still_gated_for_normal_user(client):
+    """BEZPEČNOST: Statek zůstává admin-only – běžný uživatel (i s early_access) NEVIDÍ (403)."""
+    assert _get(client, "/api/farm", _login_early(early=0)).status_code == 403, "Statek bez accessu = 403"
+    assert _get(client, "/api/farm", _login_early(early=1)).status_code == 403, "Statek i s early_access = 403 (jen admin)"
 
 
 @pytest.mark.parametrize("path", ["/api/crews/mine", "/api/farm"])
