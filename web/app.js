@@ -2765,9 +2765,15 @@ const FARM_ART = { chicken: "chicken", goat: "goat", sheep: "sheep", cow: "cow",
 function stkImg(key, emoji, cls) {
   const f = FARM_ART[key];
   if (!f) return `<span class="${cls}-emoji">${emoji}</span>`;   // neznámý klíč → emoji
-  // <img> s onerror fallbackem na emoji – funguje i bez reálného .webp assetu
-  return `<img src="/img/farm/animals/${f}.webp" class="${cls}-img" alt="" loading="lazy" data-e="${emoji}" `
-    + `onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'${cls}-emoji',textContent:this.getAttribute('data-e')}))">`;
+  // <img> bez inline onerror (CSP blokuje inline handlery) – fallback navěsí stkFixImgs po renderu
+  return `<img src="/img/farm/animals/${f}.webp" class="${cls}-img" alt="" loading="lazy" data-e="${emoji}" data-ec="${cls}-emoji">`;
+}
+function stkFixImgs(box) {   // chybějící .webp → prohodí za emoji (CSP-safe: listener v JS, ne inline onerror)
+  box.querySelectorAll("img[data-e]").forEach((im) => {
+    const swap = () => { const s = document.createElement("span"); s.className = im.dataset.ec; s.textContent = im.dataset.e; im.replaceWith(s); };
+    if (im.complete && im.naturalWidth === 0) swap();   // už selhalo (cached 404)
+    else im.addEventListener("error", swap, { once: true });
+  });
 }
 async function loadFarm() {
   const box = document.getElementById("farmBox"); if (!box) return;
@@ -2795,6 +2801,7 @@ async function loadFarm() {
       <div class="stk-shop-title">🐾 Zvířata k koupi</div>
       <div class="stk-shop">${shop}</div>
     </div>`;
+    stkFixImgs(box);   // chybějící .webp assety → emoji fallback (CSP-safe)
     if (window._farmTimer) clearInterval(window._farmTimer);
     window._farmTimer = setInterval(() => {
       let reload = false;
