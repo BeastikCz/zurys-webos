@@ -721,16 +721,17 @@ def test_war_finalize_winner_loser_and_log():
     assert any(e["event"] == "war_end" and "Vyhráno" in (e["detail"] or "") for e in log["events"])
 
 
-def test_war_win_rewards_members_capped_weekly(client):
-    """Výhra → +WAR_WIN_REWARD každému členovi vítěze (1×/parta/týden). Poražený nic."""
+def test_war_win_loots_enemy_xp_capped_weekly(client):
+    """Výhra → vítěz ukořistí 50 % války XP nepřítele do crews.xp (level), 1×/parta/týden.
+    Kopie: poražený o XP nepřijde, sedláky členů se nemění."""
     sfx = secrets.token_hex(3)
     l1 = _mk_user(50000); st1 = _run(crews.create, l1, f"RW1_{sfx}", f"RewWin {sfx}", "")
     m1 = _mk_user(1000); _run(crews.join, m1, f"RWm_{sfx}", st1["code"])   # 2členná vítězná parta
     l2 = _mk_user(50000); st2 = _run(crews.create, l2, f"RW2_{sfx}", f"RewLose {sfx}", "")
     _run(crews.declare_war, l1, st2["id"])
     _commit(crews.contribute, l1, 8000, False)                            # vítěz víc XP
-    _commit(crews.contribute, l2, 2000, False)
-    bal_l1, bal_m1, bal_l2 = _points(l1), _points(m1), _points(l2)
+    _commit(crews.contribute, l2, 2000, False)                            # nepřítel nafarmil 2000 → kořist 1000
+    win_xp0, lose_xp0, bal_m1 = _crew_xp(l1), _crew_xp(l2), _points(m1)
     conn = get_conn()
     try:
         conn.execute("UPDATE crew_wars SET ends_at='2000-01-01T00:00:00+00:00' WHERE crew_a_id=?", (st1["id"],))
@@ -738,12 +739,17 @@ def test_war_win_rewards_members_capped_weekly(client):
     finally:
         conn.close()
     _run(crews._public, st1["id"], l1)                                    # trigger lazy finalize
-    assert _points(l1) == bal_l1 + crews.WAR_WIN_REWARD, "vůdce vítěze bere odměnu"
-    assert _points(m1) == bal_m1 + crews.WAR_WIN_REWARD, "člen vítěze taky bere"
-    assert _points(l2) == bal_l2, "poražený nic nedostane"
-    # odměna se NEpočítá do žebříčků (classify zero)
-    from app.deps import classify_xp
-    assert classify_xp("Crew válka – výhra 🏆")[0] == "zero"
+    loot = int(round(2000 * crews.WAR_LOOT_FRAC))                         # = 1000
+    assert _crew_xp(l1) == win_xp0 + loot, "vítěz ukořistil 50 % XP nepřítele do levelu"
+    assert _crew_xp(l2) == lose_xp0, "poražený o XP nepřijde (kopie, ne transfer)"
+    assert _points(m1) == bal_m1, "sedláky členů se nemění (kořist jde do levelu, ne do peněženky)"
+    # týdenní gate: druhá kořist ve stejném týdnu = 0 (anti-farm faucet do levelů)
+    conn = get_conn()
+    try:
+        assert crews._pay_war_loot(conn, st1["id"], 2000) == 0, "2× kořist/týden blokovaná"
+        conn.rollback()
+    finally:
+        conn.close()
 
 
 def test_war_finalize_draw():
