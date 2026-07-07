@@ -2567,7 +2567,7 @@ def admin_crews(admin: sqlite3.Row = Depends(require_user), conn: sqlite3.Connec
             for k in ("xp", "level", "streak", "best_streak", "code", "war_wins", "war_losses", "war_draws"):
                 c.pop(k, None)
             for m in c["members"]:
-                for k in ("contributed", "sub_xp", "week_xp"):
+                for k in ("contributed", "sub_xp", "week_xp", "user_id"):   # broadcaster nevidí ani ID účtů
                     m.pop(k, None)
     return out
 

@@ -2466,7 +2466,7 @@ async function adminCrews() {                              // admin přehled par
         ${c.motd ? `<div class="acrew-motd">💬 ${esc(c.motd)}</div>` : ""}
         <div class="table-wrap"><table class="tbl"><thead><tr><th>Člen</th><th>Role</th>${full ? `<th title="All-time celkem přispěno (farm + sub)">Příspěvek</th><th title="All-time XP ze subů/giftů (ten cenný)">Sub XP</th><th title="Týdenní XP do žebříčku">Týden</th>` : ""}<th>Od</th></tr></thead><tbody>
           ${c.members.map((m) => `<tr>
-            <td><b>${esc(m.username)}</b>${m.kick_username ? ` <span class="faint" style="font-size:11px">🟢 ${esc(m.kick_username)}</span>` : ""} <span class="faint" style="font-size:11px">🆔 ${m.user_id}</span></td>
+            <td><b>${esc(m.username)}</b>${m.kick_username ? ` <span class="faint" style="font-size:11px">🟢 ${esc(m.kick_username)}</span>` : ""}${full ? ` <span class="faint" style="font-size:11px">🆔 ${m.user_id}</span>` : ""}</td>
             <td>${roleLbl[m.role] || esc(m.role)}</td>
             ${full ? `<td>${fmtPts(m.contributed)}</td>
             <td>${fmtPts(m.sub_xp)}</td>
