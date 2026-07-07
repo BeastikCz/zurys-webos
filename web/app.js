@@ -6876,15 +6876,16 @@ function crewGoalHTML(d) {
     </div>`;
 }
 function crewWarHTML(d) {
+  const canWar = d.is_leader || (d.members || []).some((m) => m.is_you && m.role === "officer");   // vůdce i důstojník vyhlašují
   const record = (d.war_wins || d.war_losses || d.war_draws)
     ? `<span class="faint" style="font-size:12px">Bilance ${d.war_wins}V-${d.war_losses}P-${d.war_draws}R</span>` : "";
   if (!d.war) {
-    if (!d.is_leader && !record) return "";
+    if (!canWar && !record) return "";
     return `<div class="panel crew-war-panel" style="margin-bottom:14px">
       <div class="section-title" style="margin-top:0;display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
         <span>⚔️ Crew War</span>${record}
       </div>
-      ${d.is_leader
+      ${canWar
         ? `<div class="faint" style="font-size:13px;margin-bottom:8px">Vyhlas válku jiné partě — 3 dny, kdo nasbírá víc XP vyhrává. Odměna = sláva, žádné sedláky.</div>
            <button class="btn btn-sm btn-accent" data-action="crew-war-open">⚔️ Vyhlásit válku</button>`
         : `<div class="faint" style="font-size:13px">Zatím žádná aktivní válka.</div>`}
@@ -7064,7 +7065,8 @@ async function crewHistoryModal() {
 }
 async function crewWarModal() {
   if (!_crewId || !_crewDetail) return;
-  if (!_crewDetail.is_leader) { toast("Jen vůdce party může vyhlásit válku.", "error"); return; }
+  const canWar = _crewDetail.is_leader || (_crewDetail.members || []).some((m) => m.is_you && m.role === "officer");
+  if (!canWar) { toast("Válku může vyhlásit jen vůdce nebo důstojník party.", "error"); return; }
   let lb;
   try { lb = await api("/crews/leaderboard?sort=week"); } catch (e) { toast(e.message, "error"); return; }
   const candidates = (lb.crews || []).filter((c) => c.id !== _crewId && !c.at_war).slice(0, 30);

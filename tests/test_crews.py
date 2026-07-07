@@ -698,6 +698,27 @@ def test_war_declare_blocks_duplicate_and_self():
         assert "válčí" in str(e).lower()
 
 
+def test_war_declare_officer_yes_member_no():
+    """Válku vyhlašuje vůdce I důstojník, ale řadový člen ne."""
+    sfx = secrets.token_hex(3)
+    lead = _mk_user(); st = _run(crews.create, lead, f"WOL_{sfx}", f"WarOff {sfx}", "WO")
+    off = _mk_user(); _run(crews.join, off, f"WOo_{sfx}", st["code"]); _run(crews.set_role, lead, off, "officer")
+    mem = _mk_user(); _run(crews.join, mem, f"WOm_{sfx}", st["code"])
+    l2 = _mk_user(); st2 = _run(crews.create, l2, f"WOE_{sfx}", f"WarEne {sfx}", "WE")
+    l3 = _mk_user(); st3 = _run(crews.create, l3, f"WOF_{sfx}", f"WarEne2 {sfx}", "W2")
+    try:                                                       # řadový člen NESMÍ
+        _run(crews.declare_war, mem, st2["id"])
+        assert False, "člen nesmí vyhlásit válku"
+    except ValueError as e:
+        assert "důstojník" in str(e).lower()
+    _run(crews.declare_war, off, st2["id"])                    # důstojník SMÍ
+    try:                                                       # parta je teď ve válce (off ji vyhlásil) → další selže
+        _run(crews.declare_war, lead, st3["id"])
+        assert False, "parta už ve válce (vyhlásil důstojník)"
+    except ValueError as e:
+        assert "ve válce" in str(e).lower()
+
+
 def test_war_finalize_winner_loser_and_log():
     """Lazy finalizace: delta XP rozhodne vítěze, status-only odměna (war_wins/losses), zalogováno."""
     sfx = secrets.token_hex(3)

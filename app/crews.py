@@ -621,15 +621,17 @@ def _finalize_wars(conn):
 
 
 def declare_war(conn, leader_uid, opponent_crew_id):
-    """Vůdce vyhlásí válku jiné partě (3 dny, skóre = kdo nasbírá víc crew XP). 1 aktivní válka/parta
-    (přirozený throttle, žádné stohování). Odměna je status, ne sedláky."""
+    """Vůdce NEBO důstojník vyhlásí válku jiné partě. 1 aktivní válka/parta (přirozený throttle,
+    žádné stohování). Odměna = status + kořist 50 % XP nepřítele vítězi (viz _pay_war_loot)."""
     _finalize_wars(conn)
     lm = _member(conn, leader_uid)
     if not lm:
         raise ValueError("Nejsi v partě.")
     crew = _crew(conn, lm["crew_id"])
-    if not crew or crew["leader_id"] != leader_uid:
-        raise ValueError("Jen vůdce party může vyhlásit válku.")
+    if not crew:
+        raise ValueError("Nejsi v partě.")
+    if lm["role"] not in ("leader", "officer"):
+        raise ValueError("Válku může vyhlásit jen vůdce nebo důstojník party.")
     opponent_crew_id = int(opponent_crew_id)
     if opponent_crew_id == crew["id"]:
         raise ValueError("Sám se sebou válčit nelze.")
