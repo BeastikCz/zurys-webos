@@ -94,3 +94,38 @@ def test_exempt_uid_bypasses_global_wager_cap(client):
         _reset_cap(conn)
         conn.commit()
         conn.close()
+
+
+def test_restore_wager_limit_gives_back_room(client):
+    """Sázka co se NEODEHRÁLA (výzva vypršela/zrušena/obsazená) musí vrátit i denní limit, ne jen vklad.
+    Regrese: bug – 2 nepřijaté duely sežraly limit, pak už nešlo hrát."""
+    from app.deps import restore_wager_limit
+    conn = get_conn()
+    try:
+        set_setting(conn, "eco_wager_cap", "1000"); conn.commit()
+        uid = _make_user(conn)
+        check_wager_limit(conn, _user(conn, uid), 1000)          # vsadil celý denní limit (otevřená výzva)
+        with pytest.raises(HTTPException):                       # plno – další sázka neprojde
+            check_wager_limit(conn, _user(conn, uid), 1)
+        restore_wager_limit(conn, uid, 1000)                    # výzvu nikdo nepřijal → vrácení
+        assert _user(conn, uid)["wagered_today"] == 0
+        check_wager_limit(conn, _user(conn, uid), 1000)          # limit zase volný
+        assert _user(conn, uid)["wagered_today"] == 1000
+    finally:
+        _reset_cap(conn); conn.close()
+
+
+def test_restore_wager_limit_clamps_and_day_guard(client):
+    from app.deps import restore_wager_limit
+    conn = get_conn()
+    try:
+        uid = _make_user(conn)
+        check_wager_limit(conn, _user(conn, uid), 200)
+        restore_wager_limit(conn, uid, 999)                     # nikdy do minusu (clamp ≥0)
+        assert _user(conn, uid)["wagered_today"] == 0
+        conn.execute("UPDATE users SET wagered_today=500, wager_day='2000-01-01' WHERE id=?", (uid,))
+        conn.commit()
+        restore_wager_limit(conn, uid, 500)                     # jiný den → neškrtej stará data
+        assert _user(conn, uid)["wagered_today"] == 500
+    finally:
+        _reset_cap(conn); conn.close()

@@ -233,6 +233,15 @@ def check_wager_limit(conn: sqlite3.Connection, user, amount: int) -> None:
                  (amount, uid))
 
 
+def restore_wager_limit(conn: sqlite3.Connection, uid: int, amount: int) -> None:
+    """Opak check_wager_limit: vrať denní limit sázek, když se sázka NEODEHRÁLA – výzva vypršela,
+    zrušena zakladatelem, nebo slot obsadil někdo jiný (refund vkladu). wagered_today -= amount,
+    clamp ≥0. Jen když je pořád tentýž den, kdy se sázka započla (jinak už proběhl denní reset)."""
+    from .db import local_date
+    conn.execute("UPDATE users SET wagered_today = MAX(0, COALESCE(wagered_today, 0) - ?) "
+                 "WHERE id = ? AND wager_day = ?", (max(0, int(amount)), uid, local_date()))
+
+
 def to_public(row: sqlite3.Row, include_email: bool = False) -> dict:
     """Veřejná podoba uživatele (bez hesla)."""
     data = {

@@ -14,7 +14,8 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 
 from ..config import ROLE_ADMIN
 from ..db import now_iso, get_setting, local_date
-from ..deps import db_dep, require_user, add_points, try_debit, client_ip, to_public, require_can_gamble, check_wager_limit
+from ..deps import (db_dep, require_user, add_points, try_debit, client_ip, to_public,
+                    require_can_gamble, check_wager_limit, restore_wager_limit)
 from ..economy import note_game_net, games_capped
 from ..models import GameCreateIn, GameMoveIn, DuelCreateIn
 from ..ratelimit import rate_limit
@@ -101,6 +102,7 @@ def _expire_open(conn) -> None:
     for g in rows:
         if _seconds_since(g["created_at"]) > OPEN_TTL_S:
             add_points(conn, g["p1_id"], g["stake"], f"Vypršelá hra #{g['id']} – vrácení vkladu")
+            restore_wager_limit(conn, g["p1_id"], g["stake"])   # nikdo se nepřidal → vrať i denní limit
             conn.execute("UPDATE games SET status='cancelled', updated_at=? WHERE id=?",
                          (now_iso(), g["id"]))
             changed = True
@@ -114,6 +116,7 @@ def refund_all_open(conn) -> int:
     rows = conn.execute("SELECT id, p1_id, stake FROM games WHERE status='open'").fetchall()
     for g in rows:
         add_points(conn, g["p1_id"], g["stake"], f"Hra #{g['id']} zrušena (údržba) – vrácení vkladu")
+        restore_wager_limit(conn, g["p1_id"], g["stake"])
         conn.execute("UPDATE games SET status='cancelled', updated_at=? WHERE id=?", (now_iso(), g["id"]))
     if rows:
         conn.commit()
@@ -126,6 +129,7 @@ def refund_open_duels(conn) -> int:
     rows = conn.execute("SELECT id, p1_id, stake FROM duels WHERE status='open'").fetchall()
     for d in rows:
         add_points(conn, d["p1_id"], d["stake"], f"Duel #{d['id']} zrušen (hry mimo provoz) – vrácení vkladu")
+        restore_wager_limit(conn, d["p1_id"], d["stake"])
         conn.execute("UPDATE duels SET status='cancelled', updated_at=? WHERE id=?", (now_iso(), d["id"]))
     if rows:
         conn.commit()
@@ -409,6 +413,7 @@ def join_game(gid: int, request: Request, user: sqlite3.Row = Depends(require_us
     )
     if cur.rowcount == 0:
         add_points(conn, user["id"], g["stake"], f"Vrácení vkladu – hra #{gid} už obsazená")
+        restore_wager_limit(conn, user["id"], g["stake"])   # nehráls → vrať i denní limit
         conn.commit()
         raise HTTPException(status_code=409, detail="Tahle hra už není volná – někdo byl rychlejší. Vklad ti vracíme. 🪙")
     conn.commit()
@@ -477,6 +482,7 @@ def cancel_game(gid: int, user: sqlite3.Row = Depends(require_user),
                     (now_iso(), gid)).rowcount == 0:
         raise HTTPException(status_code=400, detail="Tuhle hru už nejde zrušit.")
     add_points(conn, g["p1_id"], g["stake"], f"Zrušená hra #{gid} – vrácení vkladu")
+    restore_wager_limit(conn, g["p1_id"], g["stake"])   # zrušeno před hrou → vrať i denní limit
     conn.commit()
     return {"ok": True}
 
@@ -516,6 +522,7 @@ def _expire_open_duels(conn) -> None:
     for d in rows:
         if _seconds_since(d["created_at"]) > DUEL_OPEN_TTL_S:
             add_points(conn, d["p1_id"], d["stake"], f"Vypršelá výzva (duel #{d['id']}) – vrácení vkladu")
+            restore_wager_limit(conn, d["p1_id"], d["stake"])   # nikdo nepřijal → vrať i denní limit
             conn.execute("UPDATE duels SET status='cancelled', updated_at=? WHERE id=?", (now_iso(), d["id"]))
             changed = True
     if changed:
@@ -670,6 +677,7 @@ def duel_join(did: int, request: Request, user: sqlite3.Row = Depends(require_us
                        (user["id"], now_iso(), did))
     if cur.rowcount == 0:
         add_points(conn, user["id"], d["stake"], f"Duel #{did} už obsazen – vrácení vkladu")
+        restore_wager_limit(conn, user["id"], d["stake"])   # nehráls → vrať i denní limit
         conn.commit()
         raise HTTPException(status_code=409, detail="Někdo byl rychlejší. Vklad ti vracíme. 🪙")
     _resolve_duel(conn, did)        # coinflip/dice se vyhodnotí hned
@@ -690,6 +698,7 @@ def duel_cancel(did: int, user: sqlite3.Row = Depends(require_user),
                     (now_iso(), did)).rowcount == 0:
         raise HTTPException(status_code=400, detail="Tuhle výzvu už nejde zrušit.")
     add_points(conn, d["p1_id"], d["stake"], f"Zrušená výzva (duel #{did}) – vrácení vkladu")
+    restore_wager_limit(conn, d["p1_id"], d["stake"])   # zrušeno před hrou → vrať i denní limit
     conn.commit()
     return {"ok": True}
 
