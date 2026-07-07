@@ -1512,7 +1512,7 @@ async function pageUserProfile(nick) {
       ${canDM(state.user) && state.user.id !== p.id ? `<a href="#/zpravy/${p.id}" class="btn btn-primary" style="margin:16px 0 2px;display:inline-block">✉️ Napsat zprávu</a>` : ""}
       ${state.user && state.user.id !== p.id ? `<a href="#/vs/${encodeURIComponent(p.username)}" class="btn btn-ghost" style="margin:16px 0 2px 8px;display:inline-block">⚔️ Porovnat</a>` : ""}
       <div class="stat-grid" style="margin-top:18px">
-        ${statBox(fmtPts(p.points), "Sedláků teď", "accent")}
+        ${statBox(fmtPts(p.points), p.escrow > 0 ? `Sedláků teď · 🔒 ${fmtPts(p.escrow)} v sázkách` : "Sedláků teď", "accent")}
         ${statBox(fmtPts(p.earned_total), "Celkem vyděláno")}
         ${statBox(fmtPts(p.spent_total), "Celkem utraceno")}
         ${statBox(fmtPts(p.biggest_win), "Největší zisk")}

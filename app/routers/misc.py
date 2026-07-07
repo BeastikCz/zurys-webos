@@ -377,8 +377,14 @@ def public_profile(nick: str = Query("", max_length=64),
     _decor_owned = {r["decor_key"] for r in conn.execute("SELECT decor_key FROM garden_decor WHERE user_id = ?", (uid,))}
     garden_decor = [d["icon"] for d in _g.DECOR if d["key"] in _decor_owned]
     garden_plots = _g.N_PLOTS + sum(1 for k in _g.PLOT_DECORS if k in _decor_owned)
+    # sedláci zamčení v otevřených výzvách (duel/piškvorky) – vklad je stržený, ale vrátí se když
+    # výzvu nikdo nepřijme. Bez toho vypadá „0 teď" jako by o body přišel (viz deviixius 3× coinflip).
+    escrow = conn.execute(
+        "SELECT COALESCE((SELECT SUM(stake) FROM duels WHERE p1_id=? AND status='open'),0) + "
+        "COALESCE((SELECT SUM(stake) FROM games WHERE p1_id=? AND status='open'),0) AS e",
+        (uid, uid)).fetchone()["e"] or 0
     return {
-        "id": uid,
+        "id": uid, "escrow": escrow,
         "username": u["username"], "avatar_url": u["avatar_url"] or "", "role": u["role"],
         "created_at": u["created_at"], "points": u["points"],
         "rank": rank, "league": league_key, "league_mult": league_mult,
