@@ -449,7 +449,8 @@ main { padding: 0 0 80px; min-height: calc(100vh - var(--header-h)); overflow-x:
 .lb-meta { text-align: center; color: var(--text-dim); font-weight: 800; font-size: 13px; letter-spacing: .6px; text-transform: uppercase; margin: -4px 0 14px; }
 
 /* --- Pódium (TOP 3) --- */
-.podium { position: relative; display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; align-items: end; margin: 6px 0 26px; padding-top: 50px; z-index: 0; }
+.podium { position: relative; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; align-items: end; margin: 6px 0 26px; padding-top: 50px; z-index: 0; }
+.podium-card { min-width: 0; }   /* minmax(0,1fr) + min-width:0 → track nepřeroste viewport kvůli dlouhému číslu (mobil: 3. místo mizelo za okrajem) */
 .podium::before { content: ""; position: absolute; left: 50%; top: 4px; transform: translateX(-50%); width: min(640px, 96%); height: 320px; z-index: -1; pointer-events: none; background: radial-gradient(ellipse at center top, var(--accent-glow), transparent 60%); opacity: .55; filter: blur(6px); }
 
 .podium-card { position: relative; z-index: 1; display: flex; flex-direction: column; align-items: center; text-align: center; padding: 20px 12px 0; border: 1px solid var(--border); border-bottom: none; border-radius: var(--r) var(--r) 0 0; background: linear-gradient(180deg, var(--surface-2), var(--surface)); animation: pod-pop .55s cubic-bezier(.2, .9, .3, 1.4) backwards; animation-delay: var(--d, 0s); }
@@ -1084,6 +1085,11 @@ footer.site-footer { border-top: 1px solid var(--border); padding: 22px 0; color
   .topbar-inner { gap: 8px; } .top-right { gap: 6px; }
   .logo .brand { letter-spacing: .04em; }
   body.logged-in .logo .brand { display: none; }   /* přihlášený → uvolnit místo pts-pillu (jen „Z") */
+  /* pódium: i 8–10místné číslo vítěze (miliony) se musí vejít do třetinové karty, ne přetéct přes sousedy */
+  .podium { gap: 5px; }
+  .podium-card { padding-left: 3px; padding-right: 3px; }
+  .pod-pts .pod-num { font-size: 15px; } .podium-1 .pod-pts .pod-num { font-size: 19px; }
+  .pod-pts span { font-size: 9px; }
 }
 /* --- Malé telefony (≤360 px): jen značka „Z", ať topbar dýchá --- */
 @media (max-width: 360px) {
