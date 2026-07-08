@@ -638,7 +638,7 @@ async function loadMilestone() {
     const span = (m.next_at - m.prev_at) || 1;
     const pct = Math.max(3, Math.min(100, Math.round((m.spent - m.prev_at) * 100 / span)));
     el.innerHTML = `<div class="ms-bar">
-        <div class="ms-top">🏆 Utraceno celkem <b>${Number(m.spent).toLocaleString("cs-CZ")} 🌾</b> <span class="faint">— další odměna: <b style="color:var(--text)">${esc(m.next_reward)}</b></span></div>
+        <div class="ms-top">🏆 Utraceno v shopu <b>${Number(m.spent).toLocaleString("cs-CZ")} 🌾</b> <span class="faint">— další odměna: <b style="color:var(--text)">${esc(m.next_reward)}</b></span></div>
         <div class="ms-track"><div class="ms-fill" style="width:${pct}%"></div></div>
         <div class="ms-foot faint">ještě ${Number(m.next_at - m.spent).toLocaleString("cs-CZ")} 🌾 do odměny</div>
       </div>`;
