@@ -1338,7 +1338,7 @@ async function loadCrewTop() {
           <span class="crew-name"><b>${esc(c.name)}</b>${c.tag ? ` <span class="crew-tag">[${esc(c.tag)}]</span>` : ""}${c.at_war ? ' <span class="crew-war-badge" title="Právě ve válce">⚔️</span>' : ""}</span>
           <span class="crew-meta">⭐${c.level} · ${c.members} 👤 · <b>${Number(c.week_xp).toLocaleString("cs-CZ")}</b> XP</span>
         </a>`).join("")}</div>
-      <div style="margin-top:8px"><a class="btn btn-ghost btn-sm" href="#/crews">Celý žebříček part →</a></div>`;
+      <div style="margin-top:8px"><a class="btn btn-ghost btn-sm" href="#/crews/all">Celý žebříček part →</a></div>`;
   } catch (e) { box.innerHTML = ""; }
 }
 
@@ -6752,7 +6752,8 @@ async function pageCrews(param) {
   _crewId = null;
   try {
     let cid = (param && /^\d+$/.test(param)) ? parseInt(param, 10) : null;
-    if (!cid) { const mine = await api("/crews/mine"); cid = mine.crew_id; }
+    const wantLobby = param === "all";                 // #/crews/all = vždy žebříček všech part (ne auto-open moje)
+    if (!cid && !wantLobby) { const mine = await api("/crews/mine"); cid = mine.crew_id; }
     if (cid) {
       try {
         const d = await api("/crews/" + cid);
@@ -6919,7 +6920,7 @@ function renderCrewDetail(d) {
       </div>
       ${d.is_member
         ? `<div class="toolbar" style="gap:6px;flex-wrap:wrap">${d.code ? `<button class="btn btn-sm btn-ghost" data-action="crew-copy" data-code="${esc(d.code)}">📋 Kód</button>` : ""}<button class="btn btn-sm btn-ghost" data-action="crew-history" title="Historie party">📜</button>${d.is_leader ? `<button class="btn btn-sm btn-ghost" data-action="crew-settings" title="Nastavení party">⚙️</button>` : ""}<button class="btn btn-sm btn-danger" data-action="crew-leave">Odejít</button></div>`
-        : `<a class="btn btn-sm btn-ghost" href="#/crews">← Žebříček</a>`}
+        : `<a class="btn btn-sm btn-ghost" href="#/crews/all">← Žebříček</a>`}
     </div>
     <div id="crewWar">${crewWarHTML(d)}</div>
     ${(d.motd || (d.achievements && d.achievements.length)) ? `<div class="panel crew-info" style="margin-bottom:14px">${d.motd ? `<div class="crew-motd">📝 ${esc(d.motd)}</div>` : ""}${(d.achievements && d.achievements.length) ? `<div class="crew-achs">${d.achievements.map((a) => `<span class="crew-ach">${a.icon} ${esc(a.name)}</span>`).join("")}</div>` : ""}</div>` : ""}
