@@ -742,8 +742,8 @@ def test_war_finalize_winner_loser_and_log():
     assert any(e["event"] == "war_end" and "Vyhráno" in (e["detail"] or "") for e in log["events"])
 
 
-def test_war_win_loots_enemy_xp_capped_daily(client):
-    """Výhra → vítěz ukořistí 50 % války XP nepřítele do crews.xp (level), 1×/parta/DEN.
+def test_war_win_loots_enemy_xp_no_cap(client):
+    """Výhra → vítěz ukořistí 50 % války XP nepřítele do crews.xp (level), BEZ stropu.
     Kopie: poražený o XP nepřijde, sedláky členů se nemění."""
     sfx = secrets.token_hex(3)
     l1 = _mk_user(50000); st1 = _run(crews.create, l1, f"RW1_{sfx}", f"RewWin {sfx}", "")
@@ -764,10 +764,10 @@ def test_war_win_loots_enemy_xp_capped_daily(client):
     assert _crew_xp(l1) == win_xp0 + loot, "vítěz ukořistil 50 % XP nepřítele do levelu"
     assert _crew_xp(l2) == lose_xp0, "poražený o XP nepřijde (kopie, ne transfer)"
     assert _points(m1) == bal_m1, "sedláky členů se nemění (kořist jde do levelu, ne do peněženky)"
-    # denní gate: druhá kořist ve stejný den = 0 (anti-farm faucet do levelů)
+    # bez stropu: druhá kořist se vyplatí znovu (throttle = 24h válka, ne per-perioda gate)
     conn = get_conn()
     try:
-        assert crews._pay_war_loot(conn, st1["id"], 2000) == 0, "2× kořist/den blokovaná"
+        assert crews._pay_war_loot(conn, st1["id"], 2000) == loot, "bez stropu se kořist vyplatí i podruhé"
         conn.rollback()
     finally:
         conn.close()

@@ -22,7 +22,7 @@ EMBLEM_COST = 5000        # změna emblému party = sink sedláků (kosmetika, v
 LEAVE_COOLDOWN_H = 6      # po odchodu z party musíš počkat X h než vstoupíš jinam (anti-churn/hop)
 MOTD_MAX = 200           # max délka crew popisu/MOTD
 WAR_HOURS = 24           # Crew War trvá 1 den; status (war_wins/losses/draws) + kořist XP vítězi (níž)
-WAR_LOOT_FRAC = 0.5      # vítěz ukořistí 50 % války XP nepřítele → do levelu party (1×/parta/DEN, anti-farm)
+WAR_LOOT_FRAC = 0.5      # vítěz ukořistí 50 % války XP nepřítele → do levelu party (bez stropu; throttle = 24h válka)
 EMBLEMS = ["🌾", "🚜", "🐮", "🐔", "🌽", "🥕", "🍺", "⚔️", "🔥", "👑", "🛠️", "🥔",
            "🐺", "🦅", "🐗", "🐉", "🦁", "🐂", "🏰", "🛡️", "🏹", "💀", "⭐", "🍻",
            "🌻", "🐝", "🐴", "🍎", "🪓", "🎯"]
@@ -557,16 +557,11 @@ def claim_goal(conn, uid):
 # do svého crews.xp (level). Kopie – poražený o nic nepřijde. Lazy finalizace (jako aukce _finalize_expired).
 def _pay_war_loot(conn, winner_id, loser_delta):
     """Kořist za VÝHRU: vítěz +WAR_LOOT_FRAC × (XP co nepřítel za válku nafarmil) do crews.xp (level party).
-    Kopie – poražený si své XP nechá. Max 1×/parta/DEN (válka trvá 1 den → každá denní válka může platit;
-    strop proti spamu). Jen reálná výhra (ne dissolve-win → zavírá abusy typu vytvoř+rozpusť spojence).
-    Vrací připsanou kořist (0 = nic). Necommituje."""
+    Kopie – poražený si své XP nechá. BEZ stropu (přirozený throttle: válka trvá 1 den + 1 aktivní válka/parta
+    → reálně ~1 výhra/den). Dvojité výplatě brání atomický status='ended' v _finalize_wars (1 výplata/válka),
+    ne per-perioda gate. Jen reálná výhra (ne dissolve-win). Vrací připsanou kořist (0 = nic). Necommituje."""
     loot = int(round(max(0, loser_delta) * WAR_LOOT_FRAC))
     if loot <= 0:
-        return 0
-    day = local_date()   # denní gate (sloupec war_reward_week teď drží DATUM, ne ISO týden) – 1 den = 1 válka
-    # atomický denní gate na partě → i souběh finalizací odmění max 1×/den
-    if conn.execute("UPDATE crews SET war_reward_week=? WHERE id=? AND (war_reward_week IS NULL OR war_reward_week<>?)",
-                    (day, winner_id, day)).rowcount != 1:
         return 0
     conn.execute("UPDATE crews SET xp = xp + ? WHERE id=?", (loot, winner_id))
     return loot
@@ -612,7 +607,7 @@ def _finalize_wars(conn):
             conn.execute("UPDATE crew_wars SET winner_crew_id=? WHERE id=?", (winner["id"], w["id"]))
             conn.execute("UPDATE crews SET war_wins=war_wins+1 WHERE id=?", (winner["id"],))
             conn.execute("UPDATE crews SET war_losses=war_losses+1 WHERE id=?", (loser["id"],))
-            loot = _pay_war_loot(conn, winner["id"], ld)     # kořist: 50 % XP nepřítele do levelu (1×/parta/den)
+            loot = _pay_war_loot(conn, winner["id"], ld)     # kořist: 50 % XP nepřítele do levelu (bez stropu)
             bonus_txt = f" Ukořistili jste +{loot} XP z nepřítele → level party ⬆️" if loot else ""
             _log(conn, winner["id"], "war_end", detail=f"Vyhráno proti {loser['name']} ({wd} : {ld} XP) 🏆{f' +{loot} XP kořist' if loot else ''}")
             _log(conn, loser["id"], "war_end", detail=f"Prohráno proti {winner['name']} ({ld} : {wd} XP)")
