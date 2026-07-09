@@ -5330,7 +5330,7 @@ function chRenderPicked(presets) {
     <div class="section-title">Vybráno: <b>${esc(p.name)}</b> <span class="faint" style="font-size:12px">(ID ${p.id})</span></div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
       ${presets.map(([eur, arr]) => `<button class="btn" data-action="ch-award" data-eur="${eur}"
-        title="+${arr[1]} sedláků, +${arr[0]} XP">${eur} € <span class="faint" style="font-size:11px">+${Number(arr[1]).toLocaleString("cs-CZ")}🌾</span></button>`).join("")}
+        title="+${arr[1]} sedláků, +${arr[0]} XP">${eur} € <span class="faint" style="font-size:11px">+${Number(arr[1]).toLocaleString("cs-CZ")}🌾 · +${Number(arr[0]).toLocaleString("cs-CZ")} XP</span></button>`).join("")}
     </div>`;
 }
 async function chAward(eur, force) {
