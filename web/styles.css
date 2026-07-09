@@ -110,13 +110,15 @@ main { padding: 0 0 80px; min-height: calc(100vh - var(--header-h)); overflow-x:
 
 /* ============ Activity ticker ============ */
 .ticker { background: var(--bg-2); border-bottom: 1px solid var(--border); overflow: hidden; position: relative; width: 100vw; left: 50%; margin-left: -50vw; }
-.ticker-track { display: inline-flex; align-items: center; gap: 28px; padding: 9px 0; white-space: nowrap; animation: ticker 42s linear infinite; }
+.ticker-track { display: inline-flex; align-items: center; gap: 0; padding: 9px 0; white-space: nowrap; animation: ticker 54s linear infinite; }
+.ticker-copy { display: inline-flex; align-items: center; gap: 28px; }
 .ticker:hover .ticker-track { animation-play-state: paused; }
 .ticker-item { display: inline-flex; align-items: center; gap: 8px; font-size: 12.5px; }
 .ticker-item .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--success); box-shadow: 0 0 8px var(--success); }
 .ticker-item .who { font-weight: 800; color: var(--accent-2); }
 .ticker-item .what { color: var(--text-dim); }
 @keyframes ticker { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+@media (prefers-reduced-motion: reduce) { .ticker-track { animation: none; } }
 
 /* ============ Buttons ============ */
 .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 11px 18px; border-radius: 10px; border: 1px solid transparent; font-weight: 800; font-size: 13.5px; transition: .14s; white-space: nowrap; }
@@ -155,6 +157,8 @@ main { padding: 0 0 80px; min-height: calc(100vh - var(--header-h)); overflow-x:
 .da-head h1 { font-size: 34px; font-weight: 900; letter-spacing: -.01em; }
 .da-head h1 .accent { color: var(--accent); }
 .da-head p { color: var(--text-dim); margin-top: 6px; }
+.shop-how { margin-top: 10px; padding: 0; border: 0; background: none; color: var(--accent); font: inherit; font-size: 13px; font-weight: 800; }
+.shop-how:hover { text-decoration: underline; }
 .da-filters { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; margin-bottom: 20px; }
 .da-filters .spacer { flex: 1; }
 

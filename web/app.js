@@ -415,7 +415,8 @@ function pageShop() {
     <div id="shopAuctions"></div>
     <div class="da-head shop-hero"><img src="/sedlak-cut.png" class="hero-sedlak" alt="Sedlák" />
       <div><h1>Zurys <span class="accent">Shop</span></h1>
-      <p>Utrať nasbírané sedláky za prémiové skiny a odměny — instantní odměny, limitky i tomboly. 🌾</p></div></div>
+      <p>Utrať nasbírané sedláky za prémiové skiny a odměny — instantní odměny, limitky i tomboly. 🌾</p>
+      <button class="shop-how" data-action="open-welcome">🌾 Jak získat sedláky?</button></div></div>
     <div id="onbCard"></div>
     <div id="happyBanner"></div>
     <div id="soldFeed"></div>
@@ -443,7 +444,7 @@ async function loadActivity() {
     const items = await api("/shop/activity?limit=24");
     if (!items.length) { t.innerHTML = `<span class="ticker-item"><span class="dot"></span><span class="what">Buď první, kdo něco vyhraje! ⚡</span></span>`; return; }
     const one = items.map((a) => `<span class="ticker-item"><span class="dot"></span><span class="who">${uLink(a.username)}</span><span class="what">${esc(a.text)}</span></span>`).join("");
-    t.innerHTML = one + one;  // 2× pro plynulé scrollování
+    t.innerHTML = `<span class="ticker-copy">${one}</span><span class="ticker-copy" aria-hidden="true">${one}</span>`;
   } catch (e) { t.innerHTML = ""; }
 }
 
