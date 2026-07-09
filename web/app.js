@@ -149,7 +149,7 @@ const ADMIN_SECTIONS = {
   overview: [], stats: ["broadcaster"], products: ["mod", "broadcaster"], users: ["mod", "broadcaster"], subs: [], orders: ["mod", "broadcaster"],
   raffles: ["broadcaster"], auctions: ["broadcaster"], crews: ["broadcaster"], codes: ["broadcaster"], drops: ["broadcaster"], games: ["mod", "broadcaster"], bot: ["broadcaster"],
   predictions: ["mod", "predictor", "broadcaster"], economy: ["broadcaster"], news: ["broadcaster"], security: [],
-  modnabor: ["broadcaster"], gifts: ["broadcaster"],
+  modnabor: ["broadcaster"], gifts: ["broadcaster"], casehug: ["broadcaster"],
 };
 function isStaff(u) { return !!u && ["admin", "broadcaster", "mod", "predictor"].includes(u.role); }
 function hasEarlyAccess(u) { return !!u && (u.early_access || u.role === "admin"); }   // Crew = early access (admin grantuje); Statek zatím JEN admin
@@ -3335,7 +3335,7 @@ async function pageAdmin() {
     ["overview", "📊 Přehled"], ["products", "🎁 Odměny"], ["users", "👥 Uživatelé"], ["subs", "💜 Suby"], ["orders", "📦 Objednávky"],
     ["raffles", "🎟️ Tomboly"], ["auctions", "🔨 Aukce"], ["crews", "🛡️ Crew"], ["predictions", "🎯 Predikce"], ["codes", "🎫 Kódy"], ["drops", "🎁 Dropy"], ["games", "🎮 Hry"],
     ["bot", "🤖 Kick bot"], ["economy", "⚙️ Ekonomika"], ["news", "📣 Novinky"], ["security", "🛡️ Bezpečnost"],
-    ["modnabor", "🛡️ Nábor modů"], ["gifts", "💝 Dary"],
+    ["modnabor", "🛡️ Nábor modů"], ["gifts", "💝 Dary"], ["casehug", "💚 CaseHug"],
   ].filter(([k]) => canSection(state.user, k));
   if (!tabs.some(([k]) => k === adminState.tab)) adminState.tab = tabs.length ? tabs[0][0] : null;
   const ROLE_LBL = { broadcaster: "Broadcaster", predictor: "Predikce", mod: "Moderátor" };
@@ -3623,6 +3623,7 @@ function renderAdminTab(tab) {
   else if (tab === "security") adminSecurity();
   else if (tab === "modnabor") adminModApps();
   else if (tab === "gifts") adminGifts();
+  else if (tab === "casehug") adminCasehug();
 }
 
 /* --- Admin: Ekonomika (pasivní výdělek) --- */
@@ -5274,6 +5275,78 @@ async function adminGifts() {
     box.innerHTML = giftRequestsHTML(giftReqs);
   } catch (e) { box.innerHTML = `<div class="empty">${esc(e.message)}</div>`; }
 }
+
+/* --- Admin: CaseHug vklady (screen ověřený na Discordu → klik na preset) --- */
+const chState = { picked: null };
+async function adminCasehug() {
+  const box = $("#adminContent");
+  box.innerHTML = skeletonCards(2);
+  try {
+    const d = await api("/admin/casehug/recent");
+    const presets = Object.entries(d.presets);   // [["2",[800,400]], …]
+    const m = d.month || {};
+    box.innerHTML = `
+      <div class="panel" style="margin-bottom:16px">
+        <div class="section-title" style="margin-top:0">💚 Připsat vklad CaseHug</div>
+        <div class="faint" style="font-size:13px;margin-bottom:12px">
+          1. Divák pošle screen vkladu (celá obrazovka, viditelný nick + částka + datum) do Discordu.
+          2. Zkontroluj screen. 3. Najdi ho tady a klikni částku — sedláci + XP se připíšou hned
+          (XP jako supporter, počítá se do levelu i crew).</div>
+        <input class="input" id="chSearch" placeholder="Hledej nick…" autocomplete="off" style="max-width:340px">
+        <div id="chResults" class="stack-12" style="margin-top:10px"></div>
+        <div id="chPicked" style="margin-top:12px"></div>
+      </div>
+      <div class="panel">
+        <div class="row-between">
+          <div class="section-title" style="margin-top:0">Historie připsaných vkladů</div>
+          <span class="faint" style="font-size:12.5px">Tento měsíc: <b>${m.count || 0}×</b> · ${Number(m.eur || 0)} € nahlášeno · ${Number(m.points || 0).toLocaleString("cs-CZ")} 🌾 vyplaceno — srovnej s reálnou affiliate výplatou!</span>
+        </div>
+        ${(d.recent || []).length ? `<div style="overflow-x:auto"><table class="table"><thead><tr><th>Kdo</th><th>Vklad</th><th>Sedláci</th><th>Kdy</th></tr></thead><tbody>
+          ${d.recent.map((r) => `<tr><td><b>${esc(r.username || "smazaný účet")}</b></td><td>${esc((r.reason.match(/CaseHug (\d+) €/) || [])[1] || "?")} €</td><td>+${Number(r.change).toLocaleString("cs-CZ")}</td><td class="faint">${timeAgo(r.created_at)}</td></tr>`).join("")}
+        </tbody></table></div>` : `<div class="empty">Zatím žádné vklady.</div>`}
+      </div>`;
+    const inp = $("#chSearch");
+    let t = null;
+    inp.addEventListener("input", () => { clearTimeout(t); t = setTimeout(chSearch, 250); });
+    if (chState.picked) chRenderPicked(presets);
+  } catch (e) { box.innerHTML = `<div class="empty">${esc(e.message)}</div>`; }
+}
+async function chSearch() {
+  const q = ($("#chSearch")?.value || "").trim();
+  const box = $("#chResults");
+  if (!box) return;
+  if (q.length < 2) { box.innerHTML = ""; return; }
+  try {
+    const d = await api("/admin/casehug/search?q=" + encodeURIComponent(q));
+    box.innerHTML = (d.users || []).map((u) => `
+      <div class="row-between" style="padding:8px 10px;border:1px solid var(--border);border-radius:10px">
+        <span><b>${esc(u.username)}</b> <span class="faint" style="font-size:12px">${Number(u.points).toLocaleString("cs-CZ")} 🌾 · ID ${u.id}</span></span>
+        <button class="btn btn-sm" data-action="ch-pick" data-id="${u.id}" data-name="${esc(u.username)}">Vybrat</button>
+      </div>`).join("") || `<div class="faint">Nikdo nenalezen.</div>`;
+  } catch (e) { box.innerHTML = `<div class="faint">${esc(e.message)}</div>`; }
+}
+function chRenderPicked(presets) {
+  const p = chState.picked;
+  $("#chPicked").innerHTML = !p ? "" : `
+    <div class="section-title">Vybráno: <b>${esc(p.name)}</b> <span class="faint" style="font-size:12px">(ID ${p.id})</span></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
+      ${presets.map(([eur, arr]) => `<button class="btn" data-action="ch-award" data-eur="${eur}"
+        title="+${arr[1]} sedláků, +${arr[0]} XP">${eur} € <span class="faint" style="font-size:11px">+${Number(arr[1]).toLocaleString("cs-CZ")}🌾 · +${Number(arr[0]).toLocaleString("cs-CZ")} XP</span></button>`).join("")}
+    </div>`;
+}
+async function chAward(eur, force) {
+  const p = chState.picked;
+  if (!p) return;
+  if (!force && !confirm(`Připsat ${p.name} odměnu za vklad ${eur} € na CaseHug?`)) return;
+  try {
+    const r = await api("/admin/casehug/award", { method: "POST", body: { user_id: p.id, eur: parseInt(eur, 10), force: !!force } });
+    toast(`💚 ${r.user}: +${Number(r.points).toLocaleString("cs-CZ")} sedláků, +${Number(r.xp).toLocaleString("cs-CZ")} XP (${r.eur} €)`, "success");
+    adminCasehug();
+  } catch (e) {
+    if (String(e.message).includes("před chvílí") && confirm(e.message)) { chAward(eur, true); return; }
+    toast(e.message, "error");
+  }
+}
 async function banIp() {
   const ip = ($("#ipBanIp")?.value || "").trim();
   const reason = ($("#ipBanReason")?.value || "").trim();
@@ -6241,6 +6314,8 @@ function handleAction(action, el) {
     case "notif-go": closeNotifs(); if (el.dataset.link) location.hash = el.dataset.link; break;
     /* admin */
     case "admin-tab": renderAdminTab(el.dataset.tab); break;
+    case "ch-pick": chState.picked = { id: parseInt(el.dataset.id, 10), name: el.dataset.name }; adminCasehug(); break;
+    case "ch-award": chAward(el.dataset.eur, false); break;
     case "modapp-accept": modAppDecide(el.dataset.id, true, el.dataset.name); break;
     case "modapp-reject": modAppDecide(el.dataset.id, false, el.dataset.name); break;
     case "modapp-toggle": modAppToggle(); break;

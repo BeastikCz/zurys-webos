@@ -147,6 +147,26 @@ def test_leave_disbands_solo(client):
     assert _member(u) is None and not _crew_exists(st["id"])
 
 
+def test_deleted_user_frees_crew_slot(client):
+    """Regrese (faze-clan bug 9.7.): smazání usera (import ghostů) musí cascade-smazat jeho crew_members
+    řádek. Bez FK zůstal ORPHAN – počítal se do kapacity (COUNT) ale mizel ze seznamu (JOIN users) →
+    parta hlásila „plná" i když nebyla a nešlo do ní vstoupit."""
+    h = _mk_user(100000); st = _run(crews.create, h, "host", "Faze", "FZE")
+    members = [_mk_user(1000) for _ in range(crews.MEMBER_CAP - 1)]      # doplň na 6/6
+    for i, m in enumerate(members):
+        _run(crews.join, m, "m%d" % i, st["code"])
+    victim = members[0]
+    conn = get_conn()                                                    # simuluj import ghost cleanup
+    try:
+        conn.execute("DELETE FROM users WHERE id=?", (victim,)); conn.commit()
+    finally:
+        conn.close()
+    assert _member(victim) is None, "FK cascade musí smazat crew_members řádek, ne nechat orphan"
+    newbie = _mk_user(1000)                                              # uvolněný slot → join projde
+    st2 = _run(crews.join, newbie, "newbie", st["code"])
+    assert st2["members_count"] == crews.MEMBER_CAP                      # zpět na 6 reálných členů
+
+
 def test_leave_transfers_leader(client):
     h = _mk_user(100000); st = _run(crews.create, h, "host", "Transfer", "TRF")
     p = _mk_user(100000); _run(crews.join, p, "p", st["code"])

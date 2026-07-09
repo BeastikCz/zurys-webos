@@ -676,3 +676,12 @@ class PointsLogPurgeIn(BaseModel):
     aby nešlo omylem smáznout reálný ekonomický pohyb. Vše se loguje do admin auditu (reverze)."""
     ids: list[int] = Field(min_length=1, max_length=50)
     confirm_reason: Optional[str] = Field(default=None, max_length=40)
+
+
+# --- Admin: CaseHug vklady (ruční odměna za ověřený screen na Discordu) ---
+class CasehugAwardIn(BaseModel):
+    """Připsání odměny za nahlášený CaseHug vklad. eur MUSÍ být jeden z presetů (server validuje).
+    force=True přebije 10min dedup varování (fakt dva stejné vklady po sobě)."""
+    user_id: int
+    eur: int
+    force: bool = False

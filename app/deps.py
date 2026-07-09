@@ -391,6 +391,7 @@ _SECTION_BY_PREFIX = [
     ("/api/admin/crews", "crews"),
     ("/api/admin/codes", "codes"),
     ("/api/admin/gift-requests", "gifts"),
+    ("/api/admin/casehug", "casehug"),
     ("/api/admin/security", "security"),
     ("/api/admin/backup", "security"),
     ("/api/admin/drops", "drops"),

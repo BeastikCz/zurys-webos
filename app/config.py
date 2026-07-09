@@ -54,6 +54,7 @@ ADMIN_SECTIONS = {
     "economy":  (ROLE_BROADCASTER,),   # vč. zapnout/vypnout stream (live toggle)
     "news":     (ROLE_BROADCASTER,),   # patch notes / novinky (changelog)
     "gifts":    (ROLE_BROADCASTER,),   # schvalování žádostí o dar bodů (gift requests)
+    "casehug":  (ROLE_BROADCASTER,),   # ruční odměny za CaseHug vklady (screen ověřen na Discordu)
     "security": (),
 }
 
