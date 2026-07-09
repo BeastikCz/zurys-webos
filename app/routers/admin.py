@@ -25,7 +25,7 @@ from ..models import (ProductIn, SkinLookupIn, SkinSearchIn, ImageUploadIn, User
                       LiveModeIn, LegacyImportIn, PatchNoteIn, CommunityGoalIn, SubGoalIn, ModAppDecideIn, ManualOrderIn, ManualOrderBulkIn,
                       PointsLogPurgeIn, PartnerLinkIn, PartnerFlashConfigIn, GamesRakeIn, LiveHappyIn,
                       SelfExcludeIn, TimeoutIn, ShopDiscountIn, BanClusterIn, MinesBanIn, BroadcastIn, EggArmIn,
-                      AuctionCreateIn)
+                      AuctionCreateIn, CasehugAwardIn)
 from ..services import product_public, shop_discount_pct
 from ..security import new_code, secure_choice
 
@@ -2756,3 +2756,109 @@ def backup_db(request: Request,
     fname = f"webos-zaloha-{datetime.now(timezone.utc).strftime('%Y-%m-%d')}.db"
     return FileResponse(str(out), filename=fname, media_type="application/octet-stream",
                         background=BackgroundTask(out.unlink, missing_ok=True))
+
+
+# ---------------- CaseHug vklady (ruční odměna, screen ověřen na Discordu) ----------------
+# CaseHug affiliate nemá API/export → divák pošle screen vkladu do Discordu, admin/broadcaster ho
+# porovná a tady jen klikne preset. Sedláci jdou přes add_points(xp=False) + XP se přičítá EXPLICITNĚ
+# jako supporter (uncapped, krmí crew jako sub) – NEsahá se na sdílenou classify_xp (retro přepočet,
+# battlepass i žebříčky ji sdílí; reason „Vklad CaseHug" v ní default klasifikuje jako farm ≠ chceme).
+CASEHUG_PRESETS = {2: (800, 400), 5: (2200, 1100), 10: (5000, 2500),
+                   20: (11000, 5500), 50: (30000, 15000), 100: (65000, 32000)}   # € → (XP, sedláci)
+CASEHUG_REASON = "Vklad CaseHug {eur} € 💚"
+CASEHUG_DEDUP_MIN = 10     # stejný user + stejný preset do X min = varování (409), force přebije
+
+
+def _casehug_hype(username: str, eur: int):
+    """Chat hype v background threadu (žádné blokující Kick HTTP v request handleru)."""
+    import threading
+
+    def _bg():
+        try:
+            from ..db import get_conn
+            c = get_conn()
+            try:
+                kickbot.send_message(
+                    c, f"💚 {username} podpořil farmu vkladem {eur} € na CaseHug (kód ZURYS)! Díky! 🌾",
+                    kind="system")
+            finally:
+                c.close()
+        except Exception:
+            pass
+    threading.Thread(target=_bg, daemon=True).start()
+
+
+@router.get("/casehug/search")
+def casehug_search(q: str = Query("", max_length=64),
+                   conn: sqlite3.Connection = Depends(db_dep),
+                   user: sqlite3.Row = Depends(require_user)):   # sekci 'casehug' hlídá admin_guard
+    """Lehký user picker (nick → id/avatar/body). Záměrně NE /admin/users (tahá IP a celé účty)."""
+    if not q.strip():
+        return {"users": []}
+    like = f"%{q.strip()}%"
+    rows = conn.execute(
+        "SELECT id, username, kick_username, avatar_url, points FROM users "
+        "WHERE username LIKE ? OR kick_username LIKE ? ORDER BY points DESC LIMIT 8",
+        (like, like)).fetchall()
+    return {"users": [dict(r) for r in rows]}
+
+
+@router.get("/casehug/recent")
+def casehug_recent(conn: sqlite3.Connection = Depends(db_dep),
+                   user: sqlite3.Row = Depends(require_user)):
+    """Posledních 30 připsaných vkladů + souhrn (kontrola proti měsíční affiliate výplatě)."""
+    rows = conn.execute(
+        "SELECT l.id, l.user_id, l.change, l.reason, l.created_at, u.username "
+        "FROM points_log l LEFT JOIN users u ON u.id = l.user_id "
+        "WHERE l.reason LIKE 'Vklad CaseHug %' ORDER BY l.id DESC LIMIT 30").fetchall()
+    month = now_iso()[:7]
+    tot = conn.execute(
+        "SELECT COUNT(*) AS n, COALESCE(SUM(l.change),0) AS pts FROM points_log l "
+        "WHERE l.reason LIKE 'Vklad CaseHug %' AND l.created_at LIKE ?", (month + "%",)).fetchone()
+    eur_month = 0
+    for r in conn.execute("SELECT reason FROM points_log WHERE reason LIKE 'Vklad CaseHug %' AND created_at LIKE ?",
+                          (month + "%",)):
+        try:
+            eur_month += int(r["reason"].split("CaseHug ")[1].split(" €")[0])
+        except (IndexError, ValueError):
+            pass
+    return {"recent": [dict(r) for r in rows], "presets": CASEHUG_PRESETS,
+            "month": {"count": tot["n"], "points": tot["pts"], "eur": eur_month}}
+
+
+@router.post("/casehug/award")
+def casehug_award(data: CasehugAwardIn, request: Request,
+                  conn: sqlite3.Connection = Depends(db_dep),
+                  user: sqlite3.Row = Depends(require_user)):
+    """Připíše divákovi odměnu za CaseHug vklad (preset €). Screen ověřuje člověk na Discordu."""
+    preset = CASEHUG_PRESETS.get(data.eur)
+    if not preset:
+        raise HTTPException(status_code=400, detail=f"Neplatná částka. Presety: {sorted(CASEHUG_PRESETS)} €.")
+    xp, pts = preset
+    target = conn.execute("SELECT id, username FROM users WHERE id = ?", (data.user_id,)).fetchone()
+    if not target:
+        raise HTTPException(status_code=404, detail="Uživatel neexistuje.")
+    reason = CASEHUG_REASON.format(eur=data.eur)
+    if not data.force:   # dedup: stejný user + stejný preset v posledních X minutách → nejspíš dvojklik
+        cutoff = (datetime.now(timezone.utc) - timedelta(minutes=CASEHUG_DEDUP_MIN)).isoformat()
+        dup = conn.execute(
+            "SELECT 1 FROM points_log WHERE user_id=? AND reason=? AND created_at>? LIMIT 1",
+            (data.user_id, reason, cutoff)).fetchone()
+        if dup:
+            raise HTTPException(status_code=409,
+                                detail=f"{target['username']} už dostal {data.eur} € vklad před chvílí. "
+                                       "Fakt znovu? Potvrď ještě jednou.")
+    add_points(conn, target["id"], pts, reason, xp=False)   # sedláci; XP níž explicitně (supporter)
+    conn.execute("UPDATE users SET earned_total = earned_total + ? WHERE id = ?", (xp, target["id"]))
+    try:                                                    # crew XP jako supporter (uncapped) – jako sub
+        from .. import crews as _crews
+        _crews.contribute(conn, target["id"], xp, is_sub=True)
+    except Exception:
+        pass
+    record_audit(conn, user, request, "casehug.award", target=target["username"],
+                 details=f"{data.eur} € → +{pts} PTS, +{xp} XP")
+    notify(conn, target["id"], "💚", "Vklad CaseHug potvrzen!",
+           f"+{pts} sedláků a +{xp} XP za vklad {data.eur} €. Díky za podporu farmy! 🌾", "#/shop")
+    conn.commit()
+    _casehug_hype(target["username"], data.eur)
+    return {"ok": True, "user": target["username"], "eur": data.eur, "points": pts, "xp": xp}
