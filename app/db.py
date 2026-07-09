@@ -690,7 +690,7 @@ CREATE TABLE IF NOT EXISTS crews (
 );
 CREATE TABLE IF NOT EXISTS crew_members (
     crew_id     INTEGER NOT NULL REFERENCES crews(id) ON DELETE CASCADE,
-    user_id     INTEGER NOT NULL UNIQUE,
+    user_id     INTEGER NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
     role        TEXT NOT NULL DEFAULT 'member',    -- leader | officer | member
     week_xp     INTEGER NOT NULL DEFAULT 0,        -- týdenní crew XP do žebříčku = farm(capnutý) + suby(uncapped)
     week_farm   INTEGER NOT NULL DEFAULT 0,        -- týdenní FARM akumulátor (jen pro cap; suby cap obcházejí)
@@ -976,6 +976,29 @@ def init_db() -> None:
             cols = [r[1] for r in conn.execute(f"PRAGMA table_info({table})").fetchall()]
             if col not in cols:
                 conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} {ddl}")
+        # crew_members.user_id historicky chyběl FK ON DELETE CASCADE (jediná user-vázaná tabulka bez něj) →
+        # smazání usera (import ghostů: navaja_import.undo / awp_import) nechávalo ORPHAN řádek. Ten se počítal
+        # do kapacity party (_insert_member COUNT(*)), ale mizel ze seznamu členů (JOIN users) → parta hlásila
+        # „plná" i když vypadala poloprázdná a nešlo do ní vstoupit. SQLite neumí ADD FK přes ALTER → přestav
+        # tabulku s FK a při kopii zahoď orphany (WHERE user_id IN users). Guard flag → 1× per DB. Běží PO
+        # column-loopu (potřebuje všech 10 sloupců); nic crew_members nereferuje → DROP je bezpečný.
+        if get_setting(conn, "_mig_crewmem_fk", "") != "1":
+            if not any(r[2] == "users" for r in conn.execute("PRAGMA foreign_key_list(crew_members)")):
+                _cm = "crew_id, user_id, role, week_xp, week_farm, contributed, sub_xp, week, claimed_week, joined_at"
+                conn.execute(
+                    "CREATE TABLE crew_members_new ("
+                    " crew_id INTEGER NOT NULL REFERENCES crews(id) ON DELETE CASCADE,"
+                    " user_id INTEGER NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,"
+                    " role TEXT NOT NULL DEFAULT 'member', week_xp INTEGER NOT NULL DEFAULT 0,"
+                    " week_farm INTEGER NOT NULL DEFAULT 0, contributed INTEGER NOT NULL DEFAULT 0,"
+                    " sub_xp INTEGER NOT NULL DEFAULT 0, week TEXT, claimed_week TEXT, joined_at TEXT NOT NULL,"
+                    " PRIMARY KEY (crew_id, user_id))")
+                conn.execute(f"INSERT INTO crew_members_new ({_cm}) SELECT {_cm} FROM crew_members "
+                             "WHERE user_id IN (SELECT id FROM users)")   # orphany se nezkopírují = purge
+                conn.execute("DROP TABLE crew_members")
+                conn.execute("ALTER TABLE crew_members_new RENAME TO crew_members")
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_crewmem_crew ON crew_members(crew_id)")
+            set_setting(conn, "_mig_crewmem_fk", "1")
         # Garden v1 ukládala aktivní útok jako pest=1 bez času. Převeď ho na v2
         # časovaný útok od zasazení; pest=0 pak znamená nezachráněný a funguje rescue.
         conn.execute(
