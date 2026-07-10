@@ -250,6 +250,61 @@ def create(conn, title: str, image_url: str, start_bid: int, min_increment: int,
     return {"ok": True, "id": cur.lastrowid, "ends_at": ends}
 
 
+def update(conn, auction_id: int, f: dict) -> dict:
+    """Úprava BĚŽÍCÍ aukce (jen poslaná pole). start_bid jde měnit jen dokud nikdo nepřihodil;
+    buy_now musí být 0 (vypnuto) nebo vyšší než aktuální příhoz; minutes = nový konec od teď."""
+    a = conn.execute("SELECT * FROM auctions WHERE id = ?", (auction_id,)).fetchone()
+    if not a:
+        return {"ok": False, "error": "Aukce nenalezena."}
+    if a["status"] != "active":
+        return {"ok": False, "error": "Upravit jde jen běžící aukce."}
+    sets, vals = [], []
+    if f.get("title") is not None:
+        t = f["title"].strip()
+        if not t:
+            return {"ok": False, "error": "Název nesmí být prázdný."}
+        sets.append("title = ?"); vals.append(t[:120])
+    if f.get("image_url") is not None:
+        sets.append("image_url = ?"); vals.append(_safe_image_url(f["image_url"]))
+    if f.get("start_bid") is not None:
+        if a["bids_count"]:
+            return {"ok": False, "error": "Vyvolávací cenu nejde měnit – už se přihazovalo."}
+        sets.append("start_bid = ?"); vals.append(max(1, int(f["start_bid"])))
+    if f.get("min_increment") is not None:
+        sets.append("min_increment = ?"); vals.append(max(1, int(f["min_increment"])))
+    if f.get("buy_now") is not None:
+        bn = max(0, int(f["buy_now"]))
+        if bn and bn <= (a["current_bid"] or 0):
+            return {"ok": False, "error": f"Kup-teď musí být vyšší než aktuální příhoz ({a['current_bid']})."}
+        sets.append("buy_now = ?"); vals.append(bn)
+    if f.get("minutes") is not None:
+        m = max(1, min(MAX_MINUTES, int(f["minutes"])))
+        sets.append("ends_at = ?"); vals.append((datetime.now(timezone.utc) + timedelta(minutes=m)).isoformat())
+    if f.get("sub_only") is not None:
+        sets.append("sub_only = ?"); vals.append(1 if f["sub_only"] else 0)
+    if f.get("chat_announce") is not None:
+        sets.append("chat_announce = ?"); vals.append(1 if f["chat_announce"] else 0)
+    if not sets:
+        return {"ok": False, "error": "Nic k úpravě."}
+    conn.execute(f"UPDATE auctions SET {', '.join(sets)} WHERE id = ? AND status = 'active'",
+                 (*vals, auction_id))
+    conn.commit()
+    return {"ok": True}
+
+
+def delete(conn, auction_id: int) -> dict:
+    """Smaže UKONČENOU/ZRUŠENOU aukci z historie. Aktivní se musí nejdřív zrušit (kvůli escrow)."""
+    a = conn.execute("SELECT status FROM auctions WHERE id = ?", (auction_id,)).fetchone()
+    if not a:
+        return {"ok": False, "error": "Aukce nenalezena."}
+    if a["status"] == "active":
+        return {"ok": False, "error": "Běžící aukci nejdřív zruš (vrátí escrow), pak smaž."}
+    conn.execute("DELETE FROM auction_bids WHERE auction_id = ?", (auction_id,))
+    conn.execute("DELETE FROM auctions WHERE id = ?", (auction_id,))
+    conn.commit()
+    return {"ok": True}
+
+
 def cancel(conn, auction_id: int) -> dict:
     """Zruší aktivní aukci → vrátí aktuálnímu vůdci jeho blokaci (escrow). Žádný vítěz."""
     from .deps import add_points, notify
@@ -284,6 +339,7 @@ def admin_list(conn) -> list:
         out.append({"id": a["id"], "title": a["title"], "image_url": a["image_url"] or "",
                     "status": a["status"], "current_bid": a["current_bid"], "bids_count": a["bids_count"],
                     "ends_at": a["ends_at"], "buy_now": a["buy_now"] or 0, "sub_only": bool(a["sub_only"]),
+                    "start_bid": a["start_bid"], "min_increment": a["min_increment"],
                     "chat_announce": bool(a["chat_announce"]),
                     "who": (wrow["username"] if wrow else None),
                     "who_kick": (wrow["kick_username"] if wrow else None)})

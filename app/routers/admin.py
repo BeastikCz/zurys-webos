@@ -26,7 +26,7 @@ from ..models import (ProductIn, SkinLookupIn, SkinSearchIn, ImageUploadIn, User
                       LiveModeIn, LegacyImportIn, PatchNoteIn, CommunityGoalIn, SubGoalIn, ModAppDecideIn, ManualOrderIn, ManualOrderBulkIn,
                       PointsLogPurgeIn, PartnerLinkIn, PartnerFlashConfigIn, GamesRakeIn, LiveHappyIn, FarmEventIn,
                       SelfExcludeIn, TimeoutIn, ShopDiscountIn, BanClusterIn, MinesBanIn, BroadcastIn, EggArmIn,
-                      AuctionCreateIn, CasehugAwardIn)
+                      AuctionCreateIn, AuctionUpdateIn, CasehugAwardIn)
 from ..services import product_public, shop_discount_pct
 from ..security import new_code, secure_choice
 
@@ -2637,6 +2637,35 @@ def admin_auction_create(data: AuctionCreateIn, request: Request,
         raise HTTPException(status_code=400, detail=r.get("error", "Vystavit se to nepodařilo."))
     record_audit(conn, admin, request, "auction.create", f"#{r['id']} {data.title}",
                  f"start {data.start_bid}, {data.minutes} min, buy_now {data.buy_now}, sub_only {data.sub_only}")
+    conn.commit()
+    return r
+
+
+@router.put("/auctions/{auction_id}")
+def admin_auction_update(auction_id: int, data: AuctionUpdateIn, request: Request,
+                         conn: sqlite3.Connection = Depends(db_dep),
+                         admin: sqlite3.Row = Depends(require_user)):
+    """Upraví běžící aukci (jen poslaná pole)."""
+    from .. import auctions
+    fields = data.model_dump(exclude_none=True)
+    r = auctions.update(conn, auction_id, fields)
+    if not r.get("ok"):
+        raise HTTPException(status_code=400, detail=r.get("error", "Upravit se to nepodařilo."))
+    record_audit(conn, admin, request, "auction.update", f"#{auction_id}", str(fields))
+    conn.commit()
+    return r
+
+
+@router.delete("/auctions/{auction_id}")
+def admin_auction_delete(auction_id: int, request: Request,
+                         conn: sqlite3.Connection = Depends(db_dep),
+                         admin: sqlite3.Row = Depends(require_user)):
+    """Smaže ukončenou/zrušenou aukci z historie (aktivní se musí nejdřív zrušit)."""
+    from .. import auctions
+    r = auctions.delete(conn, auction_id)
+    if not r.get("ok"):
+        raise HTTPException(status_code=400, detail=r.get("error", "Smazat se to nepodařilo."))
+    record_audit(conn, admin, request, "auction.delete", f"#{auction_id}", "")
     conn.commit()
     return r
 

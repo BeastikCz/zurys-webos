@@ -270,6 +270,18 @@ class AuctionCreateIn(BaseModel):
     chat_announce: bool = True
 
 
+class AuctionUpdateIn(BaseModel):
+    """Admin: úprava běžící aukce. Posílají se jen měněná pole (None = nechat)."""
+    title: str | None = Field(default=None, min_length=1, max_length=120)
+    image_url: str | None = Field(default=None, max_length=500)
+    start_bid: int | None = Field(default=None, ge=1, le=1_000_000_000)   # jen dokud nikdo nepřihodil
+    min_increment: int | None = Field(default=None, ge=1, le=1_000_000_000)
+    minutes: int | None = Field(default=None, ge=1, le=10080)             # nový konec = teď + minutes
+    buy_now: int | None = Field(default=None, ge=0, le=1_000_000_000)
+    sub_only: bool | None = None
+    chat_announce: bool | None = None
+
+
 class LoginCalClaimIn(BaseModel):
     """Vyzvednutí milníkového bonusu z login kalendáře (počet aktivních dní)."""
     milestone: int = Field(..., ge=1, le=31)

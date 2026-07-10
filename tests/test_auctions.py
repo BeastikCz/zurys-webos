@@ -251,3 +251,29 @@ def test_antisnipe_extends():
         assert 25 <= left <= 31, f"konec ~+30 s, je {left:.0f}"
     finally:
         conn.close()
+
+
+def test_update_and_delete():
+    from app.db import get_conn
+    from app import auctions
+    conn = get_conn()
+    try:
+        aid = auctions.create(conn, "Upd", "", 100, 50, 10)["id"]
+        u1 = _user(conn); conn.commit()
+        # bez příhozů jde měnit i vyvolávací cena
+        assert auctions.update(conn, aid, {"title": "Upd2", "start_bid": 200, "buy_now": 5000})["ok"]
+        a = conn.execute("SELECT * FROM auctions WHERE id=?", (aid,)).fetchone()
+        assert a["title"] == "Upd2" and a["start_bid"] == 200 and a["buy_now"] == 5000
+        auctions.bid(conn, _row(conn, u1), aid, 300)
+        assert not auctions.update(conn, aid, {"start_bid": 500})["ok"], "start_bid po příhozu zamčený"
+        assert not auctions.update(conn, aid, {"buy_now": 300})["ok"], "kup-teď <= aktuální příhoz zamítnut"
+        assert auctions.update(conn, aid, {"min_increment": 99, "sub_only": True})["ok"]
+        # delete: aktivní ne, po zrušení ano
+        assert not auctions.delete(conn, aid)["ok"], "aktivní nejde smazat"
+        assert auctions.cancel(conn, aid)["ok"]
+        assert _pts(conn, u1) == 100000, "escrow vrácen při zrušení"
+        assert auctions.delete(conn, aid)["ok"]
+        assert conn.execute("SELECT 1 FROM auctions WHERE id=?", (aid,)).fetchone() is None
+        assert conn.execute("SELECT 1 FROM auction_bids WHERE auction_id=?", (aid,)).fetchone() is None
+    finally:
+        conn.close()
