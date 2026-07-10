@@ -2823,8 +2823,9 @@ CASEHUG_REASON = "Vklad CaseHug {eur} € 💚"
 CASEHUG_DEDUP_MIN = 10     # stejný user + stejný preset do X min = varování (409), force přebije
 
 
-def _casehug_hype(username: str, eur: int):
-    """Chat hype v background threadu (žádné blokující Kick HTTP v request handleru)."""
+def _casehug_hype(username: str):
+    """Chat hype v background threadu (žádné blokující Kick HTTP v request handleru).
+    Bez částky – kolik kdo vložil je jeho osobní věc (částku vidí jen on v notifikaci)."""
     import threading
 
     def _bg():
@@ -2833,7 +2834,7 @@ def _casehug_hype(username: str, eur: int):
             c = get_conn()
             try:
                 kickbot.send_message(
-                    c, f"💚 {username} podpořil farmu vkladem {eur} € na CaseHug (kód ZURYS)! Díky! 🌾",
+                    c, f"💚 {username} podpořil farmu vkladem na CaseHug (kód ZURYS)! Díky! 🌾",
                     kind="system")
             finally:
                 c.close()
@@ -2922,5 +2923,5 @@ def casehug_award(data: CasehugAwardIn, request: Request,
     notify(conn, target["id"], "💚", "Vklad CaseHug potvrzen!",
            f"+{pts} sedláků a +{xp} XP za vklad {data.eur} €. Díky za podporu farmy! 🌾", "#/shop")
     conn.commit()
-    _casehug_hype(target["username"], data.eur)
+    _casehug_hype(target["username"])
     return {"ok": True, "user": target["username"], "eur": data.eur, "points": pts, "xp": xp}
