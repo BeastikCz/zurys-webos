@@ -59,10 +59,10 @@ def test_award_grants_points_and_supporter_xp(client):
     r = _post(client, token, {"user_id": uid, "eur": 10})
     assert r.status_code == 200, r.text
     d = r.json()
-    assert d["points"] == 2500 and d["xp"] == 5000
+    assert d["points"] == 1000 and d["xp"] == 1000
     row = _user_row(uid)
-    assert row["points"] == 2500
-    assert row["earned_total"] == 5000          # XP explicitně (supporter), NE přes farm cap
+    assert row["points"] == 1000
+    assert row["earned_total"] == 1000          # XP explicitně (supporter), NE přes farm cap
 
 
 def test_award_dedup_and_force(client):
@@ -73,7 +73,7 @@ def test_award_dedup_and_force(client):
     assert r2.status_code == 409                # stejný preset do 10 min = dvojklik guard
     r3 = _post(client, token, {"user_id": uid, "eur": 5, "force": True})
     assert r3.status_code == 200                # force přebije
-    assert _user_row(uid)["points"] == 2 * 1100
+    assert _user_row(uid)["points"] == 2 * 500
     # jiný preset dedup neblokuje
     assert _post(client, token, {"user_id": uid, "eur": 2}).status_code == 200
 
@@ -93,7 +93,7 @@ def test_award_role_gating(client):
 
 
 def test_award_feeds_crew_as_supporter(client):
-    """XP z vkladu krmí partu člena jako SUB (uncapped) – crew XP naroste o plné XP."""
+    """Vklad do crew NEpočítá (rozhodnutí 10.7.) – crew XP se nesmí hnout."""
     from app.db import get_conn
     from app import crews
     token = _login("broadcaster")
@@ -111,4 +111,4 @@ def test_award_feeds_crew_as_supporter(client):
         after = conn.execute("SELECT xp FROM crews WHERE id=?", (cid,)).fetchone()["xp"]
     finally:
         conn.close()
-    assert after - before == 11000              # plných XP (supporter, žádný weekly farm cap)
+    assert after - before == 0                  # vklad crew nekrmí
