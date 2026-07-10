@@ -718,6 +718,8 @@ _MIGRATIONS = [
     ("garden", "notified", "INTEGER NOT NULL DEFAULT 0"),      # bitmask in-app notifikací: 1=úroda dozrála, 2=chrobáci (1× na záhon, brání spamu)
     ("battlepass", "claimed_premium", "TEXT NOT NULL DEFAULT '[]'"),   # prémiová (sub-only) řada Battle Passu – JSON list vyzvednutých tierů
     ("users", "feed_stock", "INTEGER NOT NULL DEFAULT 0"),    # Statek: zásoba krmiva (padá ze sklizně zahrádky) – krmí zvířata zdarma místo sedláků
+    ("users", "farm_fox_day", "TEXT"),                        # Statek: den, kdy se naposledy losovala liška (1×/den)
+    ("users", "farm_fox", "TEXT"),                            # Statek: pending liška – JSON {slot, ready_at} / '' vyřešeno
     # Responsible gaming – denní limit sázek (Tipsport-style). 0/NULL = bez limitu.
     ("users", "wager_limit", "INTEGER"),                   # aktuální denní strop sázek
     ("users", "wager_limit_pending", "INTEGER"),           # navýšení čeká na zítřek (snížit jde hned)

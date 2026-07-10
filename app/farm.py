@@ -9,6 +9,7 @@ Mini-hra nad zahrádkou. Hloubka:
  • Golden produkt 3 % → ×3 sedláci BEZ XP (jako zahrádka). Hlad = nenakrmené neprodukuje (aktivní péče).
 XP přes reason 'Statek: …' → classify_xp 'garden' bucket (uncapped, sub bonus). ŽÁDNÁ změna XP modelu.
 """
+import json
 import random
 import sqlite3
 from datetime import datetime, timezone, timedelta
@@ -16,6 +17,9 @@ from datetime import datetime, timezone, timedelta
 from .db import now_iso
 
 BASE_SLOTS = 2
+LIVE_SPEED_MULT = 2.0          # stream LIVE → produkční cyklus ×2 rychlejší (výnos stejný, jen se přesouvá do LIVE oken)
+FOX_CHANCE = 0.20              # šance 1×/den, že se objeví liška (jen když má user co ukrást)
+FOX_RANSOM = 200               # výkupné v sedlácích (sink); pes 🐕 lišku odežene zdarma
 SUB_SLOTS = 1
 GOLDEN_CHANCE = 0.03
 GOLDEN_MULT = 3
@@ -98,7 +102,91 @@ def _animals_public(conn, user) -> list:
     return out
 
 
+def _owns_dog(conn, uid: int) -> bool:
+    return conn.execute("SELECT 1 FROM farm_animals WHERE user_id = ? AND animal_key = 'horse'",
+                        (uid,)).fetchone() is not None
+
+
+def _fox_pending(conn, uid: int) -> dict | None:
+    """Vrátí nevyřešenou lišku {slot, ready_at}, nebo None. Zastaralou (zvíře pryč / produkt jiný) smaže."""
+    r = conn.execute("SELECT farm_fox FROM users WHERE id = ?", (uid,)).fetchone()
+    raw = (r["farm_fox"] if r else None) or ""
+    if not raw:
+        return None
+    try:
+        fox = json.loads(raw)
+    except ValueError:
+        fox = None
+    if fox:
+        a = conn.execute("SELECT ready_at FROM farm_animals WHERE user_id = ? AND slot = ?",
+                         (uid, fox.get("slot", -1))).fetchone()
+        if a and a["ready_at"] == fox.get("ready_at"):
+            return fox
+    conn.execute("UPDATE users SET farm_fox = '' WHERE id = ?", (uid,))
+    return None
+
+
+def _roll_fox(conn, user) -> None:
+    """1× denně: šance na lišku, která si brousí zuby na jeden rozdělaný/hotový produkt.
+    Pes 🐕 ji odežene zdarma (notif) – bez psa vzniká pending event (výkupné / ztráta produktu)."""
+    uid = user["id"]
+    today = now_iso()[:10]
+    r = conn.execute("SELECT farm_fox_day FROM users WHERE id = ?", (uid,)).fetchone()
+    if not r or (r["farm_fox_day"] or "") == today:
+        return
+    conn.execute("UPDATE users SET farm_fox_day = ? WHERE id = ?", (today, uid))
+    if _fox_pending(conn, uid) or random.random() >= FOX_CHANCE:
+        conn.commit()
+        return
+    targets = [t for t in conn.execute(
+        "SELECT slot, ready_at, animal_key FROM farm_animals WHERE user_id = ? AND ready_at != ''", (uid,))
+        if not _BY_KEY.get(t["animal_key"], {}).get("utility")]
+    if not targets:
+        conn.commit()
+        return
+    from .deps import notify
+    if _owns_dog(conn, uid):
+        notify(conn, uid, "🐕", "Pes odehnal lišku!",
+               "K statku se plížila liška 🦊 – tvůj pes ji odehnal. Dobrá investice! 🐾", "#/statek")
+        conn.commit()
+        return
+    t = random.choice(targets)
+    conn.execute("UPDATE users SET farm_fox = ? WHERE id = ?",
+                 (json.dumps({"slot": t["slot"], "ready_at": t["ready_at"]}), uid))
+    notify(conn, uid, "🦊", "Liška na statku!",
+           f"Liška si brousí zuby na tvůj produkt. Zaplať výkupné {FOX_RANSOM} sedláků, nebo o něj přijdeš! 🚜",
+           "#/statek")
+    conn.commit()
+
+
+def resolve_fox(conn, user, pay: bool) -> dict:
+    """Vyřeší pending lišku: pay=True → výkupné (sink), produkt zůstává. pay=False → produkt fuč, zvíře zhladoví."""
+    from .deps import try_debit
+    fox = _fox_pending(conn, user["id"])
+    if not fox:
+        conn.commit()
+        return {"ok": False, "error": "Žádná liška tu není. 🦊"}
+    if pay:
+        if not try_debit(conn, user["id"], FOX_RANSOM, "Statek: výkupné lišce 🦊"):
+            return {"ok": False, "error": f"Nemáš na výkupné ({FOX_RANSOM} sedláků)."}
+        conn.execute("UPDATE users SET farm_fox = '' WHERE id = ?", (user["id"],))
+        conn.commit()
+        paid = True
+    else:
+        conn.execute("UPDATE farm_animals SET ready_at = '' WHERE user_id = ? AND slot = ? AND ready_at = ?",
+                     (user["id"], fox["slot"], fox["ready_at"]))
+        conn.execute("UPDATE users SET farm_fox = '' WHERE id = ?", (user["id"],))
+        conn.commit()
+        paid = False
+    bal = conn.execute("SELECT points FROM users WHERE id = ?", (user["id"],)).fetchone()["points"]
+    return {"ok": True, "paid": paid, "balance": bal, "ransom": FOX_RANSOM}
+
+
 def status(conn, user) -> dict:
+    from . import live
+    _roll_fox(conn, user)
+    fox = _fox_pending(conn, user["id"])
+    is_live = live.is_live(conn)
     now = datetime.now(timezone.utc)
     n_slots = _n_slots(conn, user)
     bonus = _prod_bonus(conn, user["id"])
@@ -136,6 +224,8 @@ def status(conn, user) -> dict:
     return {"slots": slots, "animals": _animals_public(conn, user), "n_slots": n_slots, "sub": _is_sub(user),
             "golden_pct": int(GOLDEN_CHANCE * 100), "golden_mult": GOLDEN_MULT, "krmivo": _feed_stock(conn, user["id"]),
             "prod_bonus": int(bonus * 100),
+            "live": is_live, "live_mult": LIVE_SPEED_MULT,
+            "fox": ({"slot": fox["slot"], "ransom": FOX_RANSOM} if fox else None),
             "collection": {"have": len(all_keys & have_coll), "total": len(all_keys),
                            "complete": all_keys.issubset(have_coll), "reward": COLLECTION_REWARD}}
 
@@ -223,13 +313,18 @@ def feed(conn, user, slot: int) -> dict:
         return {"ok": False, "error": f"Nemáš krmivo ani dost sedláků na krmení ({a.get('feed', 0)})."}
     fed_count = (r["fed_count"] or 0) + 1
     lvl_before, lvl_after = _level(r["fed_count"]), _level(fed_count)
-    ready = (datetime.now(timezone.utc) + timedelta(hours=_hours_at(a, lvl_after))).isoformat()
+    from . import live
+    hours = _hours_at(a, lvl_after)
+    boosted = live.is_live(conn)
+    if boosted:                        # LIVE boost: rychlejší cyklus, výnos stejný (žádný nový faucet)
+        hours /= LIVE_SPEED_MULT
+    ready = (datetime.now(timezone.utc) + timedelta(hours=hours)).isoformat()
     conn.execute("UPDATE farm_animals SET ready_at = ?, fed_count = ? WHERE user_id = ? AND slot = ?",
                  (ready, fed_count, user["id"], slot))
     conn.commit()
     bal = conn.execute("SELECT points FROM users WHERE id = ?", (user["id"],)).fetchone()["points"]
     return {"ok": True, "balance": bal, "name": a.get("name"), "used_krmivo": used_krmivo,
-            "leveled_up": lvl_after > lvl_before, "level": lvl_after}
+            "leveled_up": lvl_after > lvl_before, "level": lvl_after, "live_boost": boosted}
 
 
 def _award_product(conn, user_id, a, level, bonus):
@@ -253,6 +348,9 @@ def collect(conn, user, slot: int) -> dict:
         return {"ok": False, "error": "Zvíře má hlad – nejdřív nakrm. 🌾"}
     if r["ready_at"] > now_iso():
         return {"ok": False, "error": "Ještě se nevyprodukovalo. ⏳"}
+    fox = _fox_pending(conn, user["id"])
+    if fox and fox["slot"] == slot:
+        return {"ok": False, "error": f"Na produkt číhá liška! 🦊 Zaplať výkupné ({FOX_RANSOM}), nebo jí ho nech."}
     if conn.execute("UPDATE farm_animals SET ready_at = '' WHERE user_id = ? AND slot = ? AND ready_at = ?",
                     (user["id"], slot, r["ready_at"])).rowcount != 1:
         conn.commit()
@@ -266,13 +364,14 @@ def collect(conn, user, slot: int) -> dict:
 
 def collect_all(conn, user) -> dict:
     bonus = _prod_bonus(conn, user["id"])
+    fox = _fox_pending(conn, user["id"])
     ready = conn.execute("SELECT slot, animal_key, ready_at, fed_count FROM farm_animals "
                          "WHERE user_id = ? AND ready_at != '' AND ready_at <= ?",
                          (user["id"], now_iso())).fetchall()
     total = count = golds = 0
     for r in ready:
         a = _BY_KEY.get(r["animal_key"], {})
-        if a.get("utility"):
+        if a.get("utility") or (fox and fox["slot"] == r["slot"]):
             continue
         if conn.execute("UPDATE farm_animals SET ready_at = '' WHERE user_id = ? AND slot = ? AND ready_at = ?",
                         (user["id"], r["slot"], r["ready_at"])).rowcount != 1:

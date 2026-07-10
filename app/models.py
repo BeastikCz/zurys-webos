@@ -272,6 +272,11 @@ class FarmSlotIn(BaseModel):
     slot: int = Field(..., ge=0, le=20)
 
 
+class FarmFoxIn(BaseModel):
+    """Vyřešení lišky: pay=True → výkupné, pay=False → nechat jí produkt."""
+    pay: bool
+
+
 class CommunityGoalIn(BaseModel):
     """Nastavení komunitního chat cíle (posílají se jen měněná pole)."""
     enabled: Optional[int] = Field(default=None, ge=0, le=1)

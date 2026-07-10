@@ -17,7 +17,7 @@ from ..deps import (db_dep, require_user, add_points, try_debit, record_audit, c
 from ..models import (RedeemIn, TradeUrlIn, GiftIn, QuestClaimIn, CosmeticIn, FairSeedIn, SelfExcludeIn,
                       ProfileBioIn, WagerLimitIn, ModApplyIn, BattlePassClaimIn, LoginCalClaimIn,
                       GardenPlantIn, GardenPlantAllIn, GardenHarvestIn, DecorBuyIn, LevelPassClaimIn,
-                      EggClaimIn, FarmBuyIn, FarmSlotIn)
+                      EggClaimIn, FarmBuyIn, FarmSlotIn, FarmFoxIn)
 from ..services import product_public, role_allows
 from ..ratelimit import rate_limit
 from ..security import secure_weighted_choice
@@ -1416,6 +1416,17 @@ def farm_collect_all(user: sqlite3.Row = Depends(require_user),
     """Sebere všechny hotové produkty naráz."""
     from .. import farm
     return farm.collect_all(conn, user)
+
+
+@router.post("/farm/fox")
+def farm_fox(data: FarmFoxIn, user: sqlite3.Row = Depends(require_user),
+             conn: sqlite3.Connection = Depends(db_dep)):
+    """Vyřeší lišku 🦊: zaplať výkupné (produkt zůstává), nebo jí produkt nech (zvíře zhladoví)."""
+    from .. import farm
+    r = farm.resolve_fox(conn, user, data.pay)
+    if not r.get("ok"):
+        raise HTTPException(status_code=400, detail=r.get("error", "Lišku se teď vyřešit nepodařilo."))
+    return r
 
 
 @router.post("/farm/sell")
