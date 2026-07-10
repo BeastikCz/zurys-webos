@@ -433,34 +433,6 @@ async def csrf_origin_guard(request: Request, call_next):
     return await call_next(request)
 
 
-@app.middleware("http")
-async def security_headers(request: Request, call_next):
-    response = await call_next(request)
-    for k, v in _SECURITY_HEADERS.items():
-        response.headers.setdefault(k, v)
-    if _PROD:
-        # Overlaye + údržbová stránka mají inline <script> → RELAXED CSP; zbytek (hlavně SPA) STRICT.
-        # Údržbovou stránku poznáme podle X-Maintenance (servíruje se i na "/"), overlaye podle cesty.
-        relaxed = (response.headers.get("X-Maintenance") == "1"
-                   or request.url.path.startswith("/overlay/")
-                   or request.url.path == "/maintenance.html")
-        response.headers.setdefault("Content-Security-Policy", _CSP_RELAXED if relaxed else _CSP_STRICT)
-    # SPA shell (index.html na "/") vždy revalidovat → ?v= busting se projeví hned a
-    # uživatelům nezůstane viset stará verze app.js/styles.css v cache (bez toho prohlížeč
-    # heuristicky cachoval index.html a držel starý kód i po deployi). Assety s ?v= se cacheovat smí.
-    if request.url.path == "/":
-        response.headers["Cache-Control"] = "no-cache, must-revalidate"
-    elif request.url.path.endswith((".js", ".css")):
-        # Verzované assety (?v=) → cacheovat natvrdo (nový deploy = nové ?v= = nová URL),
-        # ať se app.js/styles.css nestahuje a nerevaliduje při každé navigaci.
-        response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
-    elif request.url.path.endswith((".png", ".jpg", ".jpeg", ".webp", ".gif", ".svg", ".ico")):
-        # Obrázky (produktové, maint slideshow, ikony) mají stabilní cesty → ať si je
-        # browser/Cloudflare drží a netahají se z workeru pořád dokola. Týden stačí.
-        response.headers["Cache-Control"] = "public, max-age=604800"
-    return response
-
-
 def _is_staff_request(request) -> bool:
     """Je request od přihlášeného staffa (admin/broadcaster/mod)? Ti se NIKDY neautobanují
     – jinak aktivní admin (vyřizování objednávek = spousta requestů) trefí DDoS práh a
@@ -529,7 +501,7 @@ async def maintenance_guard(request: Request, call_next):
     if (path == "/api/health" or path == "/api/monitor/healthz" or path == "/api/_origin_check"
             or path.startswith("/api/auth/")
             or path.startswith("/api/admin/") or path == "/api/kick/webhook"
-            or path == "/maintenance.png" or path == "/og-image.png"
+            or path == "/maintenance.png" or path == "/og-image.png" or path == "/.well-known/security.txt"
             or path.startswith("/maint-")):   # health + maintenance obrázky/slideshow (/maint-N.jpg) musí projít i návštěvníkům
         return await call_next(request)
     if maintenance.bypasses_maintenance(request):
@@ -547,8 +519,8 @@ async def maintenance_guard(request: Request, call_next):
     # JS → rozbitý web. Servírujeme tedy skutečný soubor (cache pak drží správný obsah).
     if path.endswith((".js", ".css", ".woff", ".woff2", ".ttf", ".map")):
         return await call_next(request)
-    return HTMLResponse(content=maintenance.page_html(), status_code=200,
-                        headers={"X-Maintenance": "1"})
+    return HTMLResponse(content=maintenance.page_html(), status_code=503,
+                        headers={"X-Maintenance": "1", "Retry-After": "300"})
 
 
 @app.middleware("http")
@@ -560,6 +532,26 @@ async def origin_lock(request: Request, call_next):
             return JSONResponse(status_code=403,
                                 content={"detail": "Přímý přístup k serveru blokován (origin lock)."})
     return await call_next(request)
+
+
+@app.middleware("http")
+async def security_headers(request: Request, call_next):
+    """Přidá hlavičky i odpovědím, které ukončí ochranný middleware dřív."""
+    response = await call_next(request)
+    for k, v in _SECURITY_HEADERS.items():
+        response.headers.setdefault(k, v)
+    if _PROD:
+        relaxed = (response.headers.get("X-Maintenance") == "1"
+                   or request.url.path.startswith("/overlay/")
+                   or request.url.path == "/maintenance.html")
+        response.headers.setdefault("Content-Security-Policy", _CSP_RELAXED if relaxed else _CSP_STRICT)
+    if request.url.path == "/":
+        response.headers["Cache-Control"] = "no-cache, must-revalidate"
+    elif request.url.path.endswith((".js", ".css")):
+        response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+    elif request.url.path.endswith((".png", ".jpg", ".jpeg", ".webp", ".gif", ".svg", ".ico")):
+        response.headers["Cache-Control"] = "public, max-age=604800"
+    return response
 
 
 # Alert na neošetřené chyby (500) → Discord (pokud je webhook), pak vrátí čistý 500.

@@ -1,0 +1,4 @@
+Contact: https://www.instagram.com/interaty_/
+Expires: 2027-07-11T00:00:00.000Z
+Preferred-Languages: cs, en
+Canonical: https://zurys.live/.well-known/security.txt
