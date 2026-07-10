@@ -2373,7 +2373,7 @@ async function refreshAuctionBanner() {                     // banner aktivní a
 function isSubUser(u) { return !!u && (u.is_sub || ["admin", "broadcaster", "mod"].includes(u.role)); }
 function auctionCardHTML(a) {
   const me = state.user && a.leader === state.user.username;
-  const recent = a.recent && a.recent.length ? `<div class="auc-bids">${a.recent.map((b) => `<div class="auc-bid"><span>${esc(b.username || "?")}</span><b>${fmtPts(b.amount)}</b></div>`).join("")}</div>` : `<div class="faint" style="font-size:12px;margin-top:8px">Zatím bez příhozu — buď první! 🔨</div>`;
+  const recent = a.current_bid ? "" : `<div class="faint" style="font-size:12px;margin-top:8px">Zatím bez příhozu — buď první! 🔨</div>`;   // historie příhozů se veřejně neukazuje (soukromí dražitelů)
   const chips = [a.min_next, a.min_next + a.min_increment * 4, a.min_next + a.min_increment * 19];
   const locked = a.sub_only && !isSubUser(state.user);
   const buyNow = a.buy_now && a.buy_now > (a.current_bid || 0);

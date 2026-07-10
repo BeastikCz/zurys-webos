@@ -104,13 +104,11 @@ def list_public(conn) -> dict:
                 conn.commit()
                 _announce_async(f"⏳ POSLEDNÍ VTEŘINY na „{a['title']}\"! Vede {_username(conn, a['current_bidder_id'])} "
                                 f"za {a['current_bid']}. Kdo přebije?! 🔨🔥")
-        bids = [{"username": _username(conn, b["user_id"]), "amount": b["amount"], "created_at": b["created_at"]}
-                for b in conn.execute("SELECT user_id, amount, created_at FROM auction_bids "
-                                      "WHERE auction_id = ? ORDER BY id DESC LIMIT 6", (a["id"],))]
+        # historie příhozů se veřejně neposílá (soukromí dražitelů) – admin ji vidí v admin_list
         active.append({"id": a["id"], "title": a["title"], "image_url": a["image_url"] or "",
                        "current_bid": a["current_bid"], "leader": _username(conn, a["current_bidder_id"]),
                        "min_next": _min_next(a), "min_increment": a["min_increment"], "start_bid": a["start_bid"],
-                       "bids_count": a["bids_count"], "seconds_left": secs, "ends_at": a["ends_at"], "recent": bids,
+                       "bids_count": a["bids_count"], "seconds_left": secs, "ends_at": a["ends_at"],
                        "buy_now": a["buy_now"] or 0, "sub_only": bool(a["sub_only"])})
     ended = []
     for a in conn.execute("SELECT * FROM auctions WHERE status = 'ended' AND winner_id IS NOT NULL "
