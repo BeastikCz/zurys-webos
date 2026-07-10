@@ -1520,6 +1520,17 @@ def farm_feed(data: FarmSlotIn, user: sqlite3.Row = Depends(require_farm_access)
     return r
 
 
+@router.post("/farm/turbo")
+def farm_turbo(data: FarmSlotIn, user: sqlite3.Row = Depends(require_farm_access),
+               conn: sqlite3.Connection = Depends(db_dep)):
+    """Spotřebuje turbo žeton a nakrmí vybrané zvíře pro 2× rychlejší jeden cyklus."""
+    from .. import farm
+    r = farm.feed(conn, user, data.slot, turbo=True)
+    if not r.get("ok"):
+        raise HTTPException(status_code=400, detail=r.get("error", "Turbo se teď nepodařilo použít."))
+    return r
+
+
 @router.post("/farm/collect")
 def farm_collect(data: FarmSlotIn, user: sqlite3.Row = Depends(require_farm_access),
                  conn: sqlite3.Connection = Depends(db_dep)):

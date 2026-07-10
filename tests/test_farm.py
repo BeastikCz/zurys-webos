@@ -29,8 +29,11 @@ def test_full_loop_and_xp():
     try:
         uid = _user(conn); conn.commit()
         assert farm.buy(conn, _row(conn, uid), "chicken")["ok"]
-        assert farm.status(conn, _row(conn, uid))["slots"][0]["state"] == "hungry"
-        assert farm.feed(conn, _row(conn, uid), 0)["ok"]
+        initial = farm.status(conn, _row(conn, uid))
+        assert initial["slots"][0]["state"] == "hungry"
+        assert "live" not in initial, "Statek už nemá LIVE ×2 produkci"
+        fed = farm.feed(conn, _row(conn, uid), 0)
+        assert fed["ok"] and "live_boost" not in fed
         assert not farm.collect(conn, _row(conn, uid), 0).get("ok")     # moc brzy
         _ready_now(conn, uid, 0)
         et0 = _row(conn, uid)["earned_total"]
@@ -170,6 +173,71 @@ def test_barn_upgrade_adds_slot():
         conn.execute("UPDATE users SET points = 10 WHERE id = ?", (uid,)); conn.commit()
         assert not farm.upgrade_barn(conn, _row(conn, uid)).get("ok")
         assert _row(conn, uid)["points"] == 10
+    finally:
+        conn.close()
+
+
+def test_patron_gifts_unlock_slot_and_fox_guard():
+    from app.db import get_conn, now_iso
+    from app import farm
+    conn = get_conn()
+    try:
+        uid = _user(conn); conn.commit()
+        assert farm._n_slots(conn, _row(conn, uid)) == farm.BASE_SLOTS
+        conn.execute("INSERT INTO points_log (user_id, change, reason, created_at) VALUES (?,?,?,?)",
+                     (uid, 0, "Kick gift sub 🎁 ×5", now_iso()))
+        conn.commit()
+        patron = farm._patron_status(conn, uid)
+        assert patron["title"] == "Patron statku" and patron["slot_bonus"]
+        assert farm._n_slots(conn, _row(conn, uid)) == farm.BASE_SLOTS + 1
+        conn.execute("INSERT INTO points_log (user_id, change, reason, created_at) VALUES (?,?,?,?)",
+                     (uid, 0, "Kick gift sub 🎁 ×10", now_iso()))
+        conn.commit()
+        patron = farm._patron_status(conn, uid)
+        assert patron["gifts"] == 15 and patron["fox_guard"]
+        old_uid = _user(conn)
+        conn.execute("INSERT INTO points_log (user_id, change, reason, created_at) VALUES (?,?,?,?)",
+                     (old_uid, 0, "Kick gift sub 🎁 ×5", "2020-01-01T00:00:00+00:00"))
+        conn.commit()
+        old_patron = farm._patron_status(conn, old_uid)
+        assert old_patron["gifts"] == 0 and not old_patron["slot_bonus"], "patron slot končí se sezónou"
+    finally:
+        conn.close()
+
+
+def test_gift_turbo_is_single_use_and_capped():
+    from datetime import datetime, timezone
+    from app.db import get_conn
+    from app import farm
+    conn = get_conn()
+    try:
+        uid = _user(conn); conn.commit()
+        farm.buy(conn, _row(conn, uid), "chicken")
+        assert farm.grant_turbo_tokens(conn, uid, 1) == 1
+        assert farm.status(conn, _row(conn, uid))["turbo"]["count"] == 1
+        r = farm.feed(conn, _row(conn, uid), 0, turbo=True)
+        assert r["ok"] and r["turbo"] and r["turbo_left"] == 0
+        ready = conn.execute("SELECT ready_at FROM farm_animals WHERE user_id=? AND slot=0", (uid,)).fetchone()["ready_at"]
+        assert 3400 < (datetime.fromisoformat(ready) - datetime.now(timezone.utc)).total_seconds() < 3700
+        assert farm.grant_turbo_tokens(conn, uid, 4) == farm.TURBO_MAX_STORED
+    finally:
+        conn.close()
+
+
+def test_confirmed_gift_event_grants_turbo_tokens():
+    from app.db import get_conn
+    from app import farm, kickevents
+    conn = get_conn()
+    try:
+        uid = _user(conn); conn.commit()
+        gifter = _row(conn, uid)["kick_username"]
+        r = kickevents.handle_event(conn, "channel.subscription.gifts", {
+            "gifter": {"username": gifter},
+            "giftees": [{"username": "turbo_giftee_a"}, {"username": "turbo_giftee_b"}],
+        })
+        conn.commit()
+        assert r["ok"] and r["count"] == 2
+        assert farm.status(conn, _row(conn, uid))["turbo"]["count"] == 2
     finally:
         conn.close()
 

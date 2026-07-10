@@ -11,13 +11,13 @@ XP přes reason 'Statek: …' → classify_xp 'garden' bucket (uncapped, sub bon
 """
 import json
 import random
+import re
 import sqlite3
 from datetime import datetime, timezone, timedelta
 
-from .db import now_iso
+from .db import now_iso, local_now, LOCAL_TZ
 
 BASE_SLOTS = 2
-LIVE_SPEED_MULT = 2.0          # stream LIVE → produkční cyklus ×2 rychlejší (výnos stejný, jen se přesouvá do LIVE oken)
 FOX_CHANCE = 0.20              # šance 1×/den, že se objeví liška (jen když má user co ukrást)
 FOX_RANSOM = 200               # výkupné v sedlácích (sink); pes 🐕 lišku odežene zdarma
 
@@ -32,6 +32,11 @@ CONTRACT_MIN, CONTRACT_MAX = 300, 700   # …sevřeno do pásma
 BARN_MAX = 5
 BARN_COSTS = {2: 50000, 3: 150000, 4: 400000, 5: 1000000}   # cena upgradu NA level
 SUB_SLOTS = 1
+PATRON_SLOT_GIFTS = 5         # 5 darovaných subů v sezóně = 1 patron slot
+PATRON_FOX_GIFTS = 15         # mecenáš sezóny má ochranu před liškou
+TURBO_SPEED_MULT = 2.0        # jeden turbo žeton zrychlí jediný příští cyklus
+TURBO_MAX_STORED = 3
+TURBO_TTL_DAYS = 7
 GOLDEN_CHANCE = 0.03
 GOLDEN_MULT = 3
 SELL_REFUND_PCT = 0.5          # prodej zvířete = % ceny zpět
@@ -70,8 +75,70 @@ def _barn_level(user) -> int:
         return 1
 
 
-def _n_slots(conn, user) -> int:
-    return BASE_SLOTS + (SUB_SLOTS if _is_sub(user) else 0) + (_barn_level(user) - 1)
+def _patron_status(conn, uid: int) -> dict:
+    """Sezónní patronství z potvrzených Kick gift-sub logů."""
+    now = local_now()
+    season = now.strftime("%Y-%m")
+    start = datetime(now.year, now.month, 1, tzinfo=LOCAL_TZ).astimezone(timezone.utc).isoformat()
+    gifts = 0
+    for row in conn.execute(
+        "SELECT reason FROM points_log WHERE user_id = ? AND created_at >= ? "
+        "AND LOWER(reason) LIKE '%kick gift sub%' AND LOWER(reason) NOT LIKE '%příjemce%'",
+        (uid, start),
+    ):
+        match = re.search(r"[×x]\s*(\d+)", row["reason"] or "", re.IGNORECASE)
+        gifts += int(match.group(1)) if match else 1
+
+    if gifts >= 50:
+        title = "Legenda farmy"
+        next_at = None
+    elif gifts >= 30:
+        title = "Patron farmy"
+        next_at = 50
+    elif gifts >= PATRON_FOX_GIFTS:
+        title = "Mecenáš farmy"
+        next_at = 30
+    elif gifts >= PATRON_SLOT_GIFTS:
+        title = "Patron statku"
+        next_at = PATRON_FOX_GIFTS
+    elif gifts:
+        title = "Dárce farmy"
+        next_at = PATRON_SLOT_GIFTS
+    else:
+        title = None
+        next_at = 1
+    return {"season": season, "gifts": gifts, "title": title, "next_at": next_at,
+            "slot_bonus": gifts >= PATRON_SLOT_GIFTS,
+            "fox_guard": gifts >= PATRON_FOX_GIFTS}
+
+
+def _n_slots(conn, user, patron: dict | None = None) -> int:
+    patron = patron or _patron_status(conn, user["id"])
+    return BASE_SLOTS + (SUB_SLOTS if _is_sub(user) else 0) + (_barn_level(user) - 1) + int(patron["slot_bonus"])
+
+
+def _turbo_cutoff() -> str:
+    return (datetime.now(timezone.utc) - timedelta(days=TURBO_TTL_DAYS)).isoformat()
+
+
+def _turbo_status(conn, uid: int) -> dict:
+    row = conn.execute(
+        "SELECT COUNT(*) AS count, MIN(created_at) AS oldest FROM farm_turbo_tokens "
+        "WHERE user_id = ? AND used_at IS NULL AND created_at >= ?", (uid, _turbo_cutoff())
+    ).fetchone()
+    return {"count": row["count"], "max": TURBO_MAX_STORED, "oldest": row["oldest"]}
+
+
+def grant_turbo_tokens(conn, uid: int, count: int) -> int:
+    """Potvrzené gift suby dají max. tři nevyužité turbo žetony; neakumulují se donekonečna."""
+    if count <= 0:
+        return 0
+    available = _turbo_status(conn, uid)["count"]
+    granted = min(count, max(0, TURBO_MAX_STORED - available))
+    if granted:
+        conn.executemany("INSERT INTO farm_turbo_tokens (user_id, created_at) VALUES (?, ?)",
+                         [(uid, now_iso())] * granted)
+    return granted
 
 
 def _level(fed_count: int) -> int:
@@ -163,9 +230,9 @@ def _roll_fox(conn, user) -> None:
         conn.commit()
         return
     from .deps import notify
-    if _owns_dog(conn, uid):
+    if _owns_dog(conn, uid) or _patron_status(conn, uid)["fox_guard"]:
         notify(conn, uid, "🐕", "Pes odehnal lišku!",
-               "K statku se plížila liška 🦊 – tvůj pes ji odehnal. Dobrá investice! 🐾", "#/statek")
+               "K statku se plížila liška 🦊 – ochránce statku ji odehnal. Dobrá investice! 🐾", "#/statek")
         conn.commit()
         return
     t = random.choice(targets)
@@ -294,15 +361,15 @@ def upgrade_barn(conn, user) -> dict:
 
 
 def status(conn, user) -> dict:
-    from . import live
     _roll_fox(conn, user)
     _ensure_contract(conn, user)
     fox = _fox_pending(conn, user["id"])
-    is_live = live.is_live(conn)
     now = datetime.now(timezone.utc)
-    n_slots = _n_slots(conn, user)
+    patron = _patron_status(conn, user["id"])
+    active_slots = _n_slots(conn, user, patron)
     bonus = _prod_bonus(conn, user["id"])
     rows = {r["slot"]: r for r in conn.execute("SELECT * FROM farm_animals WHERE user_id = ?", (user["id"],))}
+    n_slots = max(active_slots, max(rows, default=-1) + 1)  # po sezoně neschová zvíře v bývalém patron slotu
     slots = []
     for s in range(n_slots):
         r = rows.get(s)
@@ -333,10 +400,12 @@ def status(conn, user) -> dict:
     have_coll = {r["animal_key"] for r in conn.execute(
         "SELECT animal_key FROM farm_collection WHERE user_id = ?", (user["id"],))}
     all_keys = {a["key"] for a in ANIMALS}
-    return {"slots": slots, "animals": _animals_public(conn, user), "n_slots": n_slots, "sub": _is_sub(user),
+    return {"slots": slots, "animals": _animals_public(conn, user), "n_slots": n_slots,
+            "active_slots": active_slots, "sub": _is_sub(user),
             "golden_pct": int(GOLDEN_CHANCE * 100), "golden_mult": GOLDEN_MULT, "krmivo": _feed_stock(conn, user["id"]),
             "prod_bonus": int(bonus * 100),
-            "live": is_live, "live_mult": LIVE_SPEED_MULT,
+            "patron": patron,
+            "turbo": _turbo_status(conn, user["id"]),
             "fox": ({"slot": fox["slot"], "ransom": FOX_RANSOM} if fox else None),
             "contract": _contract_public(conn, user["id"]),
             "barn": {"level": _barn_level(user), "max": BARN_MAX,
@@ -369,6 +438,8 @@ def buy(conn, user, animal_key: str) -> dict:
         return {"ok": False, "error": f"{a['name']} {a['icon']} je jen pro suby. 💜"}
     n = _n_slots(conn, user)
     occupied = {r["slot"] for r in conn.execute("SELECT slot FROM farm_animals WHERE user_id = ?", (user["id"],))}
+    if len(occupied) >= n:  # sezónní patron slot mohl skončit; zvíře v něm nejdřív prodej
+        return {"ok": False, "error": "Plný statek – prodej zvíře nebo si odemkni patron slot. 🚜"}
     empty = [s for s in range(n) if s not in occupied]
     if not empty:
         return {"ok": False, "error": "Plný statek – prodej zvíře nebo si jako sub odemkni víc slotů. 🚜"}
@@ -409,7 +480,7 @@ def sell(conn, user, slot: int) -> dict:
     return {"ok": True, "balance": bal, "refund": refund, "name": a.get("name")}
 
 
-def feed(conn, user, slot: int) -> dict:
+def feed(conn, user, slot: int, turbo: bool = False) -> dict:
     """Nakrm hladové zvíře → spustí cyklus. Použije KRMIVO (zdarma) pokud je, jinak sedláky."""
     from .deps import try_debit
     r = conn.execute("SELECT * FROM farm_animals WHERE user_id = ? AND slot = ?", (user["id"], slot)).fetchone()
@@ -420,6 +491,14 @@ def feed(conn, user, slot: int) -> dict:
         return {"ok": False, "error": f"{a.get('name', '?')} nepotřebuje krmit – dává pasivní bonus. 🐴"}
     if r["ready_at"]:
         return {"ok": False, "error": "Zvíře už produkuje (nebo má hotovo). 🐔"}
+    token = None
+    if turbo:
+        token = conn.execute(
+            "SELECT id FROM farm_turbo_tokens WHERE user_id = ? AND used_at IS NULL AND created_at >= ? "
+            "ORDER BY id LIMIT 1", (user["id"], _turbo_cutoff())
+        ).fetchone()
+        if not token:
+            return {"ok": False, "error": "Nemáš žádný turbo žeton. ⚡"}
     used_krmivo = False
     if _feed_stock(conn, user["id"]) >= 1:                       # krmivo má přednost (zdarma, ze zahrádky)
         conn.execute("UPDATE users SET feed_stock = feed_stock - 1 WHERE id = ?", (user["id"],))
@@ -428,18 +507,21 @@ def feed(conn, user, slot: int) -> dict:
         return {"ok": False, "error": f"Nemáš krmivo ani dost sedláků na krmení ({a.get('feed', 0)})."}
     fed_count = (r["fed_count"] or 0) + 1
     lvl_before, lvl_after = _level(r["fed_count"]), _level(fed_count)
-    from . import live
     hours = _hours_at(a, lvl_after)
-    boosted = live.is_live(conn)
-    if boosted:                        # LIVE boost: rychlejší cyklus, výnos stejný (žádný nový faucet)
-        hours /= LIVE_SPEED_MULT
+    if turbo:
+        if conn.execute("UPDATE farm_turbo_tokens SET used_at = ? WHERE id = ? AND used_at IS NULL",
+                        (now_iso(), token["id"])).rowcount != 1:
+            conn.rollback()
+            return {"ok": False, "error": "Turbo žeton mezitím použil jiný požadavek. Zkus to znovu."}
+        hours /= TURBO_SPEED_MULT
     ready = (datetime.now(timezone.utc) + timedelta(hours=hours)).isoformat()
     conn.execute("UPDATE farm_animals SET ready_at = ?, fed_count = ? WHERE user_id = ? AND slot = ?",
                  (ready, fed_count, user["id"], slot))
     conn.commit()
     bal = conn.execute("SELECT points FROM users WHERE id = ?", (user["id"],)).fetchone()["points"]
     return {"ok": True, "balance": bal, "name": a.get("name"), "used_krmivo": used_krmivo,
-            "leveled_up": lvl_after > lvl_before, "level": lvl_after, "live_boost": boosted}
+            "leveled_up": lvl_after > lvl_before, "level": lvl_after,
+            "turbo": turbo, "turbo_left": _turbo_status(conn, user["id"])["count"]}
 
 
 def _award_product(conn, user_id, a, level, bonus):

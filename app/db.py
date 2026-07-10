@@ -399,6 +399,15 @@ CREATE TABLE IF NOT EXISTS farm_animals (
     PRIMARY KEY (user_id, slot)
 );
 
+-- Turbo žetony za gift suby. Spotřebují se při 2× rychlém krmení a po 7 dnech propadnou.
+CREATE TABLE IF NOT EXISTS farm_turbo_tokens (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    created_at TEXT NOT NULL,
+    used_at    TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_farm_turbo_user ON farm_turbo_tokens(user_id, used_at, created_at);
+
 -- Statek – sbírka: kdy-koliv vlastněné druhy zvířat (pro odznak „Statkář" za kompletní sbírku).
 CREATE TABLE IF NOT EXISTS farm_collection (
     user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,

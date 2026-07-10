@@ -216,6 +216,8 @@ def handle_event(conn, event_type: str, payload: dict) -> dict:
         if gifter_uid:
             # komunitní SUB cíl: zapiš giftera (PŘED tick → je v outpayu, i když cíl naplní jeho gift)
             subgoal.record_gifter(conn, gifter_uid, n, in_hh=(mult > 1))
+            from . import farm
+            farm.grant_turbo_tokens(conn, gifter_uid, n)
         gexp = payload.get("expires_at")
         for g in giftees:                                        # příjemci se stávají suby
             gu = (g or {}).get("username")

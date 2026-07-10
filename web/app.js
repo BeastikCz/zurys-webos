@@ -2759,6 +2759,12 @@ function pageFarm() {
   if (!state.user) { view.innerHTML = `<div class="empty"><div class="big">🚜</div>Přihlas se přes Kick a rozjeď statek!</div>`; return; }
   view.innerHTML = `<div id="farmBox">${skeletonCards(1)}</div>`;
   loadFarm();
+  if (!localStorage.getItem("statek_guide_v1")) setTimeout(() => {
+    if (currentRoute() === "statek" && !$("#modalRoot").classList.contains("open")) {
+      localStorage.setItem("statek_guide_v1", "1");
+      farmGuide();
+    }
+  }, 250);
 }
 // Asset mapa klíč→soubor (/img/farm/animals/{file}.webp). unicorn=Kůň→horse, horse=Pes→dog (historické klíče v DB).
 const FARM_ART = { chicken: "chicken", goat: "goat", sheep: "sheep", cow: "cow", unicorn: "horse", horse: "dog" };
@@ -2783,18 +2789,30 @@ async function loadFarm() {
     const ready = f.slots.filter((s) => !s.empty && s.state === "ready" && s.slot !== foxSlot);
     const readySum = ready.reduce((a, s) => a + s.reward, 0);
     const col = f.collection;
-    const pasture = f.slots.map((s) => farmSlotHTML(s, s.slot === foxSlot)).join("");
+    const patron = f.patron;
+    const turbo = f.turbo;
+    const pasture = f.slots.map((s) => farmSlotHTML(s, s.slot === foxSlot, turbo.count > 0)).join("");
     const shop = f.animals.map((a) => farmShopHTML(a)).join("");
     const cta = ready.length
       ? `<button class="stk-cta" data-action="farm-collect-all"><span class="stk-cta-ic">⚡</span> Sebrat vše (${ready.length}× · +${fmtPts(readySum)})</button>`
       : `<div class="stk-cta" style="opacity:.5;cursor:default;background:linear-gradient(135deg,#2a2114,#1c150d);color:#9e8a69;box-shadow:none"><span class="stk-cta-ic">🕒</span> Zatím není co sebrat — nakrm zvířata</div>`;
     box.innerHTML = `<div class="stk-wrap">
       <div class="stk-head"><img class="stk-head-ic" src="/sedlak-cut.png" alt="">
-        <div><h1>Statek</h1><p>Kup zvíře → nakrm ho → produkuje v čase → seber produkt = <b>XP + sedláci</b></p></div></div>
+        <div><h1>Statek</h1><p>Kup zvíře → nakrm ho → produkuje v čase → seber produkt = <b>XP + sedláci</b></p><button class="wg-reopen" data-action="farm-guide">ℹ Jak funguje Statek?</button></div></div>
       <div class="stk-status">
         <span class="stk-s-l">🏆 <b>Sbírka</b> <span class="stk-chip${col.complete ? " ok" : ""}">${col.have}/${col.total} druhů</span>
           <span class="faint">${col.complete ? "✓ kompletní" : `kompletní = +${fmtPts(col.reward)}`}</span></span>
-        <span class="stk-s-r"><span class="stk-chip">🌾 Krmivo ${f.krmivo}</span><span class="faint" style="font-size:11px">ze sklizně</span>${f.prod_bonus ? `<span class="stk-chip" style="background:rgba(146,110,255,.14);border-color:rgba(146,110,255,.35);color:#c3b0ff">🐕 +${f.prod_bonus}%</span>` : ""}${f.live ? `<span class="stk-chip" title="Stream je LIVE – krmení teď spouští ${f.live_mult}× rychlejší cyklus" style="background:rgba(255,91,91,.14);border-color:rgba(255,91,91,.4);color:#ff8a8a">🔴 LIVE ×${f.live_mult}</span>` : ""}</span>
+        <span class="stk-s-r"><span class="stk-chip">🌾 Krmivo ${f.krmivo}</span><span class="faint" style="font-size:11px">ze sklizně</span>${f.prod_bonus ? `<span class="stk-chip" style="background:rgba(146,110,255,.14);border-color:rgba(146,110,255,.35);color:#c3b0ff">🐕 +${f.prod_bonus}%</span>` : ""}</span>
+      </div>
+      <div class="stk-status" style="border-color:${patron.gifts ? "rgba(185,95,255,.45)" : "rgba(255,183,55,.22)"}">
+        <span class="stk-s-l">🎁 <b>Patron sezóny</b> <span class="stk-chip${patron.gifts ? " ok" : ""}">${patron.gifts} tento měsíc</span>
+          <span class="faint">${patron.title ? esc(patron.title) : `První gift = odznak Dárce farmy`}</span></span>
+        <span class="stk-s-r">${patron.slot_bonus ? `<span class="stk-chip ok">🏠 +1 patron slot</span>` : ""}${patron.fox_guard ? `<span class="stk-chip ok">🦊 ochrana lišky</span>` : ""}${patron.next_at ? `<span class="faint" style="font-size:11px">ještě ${patron.next_at - patron.gifts} do dalšího milníku</span>` : `<span class="faint" style="font-size:11px">max. sezónní titul</span>`}</span>
+      </div>
+      <div class="stk-status" style="border-color:${turbo.count ? "rgba(255,183,55,.5)" : "rgba(255,183,55,.22)"}">
+        <span class="stk-s-l">⚡ <b>Farmářské turbo</b> <span class="stk-chip${turbo.count ? " ok" : ""}">${turbo.count}/${turbo.max} žetonů</span>
+          <span class="faint">1 gift = 1 žeton · další cyklus vybraného zvířete běží 2× rychleji</span></span>
+        <span class="stk-s-r"><span class="faint" style="font-size:11px">žetony propadnou za 7 dní</span></span>
       </div>
       ${f.fox ? `<div class="stk-status" style="border-color:rgba(201,106,42,.5)">
         <span class="stk-s-l">🦊 <b>Liška na statku!</b> <span class="faint">Číhá na tvůj hotový produkt – zaplať výkupné, nebo o něj přijdeš.</span></span>
@@ -2809,7 +2827,7 @@ async function loadFarm() {
       ${cta}
       ${f.barn && f.barn.next_cost ? `<div style="margin:10px 0 0;text-align:center"><button class="btn btn-ghost" data-action="farm-barn" data-cost="${f.barn.next_cost}" title="Prestige stodoly: každý level = +1 slot na zvíře (navždy)">🏠 Vylepšit stodolu na lvl ${f.barn.level + 1} (+1 slot) · ${fmtPts(f.barn.next_cost)}</button></div>`
         : f.barn && f.barn.level > 1 ? `<div class="faint" style="margin:10px 0 0;text-align:center;font-size:12px">🏆 Stodola na maximu (lvl ${f.barn.level})</div>` : ""}
-      <p class="stk-info">Sloty: <b>${f.n_slots}</b>${f.sub ? " (💜 sub +1)" : " · 💜 sub má +1 slot"}${f.barn && f.barn.level > 1 ? ` (🏠 stodola lvl ${f.barn.level})` : ""}. Krmení bere <b>krmivo</b> (zdarma ze zahrádky), jinak sedláky. Produkt = <b>XP</b> (mimo strop) + sedláci, <b>levelem roste</b> ⭐. Zlatý produkt (${f.golden_pct} %) ×${f.golden_mult}. Nenakrmené zvíře neprodukuje.</p>
+      <p class="stk-info">Sloty: <b>${f.n_slots}</b>${f.sub ? " (💜 sub +1)" : " · 💜 sub má +1 slot"}${f.barn && f.barn.level > 1 ? ` (🏠 stodola lvl ${f.barn.level})` : ""}${f.active_slots < f.n_slots ? " · sezónní patron slot skončil — prodej zvíře v něm před další koupí" : ""}. Krmení bere <b>krmivo</b> (zdarma ze zahrádky), jinak sedláky. Produkt = <b>XP</b> (mimo strop) + sedláci, <b>levelem roste</b> ⭐. Zlatý produkt (${f.golden_pct} %) ×${f.golden_mult}. Nenakrmené zvíře neprodukuje.</p>
       <div class="stk-shop-title">🐾 Zvířata k koupi</div>
       <div class="stk-shop">${shop}</div>
     </div>`;
@@ -2838,7 +2856,15 @@ async function farmFeed(slot) {
     const r = await api("/farm/feed", { method: "POST", body: { slot: parseInt(slot, 10) } });
     if (state.user) state.user.points = r.balance;
     if (r.leveled_up) { toast(`⭐ LEVEL UP! ${esc(r.name)} je teď level ${r.level} — větší výnos!`, "success"); try { confettiBurst(); } catch (e) {} }
-    else toast(`Nakrmeno ${r.used_krmivo ? "krmivem 🌾 (zdarma)" : "🌾"} — ${esc(r.name)} produkuje${r.live_boost ? " 🔴 LIVE ×2 rychlost!" : ""}`, "success");
+    else toast(`Nakrmeno ${r.used_krmivo ? "krmivem 🌾 (zdarma)" : "🌾"} — ${esc(r.name)} produkuje`, "success");
+    renderHeader(); loadFarm();
+  } catch (e) { toast(e.message, "error"); }
+}
+async function farmTurbo(slot) {
+  try {
+    const r = await api("/farm/turbo", { method: "POST", body: { slot: parseInt(slot, 10) } });
+    if (state.user) state.user.points = r.balance;
+    toast(`⚡ Turbo použito! ${esc(r.name)} dokončí tento cyklus 2× rychleji · zbývá ${r.turbo_left}`, "success");
     renderHeader(); loadFarm();
   } catch (e) { toast(e.message, "error"); }
 }
@@ -2870,7 +2896,7 @@ async function farmBarnUpgrade(cost) {
     renderHeader(); loadFarm();
   } catch (e) { toast(e.message, "error"); }
 }
-function farmSlotHTML(s, hasFox) {
+function farmSlotHTML(s, hasFox, hasTurbo) {
   if (s.empty) return `<div class="stk-animal stk-empty"><span class="stk-a-emoji">➕</span><div class="stk-a-name faint">volno</div></div>`;
   const img = stkImg(s.animal, s.icon, "stk-a");
   const name = `<div class="stk-a-name">${esc(s.name)} <span class="stk-a-lvl">⭐${s.level}</span></div>`;
@@ -2879,7 +2905,7 @@ function farmSlotHTML(s, hasFox) {
   if (s.utility) return `<div class="stk-animal">${sell}<div class="stk-badge util">+${s.bonus}%</div>${img}${name}</div>`;
   if (hasFox) return `<div class="stk-animal" title="Liška! Vyřeš ji nahoře 🦊"><div class="stk-badge hungry">🦊!</div>${img}${name}</div>`;
   if (s.state === "ready") return `<div class="stk-animal" data-action="farm-collect" data-slot="${s.slot}">${sell}<div class="stk-badge ready">${s.pico} +${fmtPts(s.reward)}</div>${img}${name}</div>`;
-  if (s.state === "hungry") return `<div class="stk-animal" data-action="farm-feed" data-slot="${s.slot}">${sell}<div class="stk-badge hungry">🌾 ${fmtPts(s.feed)}</div>${img}${name}</div>`;
+  if (s.state === "hungry") return `<div class="stk-animal" data-action="farm-feed" data-slot="${s.slot}">${sell}${hasTurbo ? `<button class="stk-a-turbo" data-action="farm-turbo" data-slot="${s.slot}" title="Použít turbo žeton: tento cyklus 2× rychleji" aria-label="Turbo krmení ${esc(s.name)}">⚡2×</button>` : ""}<div class="stk-badge hungry">🌾 ${fmtPts(s.feed)}</div>${img}${name}</div>`;
   return `<div class="stk-animal">${sell}<div class="stk-badge time grd-time" data-left="${s.seconds_left}">${grdDur(s.seconds_left)}</div>${img}${name}</div>`;
 }
 function farmShopHTML(a) {
@@ -6195,6 +6221,21 @@ function openModal(html, extraClass = "") {
 }
 function closeModal() { $("#modalRoot").classList.remove("open"); $("#modalRoot").innerHTML = ""; }
 
+function farmGuide() {
+  const steps = [
+    ["🐾", "Kup a nakrm", "Kup zvíře do volného slotu. Krmivo ze <b>Zahrádky</b> je zdarma, jinak krmíš za sedláky."],
+    ["⏱️", "Seber produkci", "Po dokončení cyklu seber produkt za <b>sedláky + XP</b>; zvíře pak znovu čeká na krmení."],
+    ["📋", "Plň Zakázku dne", "Produkty se počítají do denní zakázky. Dokonči ji pro další odměnu."],
+    ["🦊", "Chraň statek", "Liška může číhat na hotový produkt. Pes ji odežene; patron s 15 gifty tento měsíc taky."],
+    ["⚡", "Giftni a zrychli", "Každý gift sub dá turbo žeton: vyber zvíře a jeho příští cyklus poběží 2× rychleji."],
+    ["🎁", "Staň se patronem", "Za 5 gift subů v měsíci získáš patron slot do konce sezóny. Průběh najdeš přímo nad farmou."],
+  ];
+  openModal(`<div class="wg"><div class="wg-head"><img class="wg-mascot" src="/sedlak-cut.png" alt="">
+    <div><h2 class="wg-title">Jak funguje <span style="color:var(--accent)">Statek</span>? 🚜</h2><p class="wg-sub">Krátký návod, jak z farmy vytěžit maximum.</p></div></div>
+    <div class="wg-steps">${steps.map(([ic, t, d]) => `<div class="wg-step"><span class="wg-ico">${ic}</span><div><b>${t}</b><div class="wg-d">${d}</div></div></div>`).join("")}</div>
+    <button class="btn btn-primary btn-block" data-action="close-modal">Jdu farmařit! 🌾</button></div>`, "modal-wg");
+}
+
 /* Uvítací průvodce – „jak to funguje" (1× automaticky přes localStorage, znovu z patičky) */
 function welcomeGuide() {
   const u = state.user;
@@ -6252,12 +6293,14 @@ function handleAction(action, el) {
     case "grd-fert": grdFert(el.dataset.plot); break;
     case "farm-buy": farmBuy(el.dataset.animal); break;
     case "farm-feed": farmFeed(el.dataset.slot); break;
+    case "farm-turbo": farmTurbo(el.dataset.slot); break;
     case "farm-collect": farmCollect(el.dataset.slot); break;
     case "farm-collect-all": farmCollectAll(); break;
     case "farm-sell": farmSell(el.dataset.slot); break;
     case "farm-fox": farmFox(el.dataset.pay === "1"); break;
     case "farm-contract": farmContractClaim(); break;
     case "farm-barn": farmBarnUpgrade(parseInt(el.dataset.cost, 10)); break;
+    case "farm-guide": farmGuide(); break;
     case "decor-buy": buyDecor(el.dataset.key); break;
     case "claim-partner": claimPartnerLink(el.dataset.id, el.dataset.url); break;
     case "claim-quest": claimQuest(el.dataset.key); break;
