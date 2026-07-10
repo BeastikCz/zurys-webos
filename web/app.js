@@ -2445,8 +2445,18 @@ async function loadFarm() {
       <span style="margin-left:auto;display:flex;gap:8px">
         <button class="bp-claim" data-action="farm-fox" data-pay="1">💰 Zaplatit ${fmtPts(f.fox.ransom)}</button>
         <button class="btn btn-ghost" data-action="farm-fox" data-pay="0">Nechat jí ho 😞</button></span></div>` : "";
+    const con = f.contract;
+    const contractBar = con ? `<div class="panel" style="margin:0 0 14px;padding:10px 14px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;font-size:13px">
+      <b>📋 Zakázka dne</b>
+      ${con.items.map((i) => `<span class="${i.have >= i.goal ? "" : "faint"}">${i.pico} ${esc(i.product)} <b>${i.have}/${i.goal}</b>${i.have >= i.goal ? " ✓" : ""}</span>`).join("")}
+      <span style="margin-left:auto">${con.claimed ? `<span class="faint">✅ vyzvednuto (+${fmtPts(con.reward)})</span>`
+        : con.done ? `<button class="bp-claim" data-action="farm-contract">🎁 Vyzvednout +${fmtPts(con.reward)}</button>`
+        : `<span class="faint">odměna +${fmtPts(con.reward)}</span>`}</span></div>` : "";
     const shop = f.animals.map((a) => farmShopHTML(a)).join("");
-    box.innerHTML = `${collBar}${foxBar}<div class="farm-pasture">${farmSceneSVG()}<div class="farm-animals-row">${slots}</div></div>${bulk}
+    const barn = f.barn || { level: 1 };
+    const barnRow = barn.next_cost ? `<div style="margin:14px 0 0"><button class="btn btn-ghost" data-action="farm-barn" data-cost="${barn.next_cost}" title="Prestige stodoly: každý level = +1 slot na zvíře">🏠 Vylepšit stodolu na lvl ${barn.level + 1} (+1 slot) · ${fmtPts(barn.next_cost)}</button></div>`
+      : `<div class="faint" style="margin:14px 0 0;font-size:12px">🏆 Stodola na maximu (lvl ${barn.level})</div>`;
+    box.innerHTML = `${collBar}${foxBar}${contractBar}<div class="farm-pasture">${farmSceneSVG(barn.level)}<div class="farm-animals-row">${slots}</div></div>${bulk}${barnRow}
       <p class="muted" style="font-size:12px;margin:16px 0 8px">Sloty: <b>${f.n_slots}</b>${f.sub ? ` (💜 sub +1)` : ` · 💜 sub má +1 slot`}. Krmení bere <b>krmivo</b> (zdarma ze zahrádky), jinak sedláky. Produkt = <b>XP</b> (mimo strop) + sedláci, <b>levelem roste</b> ⭐. Zlatý produkt (${f.golden_pct} %) ×${f.golden_mult}. Nenakrmené neprodukuje 🌾.</p>
       <div class="section-title" style="margin:18px 0 8px">🐾 Zvířata k koupi</div>
       <div class="grd-shop">${shop}</div>`;
@@ -2479,7 +2489,12 @@ async function farmFeed(slot) {
   } catch (e) { toast(e.message, "error"); }
 }
 function farmStars(lvl, max) { return `<span class="faint" style="font-size:11px" title="Level ${lvl}/${max} – krmením roste výnos i rychlost">⭐${lvl}</span>`; }
-function farmSceneSVG() {
+function farmSceneSVG(barnLvl) {
+  // prestige stodoly: levelem se mění barva a od lvl 4 vlaje vlajka
+  const bl = Math.max(1, Math.min(5, barnLvl || 1));
+  const barnFill = ["#b4413a", "#b4413a", "#c04f36", "#c85c2e", "#d4a017"][bl - 1];
+  const barnEdge = ["#8d2f29", "#8d2f29", "#94381f", "#9c451c", "#a67c00"][bl - 1];
+  const flag = bl >= 4 ? `<line x1="60" y1="2" x2="60" y2="-26" stroke="#6b4a2a" stroke-width="3"/><path d="M60 -26 l26 7 -26 7z" fill="${bl >= 5 ? "#ffd24a" : "#e05c5c"}"/>` : "";
   return `<svg class="farm-bg" viewBox="0 0 800 230" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
     <defs>
       <linearGradient id="fsky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#20284f"/><stop offset=".45" stop-color="#3e3a66"/><stop offset=".7" stop-color="#8a5570"/><stop offset="1" stop-color="#d98a52"/></linearGradient>
@@ -2493,8 +2508,8 @@ function farmSceneSVG() {
     <path d="M0 168 Q260 140 520 165 T800 158 V230 H0Z" fill="#314c34"/>
     <rect y="160" width="800" height="70" fill="url(#fgrass)"/>
     <g transform="translate(60 92)">
-      <rect x="0" y="34" width="120" height="80" fill="#b4413a"/><rect x="0" y="34" width="120" height="80" fill="none" stroke="#8d2f29" stroke-width="2"/>
-      <polygon points="-10,36 60,2 130,36" fill="#7c2a25"/>
+      <rect x="0" y="34" width="120" height="80" fill="${barnFill}"/><rect x="0" y="34" width="120" height="80" fill="none" stroke="${barnEdge}" stroke-width="2"/>
+      <polygon points="-10,36 60,2 130,36" fill="#7c2a25"/>${flag}
       <rect x="46" y="66" width="34" height="48" fill="#5e221c"/>
       <line x1="46" y1="66" x2="80" y2="114" stroke="#ecdcb0" stroke-width="3"/><line x1="80" y1="66" x2="46" y2="114" stroke="#ecdcb0" stroke-width="3"/>
       <rect x="52" y="44" width="24" height="16" fill="#f0d488"/><line x1="64" y1="44" x2="64" y2="60" stroke="#7c2a25" stroke-width="2"/><line x1="52" y1="52" x2="76" y2="52" stroke="#7c2a25" stroke-width="2"/>
@@ -2540,6 +2555,25 @@ async function farmCollect(slot) {
     if (state.user) state.user.points = r.balance;
     toast(`${r.golden ? "🌟 ZLATÉ " : ""}${r.pico || ""} +${fmtPts(r.reward)} sedláků!`, "success");
     if (r.golden) { try { confettiBurst(); } catch (e) {} }
+    renderHeader(); loadFarm();
+  } catch (e) { toast(e.message, "error"); }
+}
+async function farmContractClaim() {
+  try {
+    const r = await api("/farm/contract/claim", { method: "POST", body: {} });
+    if (state.user) state.user.points = r.balance;
+    toast(`📋 Zakázka splněna! +${fmtPts(r.reward)} sedláků 🎁`, "success");
+    try { confettiBurst(); } catch (e) {}
+    renderHeader(); loadFarm();
+  } catch (e) { toast(e.message, "error"); }
+}
+async function farmBarnUpgrade(cost) {
+  if (!confirm(`Vylepšit stodolu za ${fmtPts(cost)} sedláků? Získáš +1 slot na zvíře (navždy).`)) return;
+  try {
+    const r = await api("/farm/barn/upgrade", { method: "POST", body: {} });
+    if (state.user) state.user.points = r.balance;
+    toast(`🏠 Stodola vylepšena na level ${r.level} — +1 slot!`, "success");
+    try { confettiBurst(); } catch (e) {}
     renderHeader(); loadFarm();
   } catch (e) { toast(e.message, "error"); }
 }
@@ -5777,6 +5811,8 @@ function handleAction(action, el) {
     case "farm-collect-all": farmCollectAll(); break;
     case "farm-sell": farmSell(el.dataset.slot); break;
     case "farm-fox": farmFox(el.dataset.pay === "1"); break;
+    case "farm-contract": farmContractClaim(); break;
+    case "farm-barn": farmBarnUpgrade(parseInt(el.dataset.cost, 10)); break;
     case "decor-buy": buyDecor(el.dataset.key); break;
     case "claim-partner": claimPartnerLink(el.dataset.id, el.dataset.url); break;
     case "claim-quest": claimQuest(el.dataset.key); break;

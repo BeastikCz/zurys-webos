@@ -1418,6 +1418,28 @@ def farm_collect_all(user: sqlite3.Row = Depends(require_user),
     return farm.collect_all(conn, user)
 
 
+@router.post("/farm/contract/claim")
+def farm_contract_claim(user: sqlite3.Row = Depends(require_user),
+                        conn: sqlite3.Connection = Depends(db_dep)):
+    """Vyzvedne odměnu za splněnou denní zakázku (sedláci bez XP)."""
+    from .. import farm
+    r = farm.claim_contract(conn, user)
+    if not r.get("ok"):
+        raise HTTPException(status_code=400, detail=r.get("error", "Vyzvednout se to teď nepodařilo."))
+    return r
+
+
+@router.post("/farm/barn/upgrade")
+def farm_barn_upgrade(user: sqlite3.Row = Depends(require_user),
+                      conn: sqlite3.Connection = Depends(db_dep)):
+    """Vylepší stodolu (sink) → +1 slot na zvíře."""
+    from .. import farm
+    r = farm.upgrade_barn(conn, user)
+    if not r.get("ok"):
+        raise HTTPException(status_code=400, detail=r.get("error", "Vylepšit se to teď nepodařilo."))
+    return r
+
+
 @router.post("/farm/fox")
 def farm_fox(data: FarmFoxIn, user: sqlite3.Row = Depends(require_user),
              conn: sqlite3.Connection = Depends(db_dep)):
