@@ -2494,12 +2494,12 @@ async function adminAuctions() {
           </div>
           <input type="file" id="auc_file" accept="image/png,image/jpeg,image/webp,image/gif" style="display:none">
           <div id="auc_skininfo" class="faint" style="font-size:11.5px;margin-top:6px"></div>
-          <div id="skinPicker" class="skin-picker" style="display:none">
+          <div id="auc_skinPicker" class="skin-picker" style="display:none">
             <div style="display:flex;gap:8px">
-              <input class="input" id="skinQ" placeholder="napiš skin: asiimov, butterfly, dragon lore…" autocomplete="off" style="flex:1">
-              <button type="button" class="btn btn-sm btn-primary" data-action="skin-search">Hledat</button>
+              <input class="input" id="auc_skinQ" placeholder="napiš skin: asiimov, butterfly, dragon lore…" autocomplete="off" style="flex:1">
+              <button type="button" class="btn btn-sm btn-primary" data-action="skin-search" data-prefix="auc">Hledat</button>
             </div>
-            <div id="skinResults" class="skin-results"></div>
+            <div id="auc_skinResults" class="skin-results"></div>
           </div>
         </div>
         <div class="field-row" style="margin-top:8px">
@@ -2561,12 +2561,12 @@ function auctionEditForm(a) {
         </div>
         <input type="file" id="aue_file" accept="image/png,image/jpeg,image/webp,image/gif" style="display:none">
         <div id="aue_skininfo" class="faint" style="font-size:11.5px;margin-top:6px"></div>
-        <div id="skinPicker" class="skin-picker" style="display:none">
+        <div id="aue_skinPicker" class="skin-picker" style="display:none">
           <div style="display:flex;gap:8px">
-            <input class="input" id="skinQ" placeholder="napiš skin: asiimov, butterfly, dragon lore…" autocomplete="off" style="flex:1">
-            <button type="button" class="btn btn-sm btn-primary" data-action="skin-search">Hledat</button>
+            <input class="input" id="aue_skinQ" placeholder="napiš skin: asiimov, butterfly, dragon lore…" autocomplete="off" style="flex:1">
+            <button type="button" class="btn btn-sm btn-primary" data-action="skin-search" data-prefix="aue">Hledat</button>
           </div>
-          <div id="skinResults" class="skin-results"></div>
+          <div id="aue_skinResults" class="skin-results"></div>
         </div>
       </div>
       <div class="field-row">
@@ -4387,12 +4387,12 @@ function productForm(p) {
         </div>
         <input type="file" id="pf_file" accept="image/png,image/jpeg,image/webp,image/gif" style="display:none">
         <div id="pf_skininfo" class="faint" style="font-size:11.5px;margin-top:6px"></div>
-        <div id="skinPicker" class="skin-picker" style="display:none">
+        <div id="pf_skinPicker" class="skin-picker" style="display:none">
           <div style="display:flex;gap:8px">
-            <input class="input" id="skinQ" placeholder="napiš skin: asiimov, butterfly, dragon lore…" autocomplete="off" style="flex:1">
-            <button type="button" class="btn btn-sm btn-primary" data-action="skin-search">Hledat</button>
+            <input class="input" id="pf_skinQ" placeholder="napiš skin: asiimov, butterfly, dragon lore…" autocomplete="off" style="flex:1">
+            <button type="button" class="btn btn-sm btn-primary" data-action="skin-search" data-prefix="pf">Hledat</button>
           </div>
-          <div id="skinResults" class="skin-results"></div>
+          <div id="pf_skinResults" class="skin-results"></div>
         </div>
       </div>
       <div class="field"><label>Popis (volitelné)</label><textarea class="input" id="pf_description" rows="2" placeholder="Krátký popis / instrukce pro diváka">${esc(p.description || "")}</textarea></div>
@@ -4465,19 +4465,19 @@ let _skinDebounce = null;
 let _imgPrefix = "pf";                  // který form widget obsluhuje: pf_ (shop odměna) / auc_ (aukce)
 const _imgEl = (s) => $(`#${_imgPrefix}_${s}`);
 function toggleSkinPicker() {
-  const p = $("#skinPicker"); if (!p) return;
+  const p = _imgEl("skinPicker"); if (!p) return;
   const show = p.style.display === "none";
   p.style.display = show ? "block" : "none";
   if (show) {
-    const q = $("#skinQ");
+    const q = _imgEl("skinQ");
     if (q) { q.value = (_imgEl("name").value || "").trim(); q.focus(); }
-    if (($("#skinQ").value || "").length >= 2) searchSkins();
+    if ((_imgEl("skinQ").value || "").length >= 2) searchSkins();
   }
 }
 function debouncedSkinSearch() { clearTimeout(_skinDebounce); _skinDebounce = setTimeout(searchSkins, 280); }
 async function searchSkins() {
-  const q = ($("#skinQ").value || "").trim();
-  const box = $("#skinResults"); if (!box) return;
+  const q = (_imgEl("skinQ").value || "").trim();
+  const box = _imgEl("skinResults"); if (!box) return;
   if (q.length < 2) { box.innerHTML = `<div class="faint" style="padding:8px">Napiš aspoň 2 znaky…</div>`; return; }
   box.innerHTML = `<div class="faint" style="padding:8px">⏳ Hledám…</div>`;
   try {
@@ -4495,7 +4495,7 @@ function pickSkin(el) {
   if (_imgEl("image")) _imgEl("image").value = image;
   const info = _imgEl("skininfo");
   if (info) info.innerHTML = `<img src="${esc(image)}" style="height:40px;vertical-align:middle;border-radius:6px;background:#0b0c16;padding:2px"> ✅ Vybráno: <b>${esc(name)}</b>`;
-  const p = $("#skinPicker"); if (p) p.style.display = "none";
+  const p = _imgEl("skinPicker"); if (p) p.style.display = "none";
 }
 function uploadImageClick() {
   const f = _imgEl("file");
@@ -6569,7 +6569,7 @@ function handleAction(action, el) {
     case "skin-picker": _imgPrefix = el.dataset.prefix || "pf"; toggleSkinPicker(); break;
     case "upload-image": _imgPrefix = el.dataset.prefix || "pf"; uploadImageClick(); break;
     case "coin-upload": coinUploadClick(); break;
-    case "skin-search": searchSkins(); break;
+    case "skin-search": _imgPrefix = el.dataset.prefix || _imgPrefix; searchSkins(); break;
     case "skin-pick": pickSkin(el); break;
     case "user-points": changeUserPoints(id, parseInt(el.dataset.sign, 10), el.dataset.name); break;
     case "pts-confirm": confirmUserPoints(el); break;
@@ -8072,7 +8072,7 @@ document.addEventListener("change", (e) => {
   else if (id === "pf_file" || id === "auc_file" || id === "aue_file") { _imgPrefix = id.slice(0, -5); uploadImageFile(); }
 });
 document.addEventListener("input", (e) => {
-  if (e.target && e.target.id === "skinQ") debouncedSkinSearch();
+  if (e.target && e.target.id.endsWith("_skinQ")) { _imgPrefix = e.target.id.slice(0, -6); debouncedSkinSearch(); }
 });
 document.addEventListener("keydown", (e) => {
   if (e.key !== "Enter") return;
