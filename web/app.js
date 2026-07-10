@@ -5428,8 +5428,8 @@ async function adminCasehug() {
           <div class="section-title" style="margin-top:0">Historie připsaných vkladů</div>
           <span class="faint" style="font-size:12.5px">Tento měsíc: <b>${m.count || 0}×</b> · ${Number(m.eur || 0)} € nahlášeno · ${Number(m.points || 0).toLocaleString("cs-CZ")} 🌾 vyplaceno — srovnej s reálnou affiliate výplatou!</span>
         </div>
-        ${(d.recent || []).length ? `<div style="overflow-x:auto"><table class="table"><thead><tr><th>Kdo</th><th>Vklad</th><th>ID vkladu</th><th>Sedláci</th><th>Kdy</th></tr></thead><tbody>
-          ${d.recent.map((r) => `<tr><td><b>${esc(r.username || "smazaný účet")}</b></td><td>${esc((r.reason.match(/CaseHug (\d+) €/) || [])[1] || "?")} €</td><td class="faint">${esc((r.reason.match(/\[([A-Za-z0-9_-]+)\]/) || [])[1] || "—")}</td><td>+${Number(r.change).toLocaleString("cs-CZ")}</td><td class="faint">${timeAgo(r.created_at)}</td></tr>`).join("")}
+        ${(d.recent || []).length ? `<div class="table-wrap" style="margin-top:10px"><table class="tbl"><thead><tr><th>Kdo</th><th>Vklad</th><th>ID vkladu</th><th>Sedláci</th><th>Kdy</th></tr></thead><tbody>
+          ${d.recent.map((r) => `<tr><td><b>${esc(r.username || "smazaný účet")}</b></td><td><b>${esc((r.reason.match(/CaseHug (\d+) €/) || [])[1] || "?")} €</b></td><td class="faint" style="font-family:monospace">${esc((r.reason.match(/\[([A-Za-z0-9_-]+)\]/) || [])[1] || "—")}</td><td style="color:var(--ok,#7ad97a)">+${Number(r.change).toLocaleString("cs-CZ")} 🌾</td><td class="faint">${timeAgo(r.created_at)}</td></tr>`).join("")}
         </tbody></table></div>` : `<div class="empty">Zatím žádné vklady.</div>`}
       </div>`;
     const inp = $("#chSearch");
