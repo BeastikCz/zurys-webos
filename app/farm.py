@@ -44,7 +44,9 @@ TURBO_SPEED_MULT = 2.0        # jeden turbo žeton zrychlí jediný příští c
 TURBO_MAX_STORED = 3
 TURBO_TTL_DAYS = 7
 GOLDEN_CHANCE = 0.03
+GOLDEN_EVENT_CHANCE = 0.10     # „Zlatá horečka" (launch event): šance na zlatý produkt během okna
 GOLDEN_MULT = 3
+PRODUCT_PICOS = ("🥚", "🥛", "🧶", "🧀", "💩", "🌟")   # markery produkce v points_log (žebříček)
 SELL_REFUND_PCT = 0.5          # prodej zvířete = % ceny zpět
 FEED_PER_LEVEL = 5             # kolik nakrmení = +1 level
 MAX_LEVEL = 10
@@ -280,6 +282,49 @@ def resolve_fox(conn, user, pay: bool) -> dict:
     return {"ok": True, "paid": paid, "balance": bal, "ransom": ransom}
 
 
+def golden_event_until(conn) -> str:
+    """ISO konec „Zlaté horečky" (''/minulost = neaktivní). Nastavuje admin endpoint."""
+    from .db import get_setting
+    return get_setting(conn, "farm_golden_until", "") or ""
+
+
+def _golden_chance(conn) -> float:
+    return GOLDEN_EVENT_CHANCE if golden_event_until(conn) > now_iso() else GOLDEN_CHANCE
+
+
+def golden_event_start(conn, days: int) -> dict:
+    """Spustí „Zlatou horečku" na N dní (šance na zlatý produkt 3 % → 10 %) + oznámí v chatu."""
+    import threading
+    import traceback
+    from .db import set_setting, get_conn
+    until = (datetime.now(timezone.utc) + timedelta(days=days)).isoformat()
+    set_setting(conn, "farm_golden_until", until)
+    conn.commit()
+
+    def _send():   # Kick HTTP mimo request thread (single-writer SQLite – viz live_events)
+        try:
+            c = get_conn()
+            try:
+                from . import kickbot
+                kickbot.send_message(
+                    c, f"🌟 ZLATÁ HOREČKA NA STATKU! {days} dní mají zlaté produkty "
+                       f"{int(GOLDEN_EVENT_CHANCE * 100)}% šanci (místo {int(GOLDEN_CHANCE * 100)} %) = ×{GOLDEN_MULT} sedláci. "
+                       f"Kup zvíře na zurys.live a farmi! 🚜", kind="farmevent")
+            finally:
+                c.close()
+        except Exception:
+            traceback.print_exc()
+    threading.Thread(target=_send, name="webos-farm-event", daemon=True).start()
+    return {"until": until, "chance_pct": int(GOLDEN_EVENT_CHANCE * 100)}
+
+
+def golden_event_stop(conn) -> dict:
+    from .db import set_setting
+    set_setting(conn, "farm_golden_until", "")
+    conn.commit()
+    return {"until": ""}
+
+
 def _starter_eligible(conn, uid: int) -> bool:
     """Nováček bez jediného zvířete v historii (sbírka prázdná) → první slepice za STARTER_COST."""
     return conn.execute("SELECT 1 FROM farm_collection WHERE user_id = ?", (uid,)).fetchone() is None
@@ -435,7 +480,10 @@ def status(conn, user) -> dict:
     all_keys = {a["key"] for a in ANIMALS}
     return {"slots": slots, "animals": _animals_public(conn, user), "n_slots": n_slots,
             "active_slots": active_slots, "sub": _is_sub(user),
-            "golden_pct": int(GOLDEN_CHANCE * 100), "golden_mult": GOLDEN_MULT, "krmivo": _feed_stock(conn, user["id"]),
+            "golden_pct": int(_golden_chance(conn) * 100), "golden_mult": GOLDEN_MULT,
+            "golden_event": golden_event_until(conn) > now_iso(),
+            "golden_event_until": golden_event_until(conn) if golden_event_until(conn) > now_iso() else "",
+            "krmivo": _feed_stock(conn, user["id"]),
             "prod_bonus": int(bonus * 100),
             "patron": patron,
             "turbo": _turbo_status(conn, user["id"]),
@@ -567,7 +615,7 @@ def _award_product(conn, user_id, a, level, bonus):
     # měkký denní strop: nad FARM_DAILY_FULL sedláků z produkce jde jen zlomek (grinder ochrana faucetu)
     soft = _farm_today(conn, user_id) >= FARM_DAILY_FULL
     paid = max(1, int(base * FARM_SOFT_RATE)) if soft else base
-    golden = random.random() < GOLDEN_CHANCE
+    golden = random.random() < _golden_chance(conn)
     add_points(conn, user_id, paid, f"Statek: {a['product']} {a['pico']}" + (" (nad denní strop)" if soft else ""))
     _farm_today_add(conn, user_id, paid)
     _contract_tick(conn, user_id, a["key"])

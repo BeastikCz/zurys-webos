@@ -348,3 +348,21 @@ def test_daily_soft_cap_reduces_payout():
         assert farm._farm_today(conn, uid) == 0
     finally:
         conn.close()
+
+
+def test_golden_event_boosts_chance():
+    from app.db import get_conn
+    from app import farm
+    conn = get_conn()
+    try:
+        uid = _user(conn); conn.commit()
+        assert farm._golden_chance(conn) == farm.GOLDEN_CHANCE
+        r = farm.golden_event_start(conn, 7)
+        assert r["until"] > "2026" and farm._golden_chance(conn) == farm.GOLDEN_EVENT_CHANCE
+        st = farm.status(conn, _row(conn, uid))
+        assert st["golden_event"] is True and st["golden_pct"] == int(farm.GOLDEN_EVENT_CHANCE * 100)
+        farm.golden_event_stop(conn)
+        assert farm._golden_chance(conn) == farm.GOLDEN_CHANCE
+        assert farm.status(conn, _row(conn, uid))["golden_event"] is False
+    finally:
+        conn.close()

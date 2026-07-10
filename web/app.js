@@ -2805,7 +2805,7 @@ async function loadFarm() {
       <div class="stk-status">
         <span class="stk-s-l">🏆 <b>Sbírka</b> <span class="stk-chip${col.complete ? " ok" : ""}">${col.have}/${col.total} druhů</span>
           <span class="faint">${col.complete ? "✓ kompletní" : `kompletní = +${fmtPts(col.reward)}`}</span></span>
-        <span class="stk-s-r"><span class="stk-chip">🌾 Krmivo ${f.krmivo}</span><span class="faint" style="font-size:11px">ze sklizně</span>${f.prod_bonus ? `<span class="stk-chip" style="background:rgba(146,110,255,.14);border-color:rgba(146,110,255,.35);color:#c3b0ff">🐕 +${f.prod_bonus}%</span>` : ""}<span class="stk-chip${f.farm_today >= f.farm_daily_full ? "" : " ok"}" title="Denní produkce v plné výši do ${fmtPts(f.farm_daily_full)} sedláků; nad strop jde jen čtvrtina (XP taky). O půlnoci se resetuje.">📈 dnes ${Number(f.farm_today).toLocaleString("cs-CZ")}/${Number(f.farm_daily_full).toLocaleString("cs-CZ")}${f.farm_today >= f.farm_daily_full ? " · ×¼" : ""}</span></span>
+        <span class="stk-s-r"><span class="stk-chip">🌾 Krmivo ${f.krmivo}</span><span class="faint" style="font-size:11px">ze sklizně</span>${f.prod_bonus ? `<span class="stk-chip" style="background:rgba(146,110,255,.14);border-color:rgba(146,110,255,.35);color:#c3b0ff">🐕 +${f.prod_bonus}%</span>` : ""}<span class="stk-chip${f.farm_today >= f.farm_daily_full ? "" : " ok"}" title="Denní produkce v plné výši do ${fmtPts(f.farm_daily_full)} sedláků; nad strop jde jen čtvrtina (XP taky). O půlnoci se resetuje.">📈 dnes ${Number(f.farm_today).toLocaleString("cs-CZ")}/${Number(f.farm_daily_full).toLocaleString("cs-CZ")}${f.farm_today >= f.farm_daily_full ? " · ×¼" : ""}</span>${f.golden_event ? `<span class="stk-chip" title="Zlatá horečka: zvýšená šance na zlatý produkt (×${f.golden_mult} sedláci)" style="background:rgba(255,210,74,.16);border-color:rgba(255,210,74,.5);color:#ffd24a">🌟 ZLATÁ HOREČKA ${f.golden_pct} %</span>` : ""}</span>
       </div>
       <div class="stk-status" style="border-color:${patron.gifts ? "rgba(185,95,255,.45)" : "rgba(255,183,55,.22)"}">
         <span class="stk-s-l">🎁 <b>Patron sezóny</b> <span class="stk-chip${patron.gifts ? " ok" : ""}">${patron.gifts} tento měsíc</span>
@@ -2833,8 +2833,13 @@ async function loadFarm() {
       <p class="stk-info">Sloty: <b>${f.n_slots}</b>${f.sub ? " (💜 sub +1)" : " · 💜 sub má +1 slot"}${f.barn && f.barn.level > 1 ? ` (🏠 stodola lvl ${f.barn.level})` : ""}${f.active_slots < f.n_slots ? " · sezónní patron slot skončil — prodej zvíře v něm před další koupí" : ""}. Krmení bere <b>krmivo</b> (zdarma ze zahrádky), jinak sedláky. Produkt = <b>XP</b> (mimo strop) + sedláci, <b>levelem roste</b> ⭐. Zlatý produkt (${f.golden_pct} %) ×${f.golden_mult}. Nenakrmené zvíře neprodukuje.</p>
       <div class="stk-shop-title">🐾 Zvířata k koupi</div>
       <div class="stk-shop">${shop}</div>
-      <div class="stk-status" style="margin-top:14px;opacity:.75"><span class="stk-s-l">🏆 <b>Farmářský žebříček</b> <span class="faint">kdo týdně vyprodukuje nejvíc — už brzy!</span></span><span class="stk-s-r"><span class="stk-chip">🔜 coming soon</span></span></div>
+      <div class="stk-shop-title" style="margin-top:18px">🏆 Farmářský žebříček týdne</div>
+      <div id="farmLb" class="stk-status" style="display:block"><span class="faint">Načítám…</span></div>
+      ${state.user && state.user.role === "admin" ? `<div style="margin:14px 0 0;text-align:center">${f.golden_event
+        ? `<button class="btn btn-ghost" data-action="farm-event" data-days="0">🛑 Ukončit Zlatou horečku (admin)</button>`
+        : `<button class="btn btn-ghost" data-action="farm-event" data-days="7">🌟 Spustit Zlatou horečku na 7 dní (admin)</button>`}</div>` : ""}
     </div>`;
+    loadFarmLb();
     stkFixImgs(box);   // chybějící .webp assety → emoji fallback (CSP-safe)
     if (window._farmTimer) clearInterval(window._farmTimer);
     window._farmTimer = setInterval(() => {
@@ -2879,6 +2884,27 @@ async function farmFox(pay) {
     if (state.user) state.user.points = r.balance;
     toast(pay ? `Výkupné zaplaceno (−${fmtPts(r.ransom)}) — produkt je v bezpečí 🦊💰` : "Liška si odnesla produkt… 🦊😞", pay ? "success" : "info");
     renderHeader(); loadFarm();
+  } catch (e) { toast(e.message, "error"); }
+}
+async function loadFarmLb() {
+  const el = document.getElementById("farmLb"); if (!el) return;
+  try {
+    const lb = await api("/farm/leaderboard");
+    if (!lb.rows.length) { el.innerHTML = `<span class="faint">Tenhle týden ještě nikdo nic nevyprodukoval — buď první! 🐔</span>`; return; }
+    const medal = (i) => ["🥇", "🥈", "🥉"][i] || `${i + 1}.`;
+    el.innerHTML = lb.rows.map((r, i) =>
+      `<div style="display:flex;align-items:center;gap:8px;padding:3px 0;font-size:13px">
+        <span style="width:26px;text-align:center">${medal(i)}</span><b>${esc(r.username)}</b>
+        <span style="margin-left:auto" class="faint">+${fmtPts(r.gained)} z produkce</span></div>`).join("")
+      + (lb.me_rank ? `<div class="faint" style="margin-top:6px;font-size:12px">Ty: #${lb.me_rank} tento týden</div>` : "");
+  } catch (e) { el.innerHTML = `<span class="faint">${esc(e.message)}</span>`; }
+}
+async function farmEvent(days) {
+  if (!confirm(days > 0 ? `Spustit Zlatou horečku na ${days} dní? Bot to oznámí v chatu.` : "Ukončit Zlatou horečku hned?")) return;
+  try {
+    await api("/admin/farm-event", { method: "POST", body: { days } });
+    toast(days > 0 ? `🌟 Zlatá horečka běží ${days} dní!` : "Zlatá horečka ukončena.", "success");
+    loadFarm();
   } catch (e) { toast(e.message, "error"); }
 }
 async function farmContractClaim() {
@@ -6304,6 +6330,7 @@ function handleAction(action, el) {
     case "farm-fox": farmFox(el.dataset.pay === "1"); break;
     case "farm-contract": farmContractClaim(); break;
     case "farm-barn": farmBarnUpgrade(parseInt(el.dataset.cost, 10)); break;
+    case "farm-event": farmEvent(parseInt(el.dataset.days, 10)); break;
     case "farm-guide": farmGuide(); break;
     case "decor-buy": buyDecor(el.dataset.key); break;
     case "claim-partner": claimPartnerLink(el.dataset.id, el.dataset.url); break;

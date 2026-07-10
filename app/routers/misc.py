@@ -1490,6 +1490,43 @@ def garden_decor_buy(data: DecorBuyIn, user: sqlite3.Row = Depends(require_user)
 
 
 # ---------------- Statek (mini-farma) ----------------
+_farm_lb_cache = {"at": 0.0, "data": None}
+
+
+@router.get("/farm/leaderboard")
+def farm_leaderboard(user: sqlite3.Row = Depends(require_user),
+                     conn: sqlite3.Connection = Depends(db_dep)):
+    """Farmářský žebříček: kdo tento týden vyprodukoval nejvíc (jen produkty statku – reasons
+    'Statek: …' s produkt emoji, vč. zlatých). Read-only z points_log, cache 60 s, týden od pondělí."""
+    import time as _t
+    from .. import farm
+    nowm = _t.monotonic()
+    if _farm_lb_cache["data"] is None or nowm - _farm_lb_cache["at"] >= 60:
+        now = datetime.now(timezone.utc)
+        monday = (now - timedelta(days=now.weekday())).replace(hour=0, minute=0, second=0, microsecond=0)
+        agg: dict = {}
+        for r in conn.execute(
+            "SELECT l.user_id, l.reason, SUM(l.change) AS gained, u.username, u.avatar_url, "
+            "  u.role, u.is_sub, u.is_vip, u.is_og, u.cos_name, u.cos_frame, u.cos_banner "
+            "FROM points_log l JOIN users u ON u.id = l.user_id "
+            "WHERE l.change > 0 AND l.created_at >= ? AND l.reason LIKE 'Statek: %' "
+            "GROUP BY l.user_id, l.reason", (monday.isoformat(),)):
+            if not any(p in (r["reason"] or "") for p in farm.PRODUCT_PICOS):
+                continue                       # koupě/prodej/zakázka/stodola se nepočítá – jen produkce
+            e = agg.setdefault(r["user_id"], {
+                "user_id": r["user_id"], "username": r["username"], "avatar_url": r["avatar_url"],
+                "role": r["role"], "is_sub": bool(r["is_sub"]), "is_vip": bool(r["is_vip"]),
+                "is_og": bool(r["is_og"]), "cos": cosmetics.resolve(r), "gained": 0})
+            e["gained"] += r["gained"]
+        ranked = sorted(agg.values(), key=lambda d: (-d["gained"], d["username"]))
+        _farm_lb_cache.update(at=nowm, data={"week_start": monday.isoformat(), "rows": ranked})
+    data = _farm_lb_cache["data"]
+    me = next((i + 1 for i, d in enumerate(data["rows"]) if d["user_id"] == user["id"]), None)
+    return {"week_start": data["week_start"], "me_rank": me,
+            "rows": [{k: v for k, v in d.items() if k != "user_id"}
+                     for d in data["rows"][:10]]}
+
+
 @router.get("/farm")
 def farm_status(user: sqlite3.Row = Depends(require_farm_access),
                 conn: sqlite3.Connection = Depends(db_dep)):

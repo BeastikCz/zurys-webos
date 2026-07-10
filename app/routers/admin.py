@@ -23,7 +23,7 @@ from .games import list_games_admin, cancel_game_admin, games_history, refund_ga
 from ..models import (ProductIn, SkinLookupIn, SkinSearchIn, ImageUploadIn, UserRoleIn, UserFlagsIn, UserPointsIn, UserAdminMetaIn, OrderStatusIn, CodeGenIn,
                       BanIn, DropCreateIn, AutoDropIn, RuleIn, EconomyIn, IpBanIn, IpUnbanIn, BotToggleIn,
                       LiveModeIn, LegacyImportIn, PatchNoteIn, CommunityGoalIn, SubGoalIn, ModAppDecideIn, ManualOrderIn, ManualOrderBulkIn,
-                      PointsLogPurgeIn, PartnerLinkIn, PartnerFlashConfigIn, GamesRakeIn, LiveHappyIn,
+                      PointsLogPurgeIn, PartnerLinkIn, PartnerFlashConfigIn, GamesRakeIn, LiveHappyIn, FarmEventIn,
                       SelfExcludeIn, TimeoutIn, ShopDiscountIn, BanClusterIn, MinesBanIn, BroadcastIn, EggArmIn,
                       AuctionCreateIn, CasehugAwardIn)
 from ..services import product_public, shop_discount_pct
@@ -2466,6 +2466,22 @@ def create_drop(data: DropCreateIn, request: Request,
 def get_autodrop(conn: sqlite3.Connection = Depends(db_dep)):
     """Nastavení auto-drop scheduleru."""
     return autodrop.get_config(conn)
+
+
+@router.post("/farm-event")
+def set_farm_event(data: FarmEventIn, request: Request,
+                   conn: sqlite3.Connection = Depends(db_dep),
+                   admin: sqlite3.Row = Depends(require_user)):
+    """Zlatá horečka na statku: days>0 spustí (šance 3 %→10 % + bot announce), days=0 ukončí."""
+    from .. import farm
+    if data.days > 0:
+        res = farm.golden_event_start(conn, data.days)
+        record_audit(conn, admin, request, "farmevent.start", "", f"{data.days} dní, do {res['until']}")
+    else:
+        res = farm.golden_event_stop(conn)
+        record_audit(conn, admin, request, "farmevent.stop", "", "")
+    conn.commit()
+    return {"ok": True, **res}
 
 
 @router.get("/live-happy")

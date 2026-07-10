@@ -311,6 +311,11 @@ class FarmFoxIn(BaseModel):
     pay: bool
 
 
+class FarmEventIn(BaseModel):
+    """Zlatá horečka na statku: days > 0 = spustit na N dní, days = 0 = ukončit hned."""
+    days: int = Field(ge=0, le=30)
+
+
 class CommunityGoalIn(BaseModel):
     """Nastavení komunitního chat cíle (posílají se jen měněná pole)."""
     enabled: Optional[int] = Field(default=None, ge=0, le=1)
