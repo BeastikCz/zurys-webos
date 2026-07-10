@@ -40,6 +40,7 @@ def _login(role):
 
 
 def _post(client, token, body):
+    body.setdefault("deposit_id", "dep_" + secrets.token_hex(4))   # unikátní ID vkladu (povinné)
     return client.post("/api/admin/casehug/award", json=body,
                        headers={"Cookie": f"{SESSION_COOKIE}={token}"})
 
@@ -83,6 +84,17 @@ def test_award_invalid_preset_and_user(client):
     uid = _mk_user()
     assert _post(client, token, {"user_id": uid, "eur": 7}).status_code == 400
     assert _post(client, token, {"user_id": 99999999, "eur": 10}).status_code == 404
+
+
+def test_award_deposit_id_required_and_unique(client):
+    token = _login("broadcaster")
+    uid, uid2 = _mk_user(), _mk_user()
+    assert _post(client, token, {"user_id": uid, "eur": 2, "deposit_id": ""}).status_code == 400
+    assert _post(client, token, {"user_id": uid, "eur": 2, "deposit_id": "ab"}).status_code == 400
+    assert _post(client, token, {"user_id": uid, "eur": 2, "deposit_id": "0bc0e3ba"}).status_code == 200
+    # stejné ID podruhé = recyklovaný screen, blokuje i pro JINÉHO uživatele a force nepřebije
+    r = _post(client, token, {"user_id": uid2, "eur": 5, "deposit_id": "0bc0e3ba", "force": True})
+    assert r.status_code == 409 and "0bc0e3ba" in r.json()["detail"]
 
 
 def test_award_role_gating(client):

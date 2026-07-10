@@ -5428,8 +5428,8 @@ async function adminCasehug() {
           <div class="section-title" style="margin-top:0">Historie připsaných vkladů</div>
           <span class="faint" style="font-size:12.5px">Tento měsíc: <b>${m.count || 0}×</b> · ${Number(m.eur || 0)} € nahlášeno · ${Number(m.points || 0).toLocaleString("cs-CZ")} 🌾 vyplaceno — srovnej s reálnou affiliate výplatou!</span>
         </div>
-        ${(d.recent || []).length ? `<div style="overflow-x:auto"><table class="table"><thead><tr><th>Kdo</th><th>Vklad</th><th>Sedláci</th><th>Kdy</th></tr></thead><tbody>
-          ${d.recent.map((r) => `<tr><td><b>${esc(r.username || "smazaný účet")}</b></td><td>${esc((r.reason.match(/CaseHug (\d+) €/) || [])[1] || "?")} €</td><td>+${Number(r.change).toLocaleString("cs-CZ")}</td><td class="faint">${timeAgo(r.created_at)}</td></tr>`).join("")}
+        ${(d.recent || []).length ? `<div style="overflow-x:auto"><table class="table"><thead><tr><th>Kdo</th><th>Vklad</th><th>ID vkladu</th><th>Sedláci</th><th>Kdy</th></tr></thead><tbody>
+          ${d.recent.map((r) => `<tr><td><b>${esc(r.username || "smazaný účet")}</b></td><td>${esc((r.reason.match(/CaseHug (\d+) €/) || [])[1] || "?")} €</td><td class="faint">${esc((r.reason.match(/\[([A-Za-z0-9_-]+)\]/) || [])[1] || "—")}</td><td>+${Number(r.change).toLocaleString("cs-CZ")}</td><td class="faint">${timeAgo(r.created_at)}</td></tr>`).join("")}
         </tbody></table></div>` : `<div class="empty">Zatím žádné vklady.</div>`}
       </div>`;
     const inp = $("#chSearch");
@@ -5456,6 +5456,8 @@ function chRenderPicked(presets) {
   const p = chState.picked;
   $("#chPicked").innerHTML = !p ? "" : `
     <div class="section-title">Vybráno: <b>${esc(p.name)}</b> <span class="faint" style="font-size:12px">(ID ${p.id})</span></div>
+    <input class="input" id="chDepId" placeholder="ID vkladu ze screenu (Payment History)…" autocomplete="off" maxlength="32" style="max-width:340px;margin-top:8px">
+    <div class="faint" style="font-size:12px;margin-top:4px">Povinné — každé ID jde připsat jen jednou (chytá recyklované screeny).</div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
       ${presets.map(([eur, arr]) => `<button class="btn" data-action="ch-award" data-eur="${eur}"
         title="+${arr[1]} sedláků, +${arr[0]} XP">${eur} € <span class="faint" style="font-size:11px">+${Number(arr[1]).toLocaleString("cs-CZ")}🌾 · +${Number(arr[0]).toLocaleString("cs-CZ")} XP</span></button>`).join("")}
@@ -5464,9 +5466,11 @@ function chRenderPicked(presets) {
 async function chAward(eur, force) {
   const p = chState.picked;
   if (!p) return;
-  if (!force && !confirm(`Připsat ${p.name} odměnu za vklad ${eur} € na CaseHug?`)) return;
+  const depId = ($("#chDepId")?.value || "").trim();
+  if (depId.length < 4) { toast("Zadej ID vkladu ze screenu (Payment History, sloupec ID).", "error"); return; }
+  if (!force && !confirm(`Připsat ${p.name} odměnu za vklad ${eur} € na CaseHug? ID vkladu: ${depId}`)) return;
   try {
-    const r = await api("/admin/casehug/award", { method: "POST", body: { user_id: p.id, eur: parseInt(eur, 10), force: !!force } });
+    const r = await api("/admin/casehug/award", { method: "POST", body: { user_id: p.id, eur: parseInt(eur, 10), deposit_id: depId, force: !!force } });
     toast(`💚 ${r.user}: +${Number(r.points).toLocaleString("cs-CZ")} sedláků, +${Number(r.xp).toLocaleString("cs-CZ")} XP (${r.eur} €)`, "success");
     adminCasehug();
   } catch (e) {

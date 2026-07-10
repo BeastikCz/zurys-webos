@@ -1,6 +1,7 @@
 """Admin API: odměny (CRUD), uživatelé, objednávky, tomboly, redeem kódy, statistiky."""
 import csv
 import base64
+import re
 import io
 import json
 import ipaddress
@@ -2890,12 +2891,24 @@ def casehug_award(data: CasehugAwardIn, request: Request,
     target = conn.execute("SELECT id, username FROM users WHERE id = ?", (data.user_id,)).fetchone()
     if not target:
         raise HTTPException(status_code=404, detail="Uživatel neexistuje.")
-    reason = CASEHUG_REASON.format(eur=data.eur)
+    did = re.sub(r"[^A-Za-z0-9_-]", "", (data.deposit_id or "").strip())[:32]
+    if len(did) < 4:
+        raise HTTPException(status_code=400, detail="Zadej ID vkladu ze screenu (Payment History, sloupec ID).")
+    # unikátnost ID napříč VŠEMI vklady – recyklovaný screen (i od jiného účtu) = tvrdý stop, force NEpřebije
+    used = conn.execute(
+        "SELECT u.username FROM points_log l LEFT JOIN users u ON u.id = l.user_id "
+        "WHERE l.reason LIKE 'Vklad CaseHug %' AND l.reason LIKE ? LIMIT 1",
+        (f"%[{did}]%",)).fetchone()
+    if used:
+        raise HTTPException(status_code=409,
+                            detail=f"ID vkladu {did} už bylo použito (připsáno: {used['username'] or 'smazaný účet'}). "
+                                   "Recyklovaný screen – NEpřipisuj.")
+    reason = CASEHUG_REASON.format(eur=data.eur) + f" [{did}]"
     if not data.force:   # dedup: stejný user + stejný preset v posledních X minutách → nejspíš dvojklik
         cutoff = (datetime.now(timezone.utc) - timedelta(minutes=CASEHUG_DEDUP_MIN)).isoformat()
         dup = conn.execute(
-            "SELECT 1 FROM points_log WHERE user_id=? AND reason=? AND created_at>? LIMIT 1",
-            (data.user_id, reason, cutoff)).fetchone()
+            "SELECT 1 FROM points_log WHERE user_id=? AND reason LIKE ? AND created_at>? LIMIT 1",
+            (data.user_id, CASEHUG_REASON.format(eur=data.eur) + "%", cutoff)).fetchone()
         if dup:
             raise HTTPException(status_code=409,
                                 detail=f"{target['username']} už dostal {data.eur} € vklad před chvílí. "
@@ -2904,7 +2917,7 @@ def casehug_award(data: CasehugAwardIn, request: Request,
     # XP jen do účtu (level) – do crew se vklad NEpočítá (rozhodnutí 10.7.)
     conn.execute("UPDATE users SET earned_total = earned_total + ? WHERE id = ?", (xp, target["id"]))
     record_audit(conn, user, request, "casehug.award", target=target["username"],
-                 details=f"{data.eur} € → +{pts} PTS, +{xp} XP")
+                 details=f"{data.eur} € → +{pts} PTS, +{xp} XP, deposit ID {did}")
     notify(conn, target["id"], "💚", "Vklad CaseHug potvrzen!",
            f"+{pts} sedláků a +{xp} XP za vklad {data.eur} €. Díky za podporu farmy! 🌾", "#/shop")
     conn.commit()
