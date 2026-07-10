@@ -128,6 +128,52 @@ def test_collection_complete_reward():
         conn.close()
 
 
+def test_contract_progress_and_claim():
+    from app.db import get_conn
+    from app import farm
+    conn = get_conn()
+    try:
+        uid = _user(conn); conn.commit()
+        farm.buy(conn, _row(conn, uid), "chicken")
+        farm.status(conn, _row(conn, uid))                       # založí dnešní zakázku
+        con = farm.status(conn, _row(conn, uid))["contract"]
+        assert con and con["items"][0]["key"] == "chicken" and not con["done"]
+        assert not farm.claim_contract(conn, _row(conn, uid)).get("ok"), "nesplněná nejde vyzvednout"
+        goal = con["items"][0]["goal"]
+        for _ in range(goal):                                    # nasbírej potřebné produkty
+            farm.feed(conn, _row(conn, uid), 0)
+            _ready_now(conn, uid, 0)
+            farm.collect(conn, _row(conn, uid), 0)
+        con = farm.status(conn, _row(conn, uid))["contract"]
+        assert con["done"] and con["items"][0]["have"] == goal
+        bal = _row(conn, uid)["points"]
+        rc = farm.claim_contract(conn, _row(conn, uid))
+        assert rc["ok"] and _row(conn, uid)["points"] == bal + con["reward"]
+        assert not farm.claim_contract(conn, _row(conn, uid)).get("ok"), "podruhé už ne"
+    finally:
+        conn.close()
+
+
+def test_barn_upgrade_adds_slot():
+    from app.db import get_conn
+    from app import farm
+    conn = get_conn()
+    try:
+        uid = _user(conn); conn.commit()
+        assert farm.status(conn, _row(conn, uid))["n_slots"] == farm.BASE_SLOTS
+        bal = _row(conn, uid)["points"]
+        r = farm.upgrade_barn(conn, _row(conn, uid))
+        assert r["ok"] and r["level"] == 2
+        assert _row(conn, uid)["points"] == bal - farm.BARN_COSTS[2]
+        assert farm.status(conn, _row(conn, uid))["n_slots"] == farm.BASE_SLOTS + 1, "stodola dala +1 slot"
+        # nedostatek sedláků na další upgrade → error, nic se nestrhne
+        conn.execute("UPDATE users SET points = 10 WHERE id = ?", (uid,)); conn.commit()
+        assert not farm.upgrade_barn(conn, _row(conn, uid)).get("ok")
+        assert _row(conn, uid)["points"] == 10
+    finally:
+        conn.close()
+
+
 def test_sub_only_unicorn():
     from app.db import get_conn
     from app import farm

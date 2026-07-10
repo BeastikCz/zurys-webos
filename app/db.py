@@ -407,6 +407,17 @@ CREATE TABLE IF NOT EXISTS farm_collection (
     PRIMARY KEY (user_id, animal_key)
 );
 
+-- Statek – denní zakázka („dodej 3× vejce + 2× mléko" → odměna sedláci bez XP). 1 řádek/user/den.
+CREATE TABLE IF NOT EXISTS farm_contracts (
+    user_id  INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    day      TEXT NOT NULL,                -- YYYY-MM-DD (UTC)
+    need     TEXT NOT NULL,                -- JSON {animal_key: ks}
+    progress TEXT NOT NULL DEFAULT '{}',   -- JSON {animal_key: dodáno}
+    reward   INTEGER NOT NULL,
+    claimed  INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (user_id, day)
+);
+
 -- PvP hry o body: piškvorky (gomoku). 1v1 se sázkou, escrow vkladů, vítěz bere bank.
 CREATE TABLE IF NOT EXISTS games (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -840,6 +851,9 @@ _MIGRATIONS = [
     ("auctions", "chat_announce", "INTEGER NOT NULL DEFAULT 1"), # aukce: hlásit do Kick chatu
     ("auctions", "going_once_sent", "INTEGER NOT NULL DEFAULT 0"),  # aukce: „poslední vteřiny" hlášeno
     ("users", "feed_stock", "INTEGER NOT NULL DEFAULT 0"),    # Statek: zásoba krmiva (padá ze sklizně zahrádky) – krmí zvířata zdarma místo sedláků
+    ("users", "farm_fox_day", "TEXT"),                        # Statek: den, kdy se naposledy losovala liška (1×/den)
+    ("users", "farm_fox", "TEXT"),                            # Statek: pending liška – JSON {slot, ready_at} / '' vyřešeno
+    ("users", "barn_level", "INTEGER NOT NULL DEFAULT 1"),    # Statek: prestige stodoly 1..5 – každý level +1 slot (velký sink)
     # Responsible gaming – denní limit sázek (Tipsport-style). 0/NULL = bez limitu.
     ("users", "wager_limit", "INTEGER"),                   # aktuální denní strop sázek
     ("users", "wager_limit_pending", "INTEGER"),           # navýšení čeká na zítřek (snížit jde hned)
