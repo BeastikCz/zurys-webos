@@ -2816,8 +2816,9 @@ def backup_db(request: Request,
 # porovná a tady jen klikne preset. Sedláci jdou přes add_points(xp=False) + XP se přičítá EXPLICITNĚ
 # jako supporter (uncapped, krmí crew jako sub) – NEsahá se na sdílenou classify_xp (retro přepočet,
 # battlepass i žebříčky ji sdílí; reason „Vklad CaseHug" v ní default klasifikuje jako farm ≠ chceme).
-CASEHUG_PRESETS = {2: (200, 200), 5: (500, 500), 10: (1000, 1000),
-                   20: (2000, 2000), 50: (5000, 5000), 100: (10000, 10000)}   # € → (XP, sedláci); 100/€, XP = sedláci
+CASEHUG_PRESETS = {2: (200, 200), 5: (500, 500), 10: (1000, 1000), 20: (2000, 2000),
+                   25: (2500, 2500), 30: (3000, 3000), 50: (5000, 5000),
+                   100: (10000, 10000)}   # € → (XP, sedláci); 100/€, XP = sedláci
 CASEHUG_REASON = "Vklad CaseHug {eur} € 💚"
 CASEHUG_DEDUP_MIN = 10     # stejný user + stejný preset do X min = varování (409), force přebije
 
