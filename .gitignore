@@ -21,3 +21,6 @@ deliverables/
 __pycache__/
 *.pyc
 .pytest_cache/
+
+# Cloudflare purge API token (deploy.py) - NIKDY necommitovat
+cf_purge_token.txt

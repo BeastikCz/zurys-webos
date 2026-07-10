@@ -1,10 +1,10 @@
-"""Deploy brana pro zurys.live: pre-flight -> bump cache -> flyctl deploy -> health.
+"""Deploy brana pro zurys.live: pre-flight -> bump cache -> flyctl deploy -> health -> CF purge.
 
 Zabaluje rucni kroky co se pri deployi zapominaji (maintenance gate, bump cache verze)
 a nechava ostry deploy za explicitni pojistkou.
 
   python deploy.py            # DRY-RUN: overi udrzbu + predeploy, ukaze pristi cache verzi. NIC nenasadi.
-  python deploy.py --deploy   # OSTRY: bump cache -> flyctl deploy -> overi health
+  python deploy.py --deploy   # OSTRY: bump cache -> flyctl deploy -> health -> CF Purge Everything
   python deploy.py --selftest # jen self-test bump logiky (bez site)
 
 Exit 0 = OK. Exit 1 = neco je spatne / STOP.
@@ -28,6 +28,9 @@ except Exception:
 
 HEALTHZ = "https://zurys.live/api/monitor/healthz"
 INDEX = Path(__file__).parent / "web" / "index.html"
+CF_TOKEN_FILE = Path(__file__).parent / "cf_purge_token.txt"   # gitignored; viz purge_cloudflare()
+CF_ZONE = "zurys.live"
+CF_API = "https://api.cloudflare.com/client/v4"
 
 
 def _get(url, timeout=10):
@@ -102,6 +105,38 @@ def wait_healthy(tries=6, gap=5):
     return False
 
 
+def _cf(path, token, payload=None):
+    req = urllib.request.Request(CF_API + path, headers={
+        "Authorization": "Bearer " + token, "Content-Type": "application/json"},
+        data=json.dumps(payload).encode() if payload else None)
+    with urllib.request.urlopen(req, timeout=30) as r:
+        return json.load(r)
+
+
+def purge_cloudflare():
+    """CF cachuje app.js a IGNORUJE ?v= v cache klici -> bez purge dostavaji divaci
+    stary frontend i po deployi. Token: dash.cloudflare.com/profile/api-tokens
+    -> Create Token -> Custom -> Zone / Cache Purge / Purge, zona zurys.live;
+    uloz retezec do cf_purge_token.txt (je v .gitignore, NIKDY necommitovat)."""
+    if not CF_TOKEN_FILE.exists():
+        print("NOK  CF purge preskocen - chybi %s. Purgni RUCNE v dashboardu!" % CF_TOKEN_FILE.name)
+        return False
+    try:
+        token = CF_TOKEN_FILE.read_text(encoding="utf-8").strip()
+        z = _cf("/zones?name=" + CF_ZONE, token)
+        if not z.get("result"):
+            print("NOK  CF purge - zona nenalezena (token/permissions?). Purgni RUCNE!")
+            return False
+        r = _cf("/zones/%s/purge_cache" % z["result"][0]["id"], token, {"purge_everything": True})
+        if r.get("success"):
+            print("OK   Cloudflare Purge Everything")
+            return True
+        print("NOK  CF purge selhal: %r. Purgni RUCNE!" % r.get("errors"))
+    except Exception as e:
+        print("NOK  CF purge selhal (%s). Purgni RUCNE!" % type(e).__name__)
+    return False
+
+
 def _selftest():
     h = '<link href="/styles.css?v=2026070207"><script src="/app.js?v=2026070207"></script>'
     out, o, n = bump_version(h)
@@ -149,6 +184,10 @@ def main():
 
     print("\nOveruji health po deployi...")
     ok = wait_healthy()
+
+    print("\n[5/5] Cloudflare purge...")
+    ok = purge_cloudflare() and ok
+
     print("\nHotovo. Cache bump ve web/index.html neni commitnuty - commitni ho sam.")
     return 0 if ok else 1
 
