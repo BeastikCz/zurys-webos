@@ -252,7 +252,7 @@ function render() {
     "mod-nabor": pageModApply, staty: pageGameStats, "sin-slavy": pageHallOfFame, zahrada: pageGarden,
     statek: pageFarm, "moje-cisla": pageWrappedLink, vs: pageVs,
   };
-  if (r.name === "statek" && !(state.user && state.user.role === "admin")) {   // Crew je veřejný (5.7.); Statek zatím jen admin → teaser
+  if (r.name === "statek" && !(state.user && (state.user.role === "admin" || state.user.farm_public))) {   // Statek: admin vždy; všem po launchi (farm_public) → jinak teaser
     pageEarlyAccess(r.name);
     window.scrollTo({ top: 0, behavior: "instant" in window ? "instant" : "auto" });
     return;
@@ -3437,7 +3437,7 @@ async function pageAdmin() {
   if (!tabs.some(([k]) => k === adminState.tab)) adminState.tab = tabs.length ? tabs[0][0] : null;
   const ROLE_LBL = { broadcaster: "Broadcaster", predictor: "Predikce", mod: "Moderátor" };
   const lbl = state.user.role === "admin" ? "Admin panel" : "Panel — " + (ROLE_LBL[state.user.role] || "Tým");
-  const maintBanner = state.user.role === "admin" ? `<div id="maintBanner" class="maint-banner"></div>` : "";
+  const maintBanner = state.user.role === "admin" ? `<div id="maintBanner" class="maint-banner"></div><div id="farmLaunchBanner" class="maint-banner"></div>` : "";
   view.innerHTML = `
     <div class="page-head"><h1>🛠️ ${lbl}</h1><p class="muted">Vidíš jen sekce, na které máš oprávnění.</p></div>
     ${maintBanner}
@@ -3447,7 +3447,7 @@ async function pageAdmin() {
     </div>
     <div id="adminContent"></div>`;
   loadAdminStats();
-  if (state.user.role === "admin") loadMaintBanner();
+  if (state.user.role === "admin") { loadMaintBanner(); loadFarmLaunchBanner(); }
   if (adminState.tab) renderAdminTab(adminState.tab);
 }
 async function loadAdminStats() {
@@ -3658,6 +3658,36 @@ async function loadMaintBanner() {
         </div>`;
     }
   } catch (e) { box.innerHTML = ""; }
+}
+async function loadFarmLaunchBanner() {
+  const box = document.getElementById("farmLaunchBanner"); if (!box) return;
+  try {
+    const s = await api("/admin/farm-launch");
+    box.className = "maint-banner" + (s.public ? " on" : "");
+    if (s.public) {
+      box.innerHTML = `
+        <div class="mb-info"><span class="mb-ico">🚜</span>
+          <div><div class="mb-title">Statek: <b>VEŘEJNÝ</b>${s.golden_until ? ` · 🌟 Zlatá horečka do ${maintHHMM(s.golden_until)} (${new Date(s.golden_until).toLocaleDateString("cs-CZ")})` : ""}</div>
+            <div class="mb-sub">Vidí ho všichni přihlášení. Novinka publikována, bot oznámil horečku v chatu.</div></div></div>
+        <div class="mb-actions"><button class="btn btn-ghost btn-sm" data-action="farm-launch-off">🔒 Vrátit za gate</button></div>`;
+    } else {
+      box.innerHTML = `
+        <div class="mb-info"><span class="mb-ico">🚜</span>
+          <div><div class="mb-title">Statek: <b>za gate</b> (vidí jen admin)</div>
+            <div class="mb-sub">Launch tlačítko naráz: otevře statek všem + spustí 🌟 Zlatou horečku na 7 dní (bot announce) + publikuje novinku.</div></div></div>
+        <div class="mb-actions"><button class="btn btn-success btn-sm" data-action="farm-launch-on">🚀 SPUSTIT STATEK PRO VŠECHNY</button></div>`;
+    }
+  } catch (e) { box.innerHTML = ""; }
+}
+async function doFarmLaunch(on) {
+  if (on && !confirm("Spustit statek pro VŠECHNY? Naráz: otevře gate + Zlatá horečka 7 dní + bot announce + novinka.")) return;
+  if (!on && !confirm("Vrátit statek za gate (jen admin)? Horečka a novinka zůstanou.")) return;
+  try {
+    await api("/admin/farm-launch?to=" + (on ? "on" : "off"), { method: "POST" });
+    toast(on ? "🚀 STATEK SPUŠTĚN PRO VŠECHNY! Horečka běží, novinka venku." : "🔒 Statek zpět za gate.", on ? "success" : "info");
+    try { if (on) confettiBurst(); } catch (e) {}
+    loadFarmLaunchBanner();
+  } catch (e) { toast(e.message, "error"); }
 }
 async function doMaintOnTime() {
   const v = (document.getElementById("maintUntil")?.value || "").trim().replace(/\s/g, "");
@@ -6331,6 +6361,8 @@ function handleAction(action, el) {
     case "farm-contract": farmContractClaim(); break;
     case "farm-barn": farmBarnUpgrade(parseInt(el.dataset.cost, 10)); break;
     case "farm-event": farmEvent(parseInt(el.dataset.days, 10)); break;
+    case "farm-launch-on": doFarmLaunch(true); break;
+    case "farm-launch-off": doFarmLaunch(false); break;
     case "farm-guide": farmGuide(); break;
     case "decor-buy": buyDecor(el.dataset.key); break;
     case "claim-partner": claimPartnerLink(el.dataset.id, el.dataset.url); break;

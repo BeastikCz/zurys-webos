@@ -304,6 +304,7 @@ def me(user: Optional[sqlite3.Row] = Depends(get_current_user),
     if user is None:
         return {"user": None}
     data = to_public(user, include_email=True)
+    data["farm_public"] = (get_setting(conn, "farm_public", "0") or "0") == "1"   # Statek otevřen všem (launch tlačítko)
     data["rank"] = user_rank(conn, user["points"], user["username"])   # pozice = liga (titul + daily násobič)
     data["pending_rankup"] = (user["pending_rankup"] if "pending_rankup" in user.keys() else "") or ""
     data["pending_overtake"] = (user["pending_overtake"] if "pending_overtake" in user.keys() else "") or ""

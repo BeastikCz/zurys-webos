@@ -366,3 +366,23 @@ def test_golden_event_boosts_chance():
         assert farm.status(conn, _row(conn, uid))["golden_event"] is False
     finally:
         conn.close()
+
+
+def test_farm_public_gate():
+    from fastapi import HTTPException
+    from app.db import get_conn, set_setting
+    from app.deps import require_farm_access
+    conn = get_conn()
+    try:
+        uid = _user(conn); conn.commit()
+        set_setting(conn, "farm_public", "0"); conn.commit()
+        try:
+            require_farm_access(_row(conn, uid), conn)
+            assert False, "před launchem musí být 403"
+        except HTTPException as e:
+            assert e.status_code == 403
+        set_setting(conn, "farm_public", "1"); conn.commit()
+        assert require_farm_access(_row(conn, uid), conn)["id"] == uid, "po launchi projde běžný user"
+        set_setting(conn, "farm_public", "0"); conn.commit()
+    finally:
+        conn.close()

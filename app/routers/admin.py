@@ -2468,6 +2468,42 @@ def get_autodrop(conn: sqlite3.Connection = Depends(db_dep)):
     return autodrop.get_config(conn)
 
 
+@router.get("/farm-launch")
+def get_farm_launch(conn: sqlite3.Connection = Depends(db_dep)):
+    """Stav launche statku (pro admin banner)."""
+    from .. import farm
+    from ..db import get_setting
+    return {"public": (get_setting(conn, "farm_public", "0") or "0") == "1",
+            "golden_until": farm.golden_event_until(conn) if farm.golden_event_until(conn) > now_iso() else ""}
+
+
+@router.post("/farm-launch")
+def farm_launch(request: Request, to: str = "on",
+                conn: sqlite3.Connection = Depends(db_dep),
+                admin: sqlite3.Row = Depends(require_user)):
+    """🚀 SPUSTÍ STATEK PRO VŠECHNY jedním klikem: otevře gate (farm_public=1) + Zlatá horečka
+    na 7 dní (bot announce v chatu) + publikuje novinku. ?to=off vrátí statek za gate (event nechá)."""
+    from .. import farm
+    from ..db import set_setting
+    if to == "off":
+        set_setting(conn, "farm_public", "0")
+        record_audit(conn, admin, request, "farm.launch.off", "", "statek zpět za gate")
+        conn.commit()
+        return {"ok": True, "public": False}
+    set_setting(conn, "farm_public", "1")
+    res = farm.golden_event_start(conn, 7)          # commitne + bot announce v bg threadu
+    conn.execute(
+        "INSERT INTO patch_notes (title, body, tag, published, created_at) VALUES (?, ?, ?, 1, ?)",
+        ("🚜 STATEK OTEVŘEN!",
+         "Kup zvíře, krm ho a sbírej produkty = sedláci + XP. První slepice jen za 500 🐣. "
+         "Plň denní zakázky 📋, vylepšuj stodolu 🏠 a pozor na lišku 🦊! Prvních 7 dní navíc ZLATÁ HOREČKA — "
+         "zlaté produkty (×3 sedláci) padají 3× častěji. Odznak 🚜 Farmář čeká na každého chovatele!",
+         "novinka", now_iso()))
+    record_audit(conn, admin, request, "farm.launch.on", "", f"public + horečka do {res['until']} + novinka")
+    conn.commit()
+    return {"ok": True, "public": True, "golden_until": res["until"]}
+
+
 @router.post("/farm-event")
 def set_farm_event(data: FarmEventIn, request: Request,
                    conn: sqlite3.Connection = Depends(db_dep),

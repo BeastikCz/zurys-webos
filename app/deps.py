@@ -357,11 +357,13 @@ def require_early_access(user: sqlite3.Row = Depends(require_user)) -> sqlite3.R
     return user
 
 
-def require_farm_access(user: sqlite3.Row = Depends(require_user)) -> sqlite3.Row:
-    """Gate pro Statek – zatím JEN admin (early_access grant otvírá pouze Crew)."""
-    if user["role"] != ROLE_ADMIN:
-        raise HTTPException(status_code=403, detail="Statek je zatím v testování. 🚜🎫")
-    return user
+def require_farm_access(user: sqlite3.Row = Depends(require_user),
+                        conn: sqlite3.Connection = Depends(db_dep)) -> sqlite3.Row:
+    """Gate pro Statek – admin vždy; všem až po launchi (admin tlačítko → app_settings farm_public='1')."""
+    from .db import get_setting
+    if user["role"] == ROLE_ADMIN or (get_setting(conn, "farm_public", "0") or "0") == "1":
+        return user
+    raise HTTPException(status_code=403, detail="Statek je zatím v testování. 🚜🎫")
 
 
 def require_broadcaster(user: sqlite3.Row = Depends(require_user)) -> sqlite3.Row:
