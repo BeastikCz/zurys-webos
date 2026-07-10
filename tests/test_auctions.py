@@ -33,10 +33,10 @@ def test_escrow_outbid_min_and_self():
         assert _pts(conn, u1) == 100000 - 100, "escrow odečetl příhoz"
         r2 = auctions.bid(conn, _row(conn, u2), aid, 150)            # přehoz
         assert r2["ok"]
-        assert _pts(conn, u1) == 100000 - 50, "přehozenému vráceno jen 50 % (ztratil 50 ze 100)"
+        assert _pts(conn, u1) == 100000 - 10, "přehozenému vráceno 90 % (ztratil 10 ze 100)"
         assert _pts(conn, u2) == 100000 - 150
         assert not auctions.bid(conn, _row(conn, u1), aid, 150).get("ok"), "pod min (200) zamítnuto"
-        assert _pts(conn, u1) == 100000 - 50, "zamítnutý příhoz (pod min) nic neodečte"
+        assert _pts(conn, u1) == 100000 - 10, "zamítnutý příhoz (pod min) nic neodečte"
         assert not auctions.bid(conn, _row(conn, u2), aid, 400).get("ok"), "vedoucí nesmí přehodit sám sebe"
     finally:
         conn.close()
@@ -153,13 +153,13 @@ def test_buy_now_refunds_current_leader_not_old():
         aid = auctions.create(conn, "BN", "", 100, 50, 10, buy_now=50000)["id"]
         u1, u2, u3 = _user(conn), _user(conn), _user(conn); conn.commit()
         auctions.bid(conn, _row(conn, u1), aid, 200)        # u1 vede 200
-        auctions.bid(conn, _row(conn, u2), aid, 400)        # u2 přehodí → u1 dostane 50 % (100)
-        assert _pts(conn, u1) == 100000 - 100
+        auctions.bid(conn, _row(conn, u2), aid, 400)        # u2 přehodí → u1 dostane 90 % (180)
+        assert _pts(conn, u1) == 100000 - 20
         assert _pts(conn, u2) == 100000 - 400
         r = auctions.buy_now(conn, _row(conn, u3), aid)     # u3 vykoupí
         assert r["ok"] and _pts(conn, u3) == 100000 - 50000
         assert _pts(conn, u2) == 100000, "aktuální vůdce u2 dostal 100 % zpět"
-        assert _pts(conn, u1) == 100000 - 100, "starý (přehozený) vůdce NEDOSTANE nic navíc"
+        assert _pts(conn, u1) == 100000 - 20, "starý (přehozený) vůdce NEDOSTANE nic navíc"
     finally:
         conn.close()
 
@@ -206,11 +206,11 @@ def test_cancel_refunds_current_leader_after_outbid():
         aid = auctions.create(conn, "C", "", 100, 50, 10)["id"]
         u1, u2 = _user(conn), _user(conn); conn.commit()
         auctions.bid(conn, _row(conn, u1), aid, 300)
-        auctions.bid(conn, _row(conn, u2), aid, 600)        # u2 vede, u1 dostal 50 % (150)
+        auctions.bid(conn, _row(conn, u2), aid, 600)        # u2 vede, u1 dostal 90 % (270)
         r = auctions.cancel(conn, aid)
         assert r["ok"] and r["refunded"] == 600
         assert _pts(conn, u2) == 100000, "aktuální vůdce u2 dostal 100 % zpět"
-        assert _pts(conn, u1) == 100000 - 150, "u1 zůstává na 50 % z přehození (cancel mu nic navíc nedává)"
+        assert _pts(conn, u1) == 100000 - 30, "u1 zůstává na 90 % z přehození (cancel mu nic navíc nedává)"
     finally:
         conn.close()
 

@@ -739,6 +739,26 @@ def test_war_declare_officer_yes_member_no():
         assert "ve válce" in str(e).lower()
 
 
+def test_war_cooldown_blocks_both_participants():
+    sfx = secrets.token_hex(3)
+    la = _mk_user(); a = _run(crews.create, la, f"CA_{sfx}", f"CoolA {sfx}", "CA")
+    lb = _mk_user(); b = _run(crews.create, lb, f"CB_{sfx}", f"CoolB {sfx}", "CB")
+    lc = _mk_user(); c = _run(crews.create, lc, f"CC_{sfx}", f"CoolC {sfx}", "CC")
+    _run(crews.declare_war, la, b["id"])
+    conn = get_conn()
+    try:
+        conn.execute("UPDATE crew_wars SET ends_at=? WHERE crew_a_id=?", (now_iso(), a["id"]))
+        conn.commit()
+    finally:
+        conn.close()
+    for leader, opponent in ((la, c["id"]), (lc, b["id"])):
+        try:
+            _run(crews.declare_war, leader, opponent)
+            assert False, "parta v cooldownu nesmí válku vyhlásit ani přijmout"
+        except ValueError as e:
+            assert "cooldown" in str(e).lower()
+
+
 def test_war_finalize_winner_loser_and_log():
     """Lazy finalizace: delta XP rozhodne vítěze, status-only odměna (war_wins/losses), zalogováno."""
     sfx = secrets.token_hex(3)

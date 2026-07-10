@@ -22,6 +22,7 @@ EMBLEM_COST = 5000        # změna emblému party = sink sedláků (kosmetika, v
 LEAVE_COOLDOWN_H = 6      # po odchodu z party musíš počkat X h než vstoupíš jinam (anti-churn/hop)
 MOTD_MAX = 200           # max délka crew popisu/MOTD
 WAR_HOURS = 24           # Crew War trvá 1 den; status (war_wins/losses/draws) + kořist XP vítězi (níž)
+WAR_COOLDOWN_H = 48      # po konci války obě party 2 dny nesmí válčit ani být napadeny
 WAR_LOOT_FRAC = 0.5      # vítěz ukořistí 50 % války XP nepřítele → do levelu party (bez stropu; throttle = 24h válka)
 EMBLEMS = ["🌾", "🚜", "🐮", "🐔", "🌽", "🥕", "🍺", "⚔️", "🔥", "👑", "🛠️", "🥔",
            "🐺", "🦅", "🐗", "🐉", "🦁", "🐂", "🏰", "🛡️", "🏹", "💀", "⭐", "🍻",
@@ -567,6 +568,13 @@ def _pay_war_loot(conn, winner_id, loser_delta):
     return loot
 
 
+def _war_cooldown_active(conn, crew_id):
+    cutoff = (datetime.fromisoformat(now_iso()) - timedelta(hours=WAR_COOLDOWN_H)).isoformat()
+    return conn.execute(
+        "SELECT 1 FROM crew_wars WHERE status='ended' AND ends_at>? "
+        "AND (crew_a_id=? OR crew_b_id=?) LIMIT 1", (cutoff, crew_id, crew_id)).fetchone() is not None
+
+
 def _finalize_wars(conn):
     """Uzavře vypršené aktivní války: spočítá deltu XP obou stran, zapíše vítěze (None=remíza),
     připíše war_wins/losses/draws, zaloguje do historie obou párty + notifikuje členy. Necommituje
@@ -639,6 +647,10 @@ def declare_war(conn, leader_uid, opponent_crew_id):
     if conn.execute("SELECT 1 FROM crew_wars WHERE (crew_a_id=? OR crew_b_id=?) AND status='active'",
                     (opp["id"], opp["id"])).fetchone():
         raise ValueError(f"{opp['name']} už s někým válčí – zkus jinou partu.")
+    if _war_cooldown_active(conn, crew["id"]):
+        raise ValueError(f"Tvoje parta má po válce {WAR_COOLDOWN_H}h cooldown.")
+    if _war_cooldown_active(conn, opp["id"]):
+        raise ValueError(f"{opp['name']} má po válce {WAR_COOLDOWN_H}h cooldown.")
     ts = now_iso()
     ends = (datetime.fromisoformat(ts) + timedelta(hours=WAR_HOURS)).isoformat()
     conn.execute(

@@ -20,7 +20,7 @@ def _safe_image_url(url: str) -> str:
 
 ANTISNIPE_SEC = 30          # příhoz v posledních N s prodlouží konec o N s
 MAX_MINUTES = 7 * 24 * 60   # max délka aukce (7 dní)
-OUTBID_REFUND_PCT = 0.5     # přehozenému se vrátí jen 50 % příhozu (zbytek propadne = sink + napětí).
+OUTBID_REFUND_PCT = 0.9     # přehozenému se vrátí 90 % příhozu (zbytek propadne = sink + napětí).
                             #   Zrušení aukce vrací 100 % (není to chyba bidera). Souběh-reject vrací 100 %.
 
 

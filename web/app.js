@@ -2395,7 +2395,7 @@ function auctionCardHTML(a) {
             <button class="btn btn-accent" data-action="auction-bid" data-id="${a.id}">🔨 Přihodit</button>
           </div>
           <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">${chips.map((v) => `<button class="btn btn-ghost btn-sm" data-action="auction-amt" data-id="${a.id}" data-amt="${v}">${fmtPts(v)}</button>`).join("")}${buyNow ? `<button class="btn btn-sm" data-action="auction-buynow" data-id="${a.id}" style="margin-left:auto;background:linear-gradient(135deg,#b07ad9,#8a4fc0);color:#fff;border:none">💎 Kup teď ${fmtPts(a.buy_now)}</button>` : ""}</div>
-          <div class="faint" style="font-size:11px;margin-top:6px">⚠️ Když tě někdo přehodí, vrátí se ti <b>50 %</b> příhozu (zbytek propadne). Přihazuj s rozmyslem.</div>`}
+`}
       ${recent}
     </div>
   </div>`;
@@ -2424,7 +2424,7 @@ async function bidAuction(id) {
   if (state.user && amount > state.user.points) { toast("Tolik sedláků nemáš.", "error"); return; }
   const minNext = parseInt(inp && inp.min, 10) || 0;           // pojistka proti překliku (escrow + 50 % ztráta)
   if (amount >= 50000 || (minNext && amount >= minNext * 10)) {
-    if (!confirm(`Fakt přihodit ${fmtPts(amount)} sedláků? ⚠️ Když tě někdo přehodí, vrátí se ti jen 50 %.`)) return;
+    if (!confirm(`Fakt přihodit ${fmtPts(amount)} sedláků?`)) return;
   }
   try {
     const r = await api(`/auctions/${id}/bid`, { method: "POST", body: { amount } });
