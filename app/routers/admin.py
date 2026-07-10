@@ -2763,8 +2763,8 @@ def backup_db(request: Request,
 # porovná a tady jen klikne preset. Sedláci jdou přes add_points(xp=False) + XP se přičítá EXPLICITNĚ
 # jako supporter (uncapped, krmí crew jako sub) – NEsahá se na sdílenou classify_xp (retro přepočet,
 # battlepass i žebříčky ji sdílí; reason „Vklad CaseHug" v ní default klasifikuje jako farm ≠ chceme).
-CASEHUG_PRESETS = {2: (800, 400), 5: (2200, 1100), 10: (5000, 2500),
-                   20: (11000, 5500), 50: (30000, 15000), 100: (65000, 32000)}   # € → (XP, sedláci)
+CASEHUG_PRESETS = {2: (200, 200), 5: (500, 500), 10: (1000, 1000),
+                   20: (2000, 2000), 50: (5000, 5000), 100: (10000, 10000)}   # € → (XP, sedláci); 100/€, XP = sedláci
 CASEHUG_REASON = "Vklad CaseHug {eur} € 💚"
 CASEHUG_DEDUP_MIN = 10     # stejný user + stejný preset do X min = varování (409), force přebije
 
@@ -2849,12 +2849,8 @@ def casehug_award(data: CasehugAwardIn, request: Request,
                                 detail=f"{target['username']} už dostal {data.eur} € vklad před chvílí. "
                                        "Fakt znovu? Potvrď ještě jednou.")
     add_points(conn, target["id"], pts, reason, xp=False)   # sedláci; XP níž explicitně (supporter)
+    # XP jen do účtu (level) – do crew se vklad NEpočítá (rozhodnutí 10.7.)
     conn.execute("UPDATE users SET earned_total = earned_total + ? WHERE id = ?", (xp, target["id"]))
-    try:                                                    # crew XP jako supporter (uncapped) – jako sub
-        from .. import crews as _crews
-        _crews.contribute(conn, target["id"], xp, is_sub=True)
-    except Exception:
-        pass
     record_audit(conn, user, request, "casehug.award", target=target["username"],
                  details=f"{data.eur} € → +{pts} PTS, +{xp} XP")
     notify(conn, target["id"], "💚", "Vklad CaseHug potvrzen!",

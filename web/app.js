@@ -5291,7 +5291,7 @@ async function adminCasehug() {
         <div class="faint" style="font-size:13px;margin-bottom:12px">
           1. Divák pošle screen vkladu (celá obrazovka, viditelný nick + částka + datum) do Discordu.
           2. Zkontroluj screen. 3. Najdi ho tady a klikni částku — sedláci + XP se připíšou hned
-          (XP jako supporter, počítá se do levelu i crew).</div>
+          (XP jako supporter, počítá se do levelu — do crew NE).</div>
         <input class="input" id="chSearch" placeholder="Hledej nick…" autocomplete="off" style="max-width:340px">
         <div id="chResults" class="stack-12" style="margin-top:10px"></div>
         <div id="chPicked" style="margin-top:12px"></div>
