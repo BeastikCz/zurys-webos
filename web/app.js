@@ -2793,8 +2793,11 @@ async function loadFarm() {
     const turbo = f.turbo;
     const pasture = f.slots.map((s) => farmSlotHTML(s, s.slot === foxSlot, turbo.count > 0)).join("");
     const shop = f.animals.map((a) => farmShopHTML(a)).join("");
+    const hasAnimals = f.slots.some((s) => !s.empty);
     const cta = ready.length
       ? `<button class="stk-cta" data-action="farm-collect-all"><span class="stk-cta-ic">⚡</span> Sebrat vše (${ready.length}× · +${fmtPts(readySum)})</button>`
+      : !hasAnimals && f.starter
+      ? `<button class="stk-cta" data-action="farm-buy" data-animal="chicken"><span class="stk-cta-ic">🐣</span> Kup první slepici za ${fmtPts(f.starter_cost)} (startovací sleva!)</button>`
       : `<div class="stk-cta" style="opacity:.5;cursor:default;background:linear-gradient(135deg,#2a2114,#1c150d);color:#9e8a69;box-shadow:none"><span class="stk-cta-ic">🕒</span> Zatím není co sebrat — nakrm zvířata</div>`;
     box.innerHTML = `<div class="stk-wrap">
       <div class="stk-head"><img class="stk-head-ic" src="/sedlak-cut.png" alt="">
@@ -2802,7 +2805,7 @@ async function loadFarm() {
       <div class="stk-status">
         <span class="stk-s-l">🏆 <b>Sbírka</b> <span class="stk-chip${col.complete ? " ok" : ""}">${col.have}/${col.total} druhů</span>
           <span class="faint">${col.complete ? "✓ kompletní" : `kompletní = +${fmtPts(col.reward)}`}</span></span>
-        <span class="stk-s-r"><span class="stk-chip">🌾 Krmivo ${f.krmivo}</span><span class="faint" style="font-size:11px">ze sklizně</span>${f.prod_bonus ? `<span class="stk-chip" style="background:rgba(146,110,255,.14);border-color:rgba(146,110,255,.35);color:#c3b0ff">🐕 +${f.prod_bonus}%</span>` : ""}</span>
+        <span class="stk-s-r"><span class="stk-chip">🌾 Krmivo ${f.krmivo}</span><span class="faint" style="font-size:11px">ze sklizně</span>${f.prod_bonus ? `<span class="stk-chip" style="background:rgba(146,110,255,.14);border-color:rgba(146,110,255,.35);color:#c3b0ff">🐕 +${f.prod_bonus}%</span>` : ""}<span class="stk-chip${f.farm_today >= f.farm_daily_full ? "" : " ok"}" title="Denní produkce v plné výši do ${fmtPts(f.farm_daily_full)} sedláků; nad strop jde jen čtvrtina (XP taky). O půlnoci se resetuje.">📈 dnes ${Number(f.farm_today).toLocaleString("cs-CZ")}/${Number(f.farm_daily_full).toLocaleString("cs-CZ")}${f.farm_today >= f.farm_daily_full ? " · ×¼" : ""}</span></span>
       </div>
       <div class="stk-status" style="border-color:${patron.gifts ? "rgba(185,95,255,.45)" : "rgba(255,183,55,.22)"}">
         <span class="stk-s-l">🎁 <b>Patron sezóny</b> <span class="stk-chip${patron.gifts ? " ok" : ""}">${patron.gifts} tento měsíc</span>
@@ -2830,6 +2833,7 @@ async function loadFarm() {
       <p class="stk-info">Sloty: <b>${f.n_slots}</b>${f.sub ? " (💜 sub +1)" : " · 💜 sub má +1 slot"}${f.barn && f.barn.level > 1 ? ` (🏠 stodola lvl ${f.barn.level})` : ""}${f.active_slots < f.n_slots ? " · sezónní patron slot skončil — prodej zvíře v něm před další koupí" : ""}. Krmení bere <b>krmivo</b> (zdarma ze zahrádky), jinak sedláky. Produkt = <b>XP</b> (mimo strop) + sedláci, <b>levelem roste</b> ⭐. Zlatý produkt (${f.golden_pct} %) ×${f.golden_mult}. Nenakrmené zvíře neprodukuje.</p>
       <div class="stk-shop-title">🐾 Zvířata k koupi</div>
       <div class="stk-shop">${shop}</div>
+      <div class="stk-status" style="margin-top:14px;opacity:.75"><span class="stk-s-l">🏆 <b>Farmářský žebříček</b> <span class="faint">kdo týdně vyprodukuje nejvíc — už brzy!</span></span><span class="stk-s-r"><span class="stk-chip">🔜 coming soon</span></span></div>
     </div>`;
     stkFixImgs(box);   // chybějící .webp assety → emoji fallback (CSP-safe)
     if (window._farmTimer) clearInterval(window._farmTimer);
@@ -2913,7 +2917,7 @@ function farmShopHTML(a) {
   const img = stkImg(a.key, a.icon, "stk-card");
   const det = a.utility ? `+${a.prod_bonus}% produkce všech` : `krmivo ${fmtPts(a.feed)} · ${a.hours}h · ${a.pico} +${fmtPts(a.reward)}`;
   const attr = locked ? "disabled" : `data-action="farm-buy" data-animal="${a.key}"`;
-  return `<button class="stk-card${a.owned ? " owned" : ""}" ${attr}>${locked ? `<span class="stk-card-lock">🔒 jen sub</span>` : ""}
+  return `<button class="stk-card${a.owned ? " owned" : ""}" ${attr}>${locked ? `<span class="stk-card-lock">🔒 jen sub</span>` : ""}${a.starter ? `<span class="stk-card-lock" style="background:rgba(85,214,105,.16);border-color:rgba(85,214,105,.45);color:#7fe89a">🐣 startovací sleva</span>` : ""}
     ${img}<div class="stk-card-name">${esc(a.name)}${a.sub_only ? ` <span class="stk-sub">💜</span>` : ""}</div>
     <div class="stk-card-cost">${fmtPts(a.cost)} 🌾</div><div class="stk-card-det">${det}</div></button>`;
 }
@@ -6226,7 +6230,7 @@ function farmGuide() {
     ["🐾", "Kup a nakrm", "Kup zvíře do volného slotu. Krmivo ze <b>Zahrádky</b> je zdarma, jinak krmíš za sedláky."],
     ["⏱️", "Seber produkci", "Po dokončení cyklu seber produkt za <b>sedláky + XP</b>; zvíře pak znovu čeká na krmení."],
     ["📋", "Plň Zakázku dne", "Produkty se počítají do denní zakázky. Dokonči ji pro další odměnu."],
-    ["🦊", "Chraň statek", "Liška může číhat na hotový produkt. Pes ji odežene; patron s 15 gifty tento měsíc taky."],
+    ["🦊", "Chraň statek", "Liška může číhat na hotový produkt — výkupné je půlka jeho hodnoty. Pes ji odežene; patron s 15 gifty tento měsíc taky."],
     ["⚡", "Giftni a zrychli", "Každý gift sub dá turbo žeton: vyber zvíře a jeho příští cyklus poběží 2× rychleji."],
     ["🎁", "Staň se patronem", "Za 5 gift subů v měsíci získáš patron slot do konce sezóny. Průběh najdeš přímo nad farmou."],
   ];

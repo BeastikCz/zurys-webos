@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 
 from .db import get_conn, now_iso
 from .deps import notify
-from . import garden, webpush
+from . import farm, garden, webpush
 
 CHECK_INTERVAL_SEC = 60      # jak často daemon projede zahrádky
 
@@ -47,6 +47,20 @@ def _scan(conn) -> None:
                      (r["user_id"], r["plot"]))
         push_queue.append((r["user_id"], "Chrobáci v zahrádce! 🐛",
                            f"Zachraň {c.get('name', 'plodinu')}, než ti sežerou půlku úrody.", "#/zahrada"))
+
+    # 3) STATEK – zvíře má hotový produkt a ještě to nebylo oznámeno
+    for r in conn.execute(
+        "SELECT user_id, slot, animal_key FROM farm_animals "
+        "WHERE ready_at != '' AND ready_at <= ? AND notified = 0", (now_iso(),)).fetchall():
+        a = farm._BY_KEY.get(r["animal_key"], {})
+        if a.get("utility"):
+            continue
+        notify(conn, r["user_id"], "🚜", "Statek: produkt hotový!",
+               f"{a.get('icon', '')} {a.get('name', 'Zvíře')} má hotovo – {a.get('pico', '')} čeká na sebrání.", "#/statek")
+        conn.execute("UPDATE farm_animals SET notified = 1 WHERE user_id = ? AND slot = ?",
+                     (r["user_id"], r["slot"]))
+        push_queue.append((r["user_id"], "Statek: produkt hotový! 🚜",
+                           f"{a.get('name', 'Zvíře')} má hotovo, běž sebrat produkt.", "#/statek"))
 
     conn.commit()  # ← write lock uvolněna PŘED síťovými voláními
 

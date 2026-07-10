@@ -32,10 +32,11 @@ BADGES = [
     {"key": "sub",         "emoji": "💜", "name": "Subscriber",   "desc": "Aktivní sub kanálu",                        "stat": "is_sub",   "tiers": [1]},
     {"key": "vip",         "emoji": "👑", "name": "VIP",          "desc": "VIP status",                                "stat": "is_vip",   "tiers": [1]},
     {"key": "og",          "emoji": "🌟", "name": "OG člen",      "desc": "Patří k OG komunitě",                       "stat": "is_og",    "tiers": [1]},
+    {"key": "farmer",      "emoji": "🚜", "name": "Farmář",       "desc": "Chovej 1 / 3 / 6 druhů zvířat na statku",   "stat": "farm_species", "tiers": [1, 3, 6]},
 ]
 
 _STAT_KEYS = ("drops", "pvp_won", "pvp_lost", "bets", "streak", "earned", "spent",
-              "balance", "raffle", "is_rank1", "is_sub", "is_vip", "is_og")
+              "balance", "raffle", "is_rank1", "is_sub", "is_vip", "is_og", "farm_species")
 
 
 def _earned_tier(tiers, value) -> int:
@@ -94,6 +95,10 @@ def _collect_stats(conn) -> dict:
         ensure(r["uid"])["spent"] = r["c"]
     for r in conn.execute("SELECT user_id uid, COUNT(*) c FROM raffle_winners GROUP BY user_id"):
         ensure(r["uid"])["raffle"] = r["c"]
+    # statek: počet KDY-KOLIV chovaných druhů (farm_collection přežívá prodej; marker __complete__ nepočítat)
+    for r in conn.execute("SELECT user_id uid, COUNT(*) c FROM farm_collection "
+                          "WHERE animal_key != '__complete__' GROUP BY user_id"):
+        ensure(r["uid"])["farm_species"] = r["c"]
     return stats
 
 

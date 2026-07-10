@@ -863,6 +863,9 @@ _MIGRATIONS = [
     ("users", "farm_fox_day", "TEXT"),                        # Statek: den, kdy se naposledy losovala liška (1×/den)
     ("users", "farm_fox", "TEXT"),                            # Statek: pending liška – JSON {slot, ready_at} / '' vyřešeno
     ("users", "barn_level", "INTEGER NOT NULL DEFAULT 1"),    # Statek: prestige stodoly 1..5 – každý level +1 slot (velký sink)
+    ("users", "farm_today", "INTEGER NOT NULL DEFAULT 0"),    # Statek: sedláci z produkce dnes (měkký denní strop)
+    ("users", "farm_day", "TEXT"),                            # den, ke kterému farm_today platí
+    ("farm_animals", "notified", "INTEGER NOT NULL DEFAULT 0"),  # 1 = „hotovo" oznámeno (anti-spam, reset při krmení)
     # Responsible gaming – denní limit sázek (Tipsport-style). 0/NULL = bez limitu.
     ("users", "wager_limit", "INTEGER"),                   # aktuální denní strop sázek
     ("users", "wager_limit_pending", "INTEGER"),           # navýšení čeká na zítřek (snížit jde hned)

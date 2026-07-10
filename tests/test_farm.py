@@ -271,3 +271,80 @@ def test_utility_horse_bonus():
         assert st["reward"] == round(130 * 1.10), f"kůň +10 % → {st['reward']}"
     finally:
         conn.close()
+
+
+def test_starter_chicken_discount_once():
+    from app.db import get_conn
+    from app import farm
+    conn = get_conn()
+    try:
+        uid = _user(conn, is_sub=1); conn.commit()             # sub = 3 sloty (ať se vejdou 2 slepice)
+        assert farm.status(conn, _row(conn, uid))["starter"] is True
+        cat = {a["key"]: a for a in farm._animals_public(conn, _row(conn, uid))}
+        assert cat["chicken"]["cost"] == farm.STARTER_COST and cat["chicken"]["starter"]
+        assert cat["goat"]["cost"] == 6000, "sleva jen na slepici"
+        bal = _row(conn, uid)["points"]
+        assert farm.buy(conn, _row(conn, uid), "chicken")["ok"]
+        assert _row(conn, uid)["points"] == bal - farm.STARTER_COST, "první slepice za startovací cenu"
+        # druhá už za plnou
+        bal = _row(conn, uid)["points"]
+        assert farm.buy(conn, _row(conn, uid), "chicken")["ok"]
+        assert _row(conn, uid)["points"] == bal - 2000
+        assert farm.status(conn, _row(conn, uid))["starter"] is False
+    finally:
+        conn.close()
+
+
+def test_fox_ransom_scales_with_product():
+    import json
+    from app.db import get_conn
+    from app import farm
+    conn = get_conn()
+    try:
+        uid = _user(conn); conn.commit()
+        farm.buy(conn, _row(conn, uid), "chicken")
+        farm.feed(conn, _row(conn, uid), 0)
+        _ready_now(conn, uid, 0)
+        # nasimuluj lišku přesně jak ji staví _roll_fox (s ransom z hodnoty produktu)
+        r = conn.execute("SELECT ready_at, fed_count FROM farm_animals WHERE user_id=? AND slot=0", (uid,)).fetchone()
+        value = farm._reward_at(farm._BY_KEY["chicken"], farm._level(r["fed_count"]), 0)
+        expect = max(farm.FOX_RANSOM_MIN, min(farm.FOX_RANSOM_MAX, int(value * farm.FOX_RANSOM_PCT)))
+        assert expect < 130, "výkupné za vejce (130) musí být míň než produkt – jinak se nevyplatí platit"
+        conn.execute("UPDATE users SET farm_fox=? WHERE id=?",
+                     (json.dumps({"slot": 0, "ready_at": r["ready_at"], "ransom": expect}), uid))
+        conn.commit()
+        assert farm.status(conn, _row(conn, uid))["fox"]["ransom"] == expect
+        bal = _row(conn, uid)["points"]
+        rf = farm.resolve_fox(conn, _row(conn, uid), pay=True)
+        assert rf["ok"] and rf["ransom"] == expect
+        assert _row(conn, uid)["points"] == bal - expect
+        assert farm.collect(conn, _row(conn, uid), 0)["ok"], "po zaplacení jde produkt sebrat"
+    finally:
+        conn.close()
+
+
+def test_daily_soft_cap_reduces_payout():
+    from app.db import get_conn, now_iso
+    from app import farm
+    conn = get_conn()
+    try:
+        uid = _user(conn); conn.commit()
+        farm.buy(conn, _row(conn, uid), "chicken")
+        # pod stropem: plný výnos
+        farm.feed(conn, _row(conn, uid), 0); _ready_now(conn, uid, 0)
+        rc = farm.collect(conn, _row(conn, uid), 0)
+        assert rc["ok"] and rc["reward"] >= 130
+        assert farm._farm_today(conn, uid) >= 130
+        # nad stropem: jen FARM_SOFT_RATE
+        conn.execute("UPDATE users SET farm_today=?, farm_day=? WHERE id=?",
+                     (farm.FARM_DAILY_FULL, now_iso()[:10], uid))
+        conn.commit()
+        farm.feed(conn, _row(conn, uid), 0); _ready_now(conn, uid, 0)
+        rc = farm.collect(conn, _row(conn, uid), 0)
+        assert rc["ok"] and rc["reward"] <= int(130 * 1.1 * farm.FARM_SOFT_RATE) * farm.GOLDEN_MULT
+        assert rc["reward"] < 130 or rc["golden"], f"nad strop musí být snížený výnos: {rc}"
+        # jiný den = reset
+        conn.execute("UPDATE users SET farm_day='2000-01-01' WHERE id=?", (uid,)); conn.commit()
+        assert farm._farm_today(conn, uid) == 0
+    finally:
+        conn.close()

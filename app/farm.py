@@ -19,7 +19,13 @@ from .db import now_iso, local_now, LOCAL_TZ
 
 BASE_SLOTS = 2
 FOX_CHANCE = 0.20              # šance 1×/den, že se objeví liška (jen když má user co ukrást)
-FOX_RANSOM = 200               # výkupné v sedlácích (sink); pes 🐕 lišku odežene zdarma
+FOX_RANSOM_PCT = 0.5           # výkupné = 50 % hodnoty ohroženého produktu (vždy se vyplatí zaplatit)…
+FOX_RANSOM_MIN, FOX_RANSOM_MAX = 50, 200   # …sevřeno, ať to není nula ani drakonické
+FOX_RANSOM = 200               # fallback pro pending lišky z doby fixního výkupného
+
+STARTER_COST = 500             # první zvíře vůbec (slepice) za zlomek ceny – onboarding nováčka
+FARM_DAILY_FULL = 8000         # sedláci z produkce/den v plné výši; nad strop jen FARM_SOFT_RATE
+FARM_SOFT_RATE = 0.25          # (XP jde ze snížené částky taky – měkký strop, ne tvrdý blok)
 
 # Zakázky: denní kontrakt z vlastněných druhů („dodej 3× vejce + 2× mléko"). Odměna sedláci BEZ XP,
 # strop pod quest kotvou (750/den), ať se faucety nedublují.
@@ -176,9 +182,12 @@ def _animals_public(conn, user) -> list:
     owned = {r["animal_key"] for r in conn.execute(
         "SELECT animal_key FROM farm_animals WHERE user_id = ?", (user["id"],))}
     sub = _is_sub(user)
+    starter = _starter_eligible(conn, user["id"])
     out = []
     for a in ANIMALS:
-        out.append({"key": a["key"], "icon": a["icon"], "name": a["name"], "cost": a["cost"],
+        out.append({"key": a["key"], "icon": a["icon"], "name": a["name"],
+                    "cost": STARTER_COST if starter and a["key"] == "chicken" else a["cost"],
+                    "starter": starter and a["key"] == "chicken",
                     "utility": a.get("utility", False), "prod_bonus": int(a.get("prod_bonus", 0) * 100),
                     "sub_only": a.get("sub_only", False), "locked": a.get("sub_only", False) and not sub,
                     "owned": a["key"] in owned,
@@ -224,7 +233,7 @@ def _roll_fox(conn, user) -> None:
         conn.commit()
         return
     targets = [t for t in conn.execute(
-        "SELECT slot, ready_at, animal_key FROM farm_animals WHERE user_id = ? AND ready_at != ''", (uid,))
+        "SELECT slot, ready_at, animal_key, fed_count FROM farm_animals WHERE user_id = ? AND ready_at != ''", (uid,))
         if not _BY_KEY.get(t["animal_key"], {}).get("utility")]
     if not targets:
         conn.commit()
@@ -236,10 +245,13 @@ def _roll_fox(conn, user) -> None:
         conn.commit()
         return
     t = random.choice(targets)
+    a = _BY_KEY.get(t["animal_key"], {})
+    value = _reward_at(a, _level(t["fed_count"]), _prod_bonus(conn, uid))
+    ransom = max(FOX_RANSOM_MIN, min(FOX_RANSOM_MAX, int(value * FOX_RANSOM_PCT)))
     conn.execute("UPDATE users SET farm_fox = ? WHERE id = ?",
-                 (json.dumps({"slot": t["slot"], "ready_at": t["ready_at"]}), uid))
+                 (json.dumps({"slot": t["slot"], "ready_at": t["ready_at"], "ransom": ransom}), uid))
     notify(conn, uid, "🦊", "Liška na statku!",
-           f"Liška si brousí zuby na tvůj produkt. Zaplať výkupné {FOX_RANSOM} sedláků, nebo o něj přijdeš! 🚜",
+           f"Liška si brousí zuby na tvůj produkt. Zaplať výkupné {ransom} sedláků, nebo o něj přijdeš! 🚜",
            "#/statek")
     conn.commit()
 
@@ -251,9 +263,10 @@ def resolve_fox(conn, user, pay: bool) -> dict:
     if not fox:
         conn.commit()
         return {"ok": False, "error": "Žádná liška tu není. 🦊"}
+    ransom = fox.get("ransom", FOX_RANSOM)
     if pay:
-        if not try_debit(conn, user["id"], FOX_RANSOM, "Statek: výkupné lišce 🦊"):
-            return {"ok": False, "error": f"Nemáš na výkupné ({FOX_RANSOM} sedláků)."}
+        if not try_debit(conn, user["id"], ransom, "Statek: výkupné lišce 🦊"):
+            return {"ok": False, "error": f"Nemáš na výkupné ({ransom} sedláků)."}
         conn.execute("UPDATE users SET farm_fox = '' WHERE id = ?", (user["id"],))
         conn.commit()
         paid = True
@@ -264,7 +277,27 @@ def resolve_fox(conn, user, pay: bool) -> dict:
         conn.commit()
         paid = False
     bal = conn.execute("SELECT points FROM users WHERE id = ?", (user["id"],)).fetchone()["points"]
-    return {"ok": True, "paid": paid, "balance": bal, "ransom": FOX_RANSOM}
+    return {"ok": True, "paid": paid, "balance": bal, "ransom": ransom}
+
+
+def _starter_eligible(conn, uid: int) -> bool:
+    """Nováček bez jediného zvířete v historii (sbírka prázdná) → první slepice za STARTER_COST."""
+    return conn.execute("SELECT 1 FROM farm_collection WHERE user_id = ?", (uid,)).fetchone() is None
+
+
+def _farm_today(conn, uid: int) -> int:
+    """Sedláci z produkce připsaní dnes (pro měkký denní strop)."""
+    r = conn.execute("SELECT farm_today, farm_day FROM users WHERE id = ?", (uid,)).fetchone()
+    if not r or (r["farm_day"] or "") != now_iso()[:10]:
+        return 0
+    return r["farm_today"] or 0
+
+
+def _farm_today_add(conn, uid: int, amount: int) -> None:
+    today = now_iso()[:10]
+    conn.execute("UPDATE users SET farm_today = CASE WHEN COALESCE(farm_day,'') = ? "
+                 "THEN COALESCE(farm_today,0) + ? ELSE ? END, farm_day = ? WHERE id = ?",
+                 (today, amount, amount, today, uid))
 
 
 def _contract_row(conn, uid: int):
@@ -406,7 +439,9 @@ def status(conn, user) -> dict:
             "prod_bonus": int(bonus * 100),
             "patron": patron,
             "turbo": _turbo_status(conn, user["id"]),
-            "fox": ({"slot": fox["slot"], "ransom": FOX_RANSOM} if fox else None),
+            "fox": ({"slot": fox["slot"], "ransom": fox.get("ransom", FOX_RANSOM)} if fox else None),
+            "farm_today": _farm_today(conn, user["id"]), "farm_daily_full": FARM_DAILY_FULL,
+            "starter": _starter_eligible(conn, user["id"]), "starter_cost": STARTER_COST,
             "contract": _contract_public(conn, user["id"]),
             "barn": {"level": _barn_level(user), "max": BARN_MAX,
                      "next_cost": BARN_COSTS.get(_barn_level(user) + 1)},
@@ -444,15 +479,17 @@ def buy(conn, user, animal_key: str) -> dict:
     if not empty:
         return {"ok": False, "error": "Plný statek – prodej zvíře nebo si jako sub odemkni víc slotů. 🚜"}
     slot = empty[0]
-    if not try_debit(conn, user["id"], a["cost"], f"Statek: koupě {a['name']} {a['icon']}"):
-        return {"ok": False, "error": f"Nemáš dost sedláků ({a['cost']})."}
+    # onboarding: úplně první zvíře (slepice) za zlomek ceny; prodej pak vrátí max +500 1×/účet – zanedbatelné
+    cost = STARTER_COST if animal_key == "chicken" and _starter_eligible(conn, user["id"]) else a["cost"]
+    if not try_debit(conn, user["id"], cost, f"Statek: koupě {a['name']} {a['icon']}"):
+        return {"ok": False, "error": f"Nemáš dost sedláků ({cost})."}
     try:
         conn.execute("INSERT INTO farm_animals (user_id, slot, animal_key, ready_at, fed_count, bought_at) "
                      "VALUES (?, ?, ?, '', 0, ?)", (user["id"], slot, animal_key, now_iso()))
     except sqlite3.IntegrityError:
         from .deps import add_points
         conn.rollback()
-        add_points(conn, user["id"], a["cost"], "Vrácení za zvíře (souběh)", xp=False)
+        add_points(conn, user["id"], cost, "Vrácení za zvíře (souběh)", xp=False)
         conn.commit()
         return {"ok": False, "error": "Slot se mezitím obsadil. Zkus znovu."}
     _note_collection(conn, user["id"], animal_key)
@@ -515,7 +552,7 @@ def feed(conn, user, slot: int, turbo: bool = False) -> dict:
             return {"ok": False, "error": "Turbo žeton mezitím použil jiný požadavek. Zkus to znovu."}
         hours /= TURBO_SPEED_MULT
     ready = (datetime.now(timezone.utc) + timedelta(hours=hours)).isoformat()
-    conn.execute("UPDATE farm_animals SET ready_at = ?, fed_count = ? WHERE user_id = ? AND slot = ?",
+    conn.execute("UPDATE farm_animals SET ready_at = ?, fed_count = ?, notified = 0 WHERE user_id = ? AND slot = ?",
                  (ready, fed_count, user["id"], slot))
     conn.commit()
     bal = conn.execute("SELECT points FROM users WHERE id = ?", (user["id"],)).fetchone()["points"]
@@ -527,12 +564,16 @@ def feed(conn, user, slot: int, turbo: bool = False) -> dict:
 def _award_product(conn, user_id, a, level, bonus):
     from .deps import add_points
     base = _reward_at(a, level, bonus)
+    # měkký denní strop: nad FARM_DAILY_FULL sedláků z produkce jde jen zlomek (grinder ochrana faucetu)
+    soft = _farm_today(conn, user_id) >= FARM_DAILY_FULL
+    paid = max(1, int(base * FARM_SOFT_RATE)) if soft else base
     golden = random.random() < GOLDEN_CHANCE
-    add_points(conn, user_id, base, f"Statek: {a['product']} {a['pico']}")
+    add_points(conn, user_id, paid, f"Statek: {a['product']} {a['pico']}" + (" (nad denní strop)" if soft else ""))
+    _farm_today_add(conn, user_id, paid)
     _contract_tick(conn, user_id, a["key"])
     if golden:
-        add_points(conn, user_id, base * (GOLDEN_MULT - 1), f"Statek: zlaté {a['product']} 🌟", xp=False)
-    return base * (GOLDEN_MULT if golden else 1), golden
+        add_points(conn, user_id, paid * (GOLDEN_MULT - 1), f"Statek: zlaté {a['product']} 🌟", xp=False)
+    return paid * (GOLDEN_MULT if golden else 1), golden
 
 
 def collect(conn, user, slot: int) -> dict:
@@ -548,7 +589,8 @@ def collect(conn, user, slot: int) -> dict:
         return {"ok": False, "error": "Ještě se nevyprodukovalo. ⏳"}
     fox = _fox_pending(conn, user["id"])
     if fox and fox["slot"] == slot:
-        return {"ok": False, "error": f"Na produkt číhá liška! 🦊 Zaplať výkupné ({FOX_RANSOM}), nebo jí ho nech."}
+        return {"ok": False,
+                "error": f"Na produkt číhá liška! 🦊 Zaplať výkupné ({fox.get('ransom', FOX_RANSOM)}), nebo jí ho nech."}
     if conn.execute("UPDATE farm_animals SET ready_at = '' WHERE user_id = ? AND slot = ? AND ready_at = ?",
                     (user["id"], slot, r["ready_at"])).rowcount != 1:
         conn.commit()
