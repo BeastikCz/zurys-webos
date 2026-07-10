@@ -2484,8 +2484,23 @@ async function adminAuctions() {
     box.innerHTML = `
       <div class="panel" style="margin-bottom:18px">
         <div class="section-title">🔨 Vystavit aukci o skin</div>
-        <div class="field"><label>Název skinu</label><input class="input" id="auc_title" placeholder="např. AK-47 Redline (FT)"></div>
-        <div class="field" style="margin-top:8px"><label>Obrázek (URL, volitelné)</label><input class="input" id="auc_img" placeholder="https://…/skin.png"></div>
+        <div class="field"><label>Název skinu</label><input class="input" id="auc_name" placeholder="např. AK-47 Redline (FT)"></div>
+        <div class="field" style="margin-top:8px"><label>Obrázek (URL, volitelné)</label>
+          <div style="display:flex;gap:8px">
+            <input class="input" id="auc_image" placeholder="https://… / 📁 z PC / 🔍 skin" style="flex:1">
+            <button type="button" class="btn btn-sm" data-action="upload-image" data-prefix="auc" title="Nahrát obrázek z počítače" style="white-space:nowrap">📁 Z PC</button>
+            <button type="button" class="btn btn-sm" data-action="skin-picker" data-prefix="auc" title="Vyhledat CS2 skin z katalogu (s náhledy)" style="white-space:nowrap">🔍 Najít skin</button>
+          </div>
+          <input type="file" id="auc_file" accept="image/png,image/jpeg,image/webp,image/gif" style="display:none">
+          <div id="auc_skininfo" class="faint" style="font-size:11.5px;margin-top:6px"></div>
+          <div id="skinPicker" class="skin-picker" style="display:none">
+            <div style="display:flex;gap:8px">
+              <input class="input" id="skinQ" placeholder="napiš skin: asiimov, butterfly, dragon lore…" autocomplete="off" style="flex:1">
+              <button type="button" class="btn btn-sm btn-primary" data-action="skin-search">Hledat</button>
+            </div>
+            <div id="skinResults" class="skin-results"></div>
+          </div>
+        </div>
         <div class="field-row" style="margin-top:8px">
           <div class="field"><label>Vyvolávací cena</label><input class="input" id="auc_start" type="number" min="1" value="100"></div>
           <div class="field"><label>Min. příhoz</label><input class="input" id="auc_inc" type="number" min="1" value="50"></div>
@@ -2516,9 +2531,9 @@ function adminAuctionRow(a) {
   </div>`;
 }
 async function adminCreateAuction() {
-  const title = ($("#auc_title").value || "").trim();
+  const title = ($("#auc_name").value || "").trim();
   if (!title) { toast("Zadej název skinu.", "error"); return; }
-  const body = { title, image_url: ($("#auc_img").value || "").trim(), start_bid: parseInt($("#auc_start").value || "100", 10), min_increment: parseInt($("#auc_inc").value || "50", 10), minutes: parseInt($("#auc_min").value || "10", 10), buy_now: parseInt($("#auc_buynow").value || "0", 10), sub_only: $("#auc_subonly").checked, chat_announce: $("#auc_chat").checked };
+  const body = { title, image_url: ($("#auc_image").value || "").trim(), start_bid: parseInt($("#auc_start").value || "100", 10), min_increment: parseInt($("#auc_inc").value || "50", 10), minutes: parseInt($("#auc_min").value || "10", 10), buy_now: parseInt($("#auc_buynow").value || "0", 10), sub_only: $("#auc_subonly").checked, chat_announce: $("#auc_chat").checked };
   try { await api("/admin/auctions", { method: "POST", body }); toast("🔨 Aukce vystavena!", "success"); adminAuctions(); }
   catch (e) { toast(e.message, "error"); }
 }
@@ -4356,8 +4371,8 @@ async function saveProduct() {
   } catch (e) { toast(e.message, "error"); }
 }
 async function lookupSkinImage() {
-  const name = ($("#pf_name").value || "").trim();
-  const info = $("#pf_skininfo");
+  const name = (_imgEl("name").value || "").trim();
+  const info = _imgEl("skininfo");
   if (name.length < 3) { toast("Nejdřív napiš název skinu do pole Název (např. AWP | Asiimov (Field-Tested)).", "error"); return; }
   if (info) info.innerHTML = "⏳ Hledám na Steamu…";
   try {
@@ -4366,7 +4381,7 @@ async function lookupSkinImage() {
       if (info) info.innerHTML = "⚠️ Přesná shoda nenalezena. Napiš název <b>přesně jako na Steam marketu</b> (vč. opotřebení, např. „AK-47 | Redline (Field-Tested)”). Když Steam zrovna omezuje dotazy, zkus to za chvíli znovu — nebo vlož URL obrázku ručně.";
       return;
     }
-    $("#pf_image").value = r.image_url;
+    _imgEl("image").value = r.image_url;
     if (info) info.innerHTML = `<img src="${esc(r.image_url)}" style="height:44px;vertical-align:middle;border-radius:6px;background:#0b0c16;padding:2px"> ✅ <b>${esc(r.name)}</b>${r.price ? ` · <span class="muted">tržní cena ${esc(r.price)}</span> <span style="opacity:.55">(orientačně — cenu zadej v sedlácích)</span>` : ""}`;
   } catch (e) {
     if (info) info.innerHTML = `⚠️ ${esc(e.message)}`;
@@ -4375,13 +4390,15 @@ async function lookupSkinImage() {
 }
 /* --- Vizuální pickr skinů (lokální katalog, našeptávač s náhledy) --- */
 let _skinDebounce = null;
+let _imgPrefix = "pf";                  // který form widget obsluhuje: pf_ (shop odměna) / auc_ (aukce)
+const _imgEl = (s) => $(`#${_imgPrefix}_${s}`);
 function toggleSkinPicker() {
   const p = $("#skinPicker"); if (!p) return;
   const show = p.style.display === "none";
   p.style.display = show ? "block" : "none";
   if (show) {
     const q = $("#skinQ");
-    if (q) { q.value = ($("#pf_name").value || "").trim(); q.focus(); }
+    if (q) { q.value = (_imgEl("name").value || "").trim(); q.focus(); }
     if (($("#skinQ").value || "").length >= 2) searchSkins();
   }
 }
@@ -4402,21 +4419,21 @@ async function searchSkins() {
 }
 function pickSkin(el) {
   const name = el.dataset.name, image = el.dataset.image;
-  if ($("#pf_name")) $("#pf_name").value = name;
-  if ($("#pf_image")) $("#pf_image").value = image;
-  const info = $("#pf_skininfo");
+  if (_imgEl("name")) _imgEl("name").value = name;
+  if (_imgEl("image")) _imgEl("image").value = image;
+  const info = _imgEl("skininfo");
   if (info) info.innerHTML = `<img src="${esc(image)}" style="height:40px;vertical-align:middle;border-radius:6px;background:#0b0c16;padding:2px"> ✅ Vybráno: <b>${esc(name)}</b>`;
   const p = $("#skinPicker"); if (p) p.style.display = "none";
 }
 function uploadImageClick() {
-  const f = $("#pf_file");
+  const f = _imgEl("file");
   if (f) f.click();                       // otevře dialog výběru souboru
 }
 async function uploadImageFile() {
-  const f = $("#pf_file");
+  const f = _imgEl("file");
   const file = f && f.files && f.files[0];
   if (!file) return;
-  const info = $("#pf_skininfo");
+  const info = _imgEl("skininfo");
   if (file.size > 6 * 1024 * 1024) { toast("Obrázek je příliš velký (max 6 MB).", "error"); f.value = ""; return; }
   if (info) info.innerHTML = "⏳ Nahrávám…";
   try {
@@ -4427,7 +4444,7 @@ async function uploadImageFile() {
       r.readAsDataURL(file);
     });
     const r = await api("/admin/products/upload-image", { method: "POST", body: { data: dataUrl } });
-    if ($("#pf_image")) $("#pf_image").value = r.url;
+    if (_imgEl("image")) _imgEl("image").value = r.url;
     if (info) info.innerHTML = `<img src="${esc(r.url)}" style="height:44px;vertical-align:middle;border-radius:6px;background:#0b0c16;padding:2px"> ✅ Nahráno z PC`;
   } catch (e) {
     if (info) info.innerHTML = `⚠️ ${esc(e.message)}`;
@@ -6476,9 +6493,9 @@ function handleAction(action, el) {
     case "product-new": productForm(null); break;
     case "product-edit": { const p = adminState.products.find((x) => x.id === id); productForm(p); break; }
     case "product-delete": deleteProduct(id); break;
-    case "skin-lookup": lookupSkinImage(); break;
-    case "skin-picker": toggleSkinPicker(); break;
-    case "upload-image": uploadImageClick(); break;
+    case "skin-lookup": _imgPrefix = el.dataset.prefix || "pf"; lookupSkinImage(); break;
+    case "skin-picker": _imgPrefix = el.dataset.prefix || "pf"; toggleSkinPicker(); break;
+    case "upload-image": _imgPrefix = el.dataset.prefix || "pf"; uploadImageClick(); break;
     case "coin-upload": coinUploadClick(); break;
     case "skin-search": searchSkins(); break;
     case "skin-pick": pickSkin(el); break;
@@ -7978,7 +7995,7 @@ document.addEventListener("visibilitychange", () => { if (document.visibilitySta
 document.addEventListener("change", (e) => {
   const id = e.target && e.target.id;
   if (id === "coinFile") uploadCoinIcon();
-  else if (id === "pf_file") uploadImageFile();
+  else if (id === "pf_file" || id === "auc_file") { _imgPrefix = id.slice(0, -5); uploadImageFile(); }
 });
 document.addEventListener("input", (e) => {
   if (e.target && e.target.id === "skinQ") debouncedSkinSearch();
