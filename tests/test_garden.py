@@ -243,3 +243,33 @@ def test_garden_legacy_pest_is_migrated(client):
         assert plot["eaten"] is True
     finally:
         conn.close()
+
+
+def test_maintenance_freezes_garden(client):
+    """Údržba zamrazí zahrádku: po vypnutí se planted/ready/pest_at posunou o délku výpadku."""
+    import datetime as _dt
+    from app.db import get_conn, set_setting
+    from app import garden, maintenance
+    conn = get_conn()
+    try:
+        uid = _mk(conn)
+        garden.plant(conn, {"id": uid}, 0, "mrkev")
+        # zasazeno 20 min PŘED začátkem údržby (posun se týká jen před-údržbových záhonů)
+        old = (_dt.datetime.now(_dt.timezone.utc) - _dt.timedelta(minutes=20)).isoformat()
+        conn.execute("UPDATE garden SET planted_at=?, ready_at=?, pest_at=? WHERE user_id=?",
+                     (old, old, old, uid)); conn.commit()
+        before = dict(conn.execute("SELECT planted_at, ready_at FROM garden WHERE user_id=?", (uid,)).fetchone())
+
+        # údržba začala před 10 minutami
+        maintenance.set_on(conn, True)
+        since = (_dt.datetime.now(_dt.timezone.utc) - _dt.timedelta(minutes=10)).isoformat()
+        set_setting(conn, "maintenance_since", since); conn.commit()
+        maintenance.set_on(conn, False)
+
+        after = conn.execute("SELECT planted_at, ready_at, pest_at FROM garden WHERE user_id=?", (uid,)).fetchone()
+        shift = _dt.datetime.fromisoformat(after["ready_at"]) - _dt.datetime.fromisoformat(before["ready_at"])
+        assert 9.5 * 60 < shift.total_seconds() < 10.5 * 60
+        assert after["pest_at"] == after["ready_at"]   # NULL-safe posun proběhl i u pest_at
+    finally:
+        conn.execute("DELETE FROM garden WHERE user_id=?", (uid,)); conn.commit()
+        conn.close()

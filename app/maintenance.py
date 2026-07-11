@@ -51,11 +51,41 @@ def load(conn: sqlite3.Connection) -> None:
 def set_on(conn: sqlite3.Connection, value: bool, until_iso: str = "") -> None:
     """Přepne režim (paměť + app_settings). until_iso = ISO čas konce odpočtu (volitelné)."""
     global _on, _until
+    was_on = _on
     _on = bool(value)
     _until = (until_iso or "") if value else ""
     set_setting(conn, "maintenance_mode", "1" if _on else "0")
     set_setting(conn, "maintenance_until", _until)
+    if _on and not was_on:
+        set_setting(conn, "maintenance_since", now_iso())
+    elif not _on:
+        _unfreeze_garden(conn)
     conn.commit()
+
+
+def _unfreeze_garden(conn: sqlite3.Connection) -> None:
+    """Konec údržby → posuň časy zahrádky o délku výpadku (zahrádka během údržby „zamrzne").
+    Hráči se nedostanou na web, ale chrobáci by jinak žrali dál (viz incident 10.7., user 1439).
+    Posouvá jen záhony zasazené PŘED začátkem údržby (admin s bypassem sází i během ní)."""
+    since = get_setting(conn, "maintenance_since", "") or ""
+    if not since:
+        return
+    set_setting(conn, "maintenance_since", "")
+    try:
+        delta = datetime.now(timezone.utc) - datetime.fromisoformat(since)
+    except ValueError:
+        return
+    if delta.total_seconds() < 60:   # ponytail: kratičká údržba za posun nestojí
+        return
+
+    def shift(iso):
+        return (datetime.fromisoformat(iso) + delta).isoformat() if iso else iso
+
+    rows = conn.execute("SELECT rowid, planted_at, ready_at, pest_at FROM garden "
+                        "WHERE planted_at < ?", (since,)).fetchall()
+    for r in rows:
+        conn.execute("UPDATE garden SET planted_at = ?, ready_at = ?, pest_at = ? WHERE rowid = ?",
+                     (shift(r["planted_at"]), shift(r["ready_at"]), shift(r["pest_at"]), r["rowid"]))
 
 
 def _auto_off() -> None:
@@ -68,6 +98,7 @@ def _auto_off() -> None:
         try:
             set_setting(conn, "maintenance_mode", "0")
             set_setting(conn, "maintenance_until", "")
+            _unfreeze_garden(conn)
             conn.commit()
         finally:
             conn.close()
