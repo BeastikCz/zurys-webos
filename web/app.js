@@ -2943,7 +2943,8 @@ async function farmBuy(animal) {
   try {
     const r = await api("/farm/buy", { method: "POST", body: { animal } });
     if (state.user) state.user.points = r.balance;
-    toast(`Koupil jsi ${r.icon} ${esc(r.name)}! Teď ho nakrm 🌾`, "success");
+    toast(r.level > 1 ? `Koupil jsi ${r.icon} ${esc(r.name)} — ze stáje se vrací na ⭐${r.level}! Teď ho nakrm 🌾`
+      : `Koupil jsi ${r.icon} ${esc(r.name)}! Teď ho nakrm 🌾`, "success");
     renderHeader(); loadFarm();
   } catch (e) { toast(e.message, "error"); }
 }
@@ -3035,7 +3036,7 @@ function farmShopHTML(a) {
     <div class="stk-card-cost">${fmtPts(a.cost)} 🌾</div><div class="stk-card-det">${det}</div></button>`;
 }
 async function farmSell(slot) {
-  if (!confirm("Prodat zvíře? Vrátí se část ceny, slot se uvolní (sbírka zůstane).")) return;
+  if (!confirm("Prodat zvíře? Vrátí se část ceny a slot se uvolní. Level zůstane uložený ve stáji — při znovukoupení stejného druhu se obnoví. ⭐")) return;
   try {
     const r = await api("/farm/sell", { method: "POST", body: { slot: parseInt(slot, 10) } });
     if (state.user) state.user.points = r.balance;

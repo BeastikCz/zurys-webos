@@ -541,10 +541,17 @@ def buy(conn, user, animal_key: str) -> dict:
         conn.commit()
         return {"ok": False, "error": "Slot se mezitím obsadil. Zkus znovu."}
     _note_collection(conn, user["id"], animal_key)
+    # „stáj": druh už jsi trénoval → nové zvíře nastoupí s uloženým levelem (fed_count ze sbírky)
+    stored = conn.execute("SELECT fed_count FROM farm_collection WHERE user_id = ? AND animal_key = ?",
+                          (user["id"], animal_key)).fetchone()
+    restored = (stored["fed_count"] if stored else 0) or 0
+    if restored:
+        conn.execute("UPDATE farm_animals SET fed_count = ? WHERE user_id = ? AND slot = ?",
+                     (restored, user["id"], slot))
     conn.commit()
     bal = conn.execute("SELECT points FROM users WHERE id = ?", (user["id"],)).fetchone()["points"]
     return {"ok": True, "balance": bal, "name": a["name"], "icon": a["icon"], "slot": slot,
-            "utility": a.get("utility", False)}
+            "utility": a.get("utility", False), "level": _level(restored)}
 
 
 def sell(conn, user, slot: int) -> dict:
@@ -555,6 +562,9 @@ def sell(conn, user, slot: int) -> dict:
         return {"ok": False, "error": "Prázdný slot."}
     a = _BY_KEY.get(r["animal_key"], {})
     refund = int(round(a.get("cost", 0) * SELL_REFUND_PCT))
+    # „stáj": ulož natrénovaný level druhu – při znovukoupení se obnoví (prodej nemaže progres)
+    conn.execute("UPDATE farm_collection SET fed_count = MAX(COALESCE(fed_count, 0), ?) "
+                 "WHERE user_id = ? AND animal_key = ?", (r["fed_count"] or 0, user["id"], r["animal_key"]))
     if conn.execute("DELETE FROM farm_animals WHERE user_id = ? AND slot = ?", (user["id"], slot)).rowcount != 1:
         conn.commit()
         return {"ok": False, "error": "Už prodáno."}

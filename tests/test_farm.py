@@ -386,3 +386,23 @@ def test_farm_public_gate():
         set_setting(conn, "farm_public", "0"); conn.commit()
     finally:
         conn.close()
+
+
+def test_sell_keeps_level_in_stable():
+    from app.db import get_conn
+    from app import farm
+    conn = get_conn()
+    try:
+        uid = _user(conn); conn.commit()
+        farm.buy(conn, _row(conn, uid), "chicken")
+        for _ in range(farm.FEED_PER_LEVEL):                     # vytrénuj na level 2
+            farm.feed(conn, _row(conn, uid), 0)
+            _ready_now(conn, uid, 0)
+            farm.collect(conn, _row(conn, uid), 0)
+        assert farm.status(conn, _row(conn, uid))["slots"][0]["level"] == 2
+        assert farm.sell(conn, _row(conn, uid), 0)["ok"]
+        rb = farm.buy(conn, _row(conn, uid), "chicken")          # znovukoupení = level ze stáje
+        assert rb["ok"] and rb["level"] == 2, rb
+        assert farm.status(conn, _row(conn, uid))["slots"][0]["level"] == 2, "level přežil prodej"
+    finally:
+        conn.close()

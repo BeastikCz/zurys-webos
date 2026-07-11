@@ -866,6 +866,7 @@ _MIGRATIONS = [
     ("users", "farm_today", "INTEGER NOT NULL DEFAULT 0"),    # Statek: sedláci z produkce dnes (měkký denní strop)
     ("users", "farm_day", "TEXT"),                            # den, ke kterému farm_today platí
     ("farm_animals", "notified", "INTEGER NOT NULL DEFAULT 0"),  # 1 = „hotovo" oznámeno (anti-spam, reset při krmení)
+    ("farm_collection", "fed_count", "INTEGER NOT NULL DEFAULT 0"),  # „stáj": max natrénovaný fed_count druhu – prodej uloží, koupě obnoví (level se neztrácí)
     # Responsible gaming – denní limit sázek (Tipsport-style). 0/NULL = bez limitu.
     ("users", "wager_limit", "INTEGER"),                   # aktuální denní strop sázek
     ("users", "wager_limit_pending", "INTEGER"),           # navýšení čeká na zítřek (snížit jde hned)
