@@ -797,9 +797,11 @@ def admin_users(q: str = Query("", max_length=64),
             "FROM users u ")
     if q:
         like = f"%{q.strip()}%"
+        # číslo v hledání = přesné ID účtu (support: „user 231") – jinak by našlo nic
+        uid = int(q.strip()) if q.strip().isdigit() else -1
         rows = conn.execute(
-            cols + "WHERE u.username LIKE ? OR u.kick_username LIKE ? OR u.email LIKE ? "
-            "ORDER BY " + order_sql + " LIMIT 100", (like, like, like),
+            cols + "WHERE u.username LIKE ? OR u.kick_username LIKE ? OR u.email LIKE ? OR u.id = ? "
+            "ORDER BY " + order_sql + " LIMIT 100", (like, like, like, uid),
         ).fetchall()
     else:
         rows = conn.execute(cols + "ORDER BY " + order_sql + " LIMIT 100").fetchall()
@@ -1916,8 +1918,10 @@ def security_points_feed(q: str = Query("", max_length=64), flow: str = Query(""
     Filtry: q=nick, flow=in|out, min_amount=|změna|>=, reason=hledání v důvodu."""
     where, params = ["1=1"], []
     if q.strip():
-        where.append("u.username LIKE ?")
-        params.append(f"%{q.strip()}%")
+        if q.strip().isdigit():   # číslo = přesné ID účtu
+            where.append("u.id = ?"); params.append(int(q.strip()))
+        else:
+            where.append("u.username LIKE ?"); params.append(f"%{q.strip()}%")
     if flow == "in":
         where.append("l.change > 0")
     elif flow == "out":
@@ -2880,10 +2884,11 @@ def casehug_search(q: str = Query("", max_length=64),
     if not q.strip():
         return {"users": []}
     like = f"%{q.strip()}%"
+    uid = int(q.strip()) if q.strip().isdigit() else -1   # číslo = přesné ID účtu
     rows = conn.execute(
         "SELECT id, username, kick_username, avatar_url, points FROM users "
-        "WHERE username LIKE ? OR kick_username LIKE ? ORDER BY points DESC LIMIT 8",
-        (like, like)).fetchall()
+        "WHERE username LIKE ? OR kick_username LIKE ? OR id = ? ORDER BY points DESC LIMIT 8",
+        (like, like, uid)).fetchall()
     return {"users": [dict(r) for r in rows]}
 
 
