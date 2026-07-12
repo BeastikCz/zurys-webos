@@ -296,6 +296,7 @@ def test_wheel_sub_spins_and_paid_respin(client):
         uid2 = _mk(conn, points=0)                           # free hráč: 1 spin, re-spin bez sedláků neprojde
         r = wheel_spin(data=None, user=_row(conn, uid2), conn=conn)
         assert r["spins_left"] == 0 and r["respin_available"]
+        conn.execute("UPDATE users SET points = 0 WHERE id = ?", (uid2,))  # výhra z free spinu nesmí ovlivnit test debitu
         with pytest.raises(HTTPException) as ex:
             wheel_spin(data=WheelSpinIn(paid=True), user=_row(conn, uid2), conn=conn)
         assert "potřebuješ" in ex.value.detail
