@@ -1,3 +1,7 @@
+import os
+import subprocess
+import sys
+
 from app import config, ddos, deps, main
 
 
@@ -11,6 +15,23 @@ def test_fly_remains_production_fallback(monkeypatch):
     monkeypatch.delenv("WEBOS_PROD", raising=False)
     monkeypatch.setenv("FLY_APP_NAME", "zurys-shop")
     assert config.is_production() is True
+
+
+def test_webos_prod_boots_main_and_oauth_in_production(tmp_path):
+    env = os.environ | {
+        "WEBOS_DATA_DIR": str(tmp_path),
+        "WEBOS_PROD": "1",
+        "KICK_CLIENT_ID": "test-id",
+        "KICK_CLIENT_SECRET": "test-secret",
+    }
+    code = (
+        "from app import main; from app.routers import auth; "
+        "assert main._PROD and main.app.docs_url is None and main.app.openapi_url is None; "
+        "assert auth.IS_PRODUCTION and auth.OAUTH_ENABLED; "
+        "assert 'Strict-Transport-Security' in main._SECURITY_HEADERS"
+    )
+    result = subprocess.run([sys.executable, "-c", code], env=env, capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr
 
 
 def test_local_without_proxy_headers_skips_ddos(client, monkeypatch):
