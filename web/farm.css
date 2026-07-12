@@ -72,12 +72,12 @@
 .stk-empty .stk-a-emoji { font-size: clamp(34px, 4vw, 54px); opacity: .5; }
 
 /* plovoucí badge nad zvířetem */
-.stk-badge { position: absolute; top: -14px; left: 50%; transform: translateX(-50%);
+.stk-badge { position: absolute; top: -34px; left: 50%; transform: translateX(-50%);
   white-space: nowrap; font-size: 12.5px; font-weight: 800; padding: 5px 11px; border-radius: 11px;
   box-shadow: 0 8px 20px -8px #000; border: 1px solid transparent; backdrop-filter: blur(4px); }
 .stk-badge.ready { background: linear-gradient(180deg, #7be0a0, #46d369); color: #06340f;
   border-color: #9cf0b8; box-shadow: 0 0 22px rgba(70,211,105,.55), 0 8px 20px -8px #000; animation: stkPulse 1.3s ease-in-out infinite; }
-.stk-badge.time { background: rgba(12,10,7,.82); color: #f0e6cf; border-color: rgba(255,215,94,.25); font-variant-numeric: tabular-nums; }
+.stk-badge.time { top: -38px; background: rgba(12,10,7,.82); color: #f0e6cf; border-color: rgba(255,215,94,.25); font-variant-numeric: tabular-nums; }
 .stk-badge.hungry { background: linear-gradient(180deg, #ffcf6a, #ff9d18); color: var(--stk-ink); border-color: #ffe0a0; }
 .stk-badge.util { background: rgba(146,110,255,.9); color: #fff; border-color: #b79dff; }
 @keyframes stkPulse { 0%,100% { transform: translateX(-50%) scale(1); } 50% { transform: translateX(-50%) scale(1.06); } }
@@ -136,7 +136,7 @@
 }
 @media (max-width: 720px) {
   .stk-scene { aspect-ratio: auto; min-height: 300px; }
-  .stk-pasture { gap: 14px; flex-wrap: wrap; justify-content: center; inset: auto 0 6%; }
+  .stk-pasture { gap: 44px 14px; flex-wrap: wrap; justify-content: center; inset: auto 0 6%; }
   .stk-shop { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .stk-status { font-size: 12px; }
   .stk-status .stk-s-r { width: 100%; margin-left: 0; }

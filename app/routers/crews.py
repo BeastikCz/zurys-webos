@@ -137,5 +137,5 @@ def crews_reject(crew_id: int, data: CrewMemberIn, user: sqlite3.Row = Depends(r
 @router.post("/{crew_id}/war/declare")
 def crews_war_declare(crew_id: int, data: CrewWarDeclareIn, user: sqlite3.Row = Depends(require_user),
                       conn: sqlite3.Connection = Depends(db_dep)):
-    """Vůdce vyhlásí válku jiné partě (3 dny, skóre = crew XP). Odměna je status, ne sedláky."""
+    """Vůdce vyhlásí válku jiné partě (1 den + 2 dny pauza, skóre = crew XP)."""
     return _do(crews.declare_war, conn, user["id"], data.opponent_id)

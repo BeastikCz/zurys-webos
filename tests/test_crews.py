@@ -501,10 +501,13 @@ def test_achievements_derived(client):
     u = _mk_user(100000); st = _run(crews.create, u, "u", "AchParta", "ACH")
     conn = get_conn()
     try:
+        conn.execute("UPDATE crews SET war_wins=40 WHERE id=?", (st["id"],))
+        conn.execute("UPDATE crew_members SET sub_xp=? WHERE user_id=?", (50 * crews.XP_PER_SUB, u))
         conn.execute("UPDATE crews SET xp=1000000, best_streak=5 WHERE id=?", (st["id"],)); conn.commit()
     finally:
         conn.close()
     names = [a["name"] for a in _run(crews.state, u, st["id"])["achievements"]]
+    assert "40 výher ve válce" in names and "50 subů" in names
     assert "Lvl 5" in names and "4 týdny v řadě" in names       # lvl6 → Lvl5; streak5 → 4 týdny
 
 
