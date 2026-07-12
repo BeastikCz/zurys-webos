@@ -155,8 +155,17 @@ switch_release() {{
     mv -Tf "$next" "$app"
 }}
 
+local_health() {{
+    # uvicorn po restartu nabiha par sekund -> retry, ne okamzity fail
+    for _ in 1 2 3 4 5 6 7 8; do
+        curl -fsS --max-time 10 http://127.0.0.1:8080/api/monitor/healthz 2>/dev/null | grep -q '"db":"ok"' && return 0
+        sleep 3
+    done
+    return 1
+}}
+
 switch_release "$release"
-if ! systemctl restart webos || ! curl -fsS --max-time 10 http://127.0.0.1:8080/api/monitor/healthz | grep -q '"db":"ok"'; then
+if ! systemctl restart webos || ! local_health; then
     switch_release "$old"
     systemctl restart webos || true
     exit 1
