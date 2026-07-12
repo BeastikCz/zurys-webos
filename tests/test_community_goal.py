@@ -36,8 +36,15 @@ def test_stream_end_resets_cgoal(client, monkeypatch):
         set_setting(conn, "cgoal_reset_on_stream_end", "1")
         conn.commit()
         monkeypatch.setattr("app.live.is_live", lambda c: False)   # stream skončil
-        live_events._check(conn)
-        assert community_goal.status(conn)["progress"] == 0, "konec streamu měl vynulovat chat cíl"
+        live_events._check(conn)                              # reset ODLOŽEN o RESET_DELAY_MIN
+        assert community_goal.status(conn)["progress"] == 300, "hned po konci streamu progres drží"
+        from datetime import datetime, timezone, timedelta
+        old_ts = (datetime.now(timezone.utc) - timedelta(minutes=live_events.RESET_DELAY_MIN + 1)).isoformat()
+        set_setting(conn, "live_went_offline_at", old_ts)
+        set_setting(conn, "goals_reset_done_for", "")
+        conn.commit()
+        live_events._check(conn)                              # offline > 2 h → odložený reset
+        assert community_goal.status(conn)["progress"] == 0, "2 h po konci streamu se chat cíl nuluje"
     finally:
         conn.close()
 
