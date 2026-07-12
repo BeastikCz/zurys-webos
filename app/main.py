@@ -21,7 +21,7 @@ from .garden_notify import start_garden_notify_daemon
 from .se_tips import start_se_tips_daemon
 from .wrapped_push import start_wrapped_push_daemon
 from .mines_anticheat import start_mines_anticheat_daemon
-from .config import WEB_DIR, UPLOAD_DIR, SESSION_COOKIE, STAFF_ROLES, TRUSTED_IPS
+from .config import WEB_DIR, UPLOAD_DIR, SESSION_COOKIE, STAFF_ROLES, TRUSTED_IPS, is_production
 from .db import init_db, get_conn, now_iso, get_setting, set_setting
 from .deps import client_ip
 from .seed import seed_if_empty, sync_changelog
@@ -323,9 +323,8 @@ try:
 finally:
     _cb.close()
 
-# Na Fly (produkce) vypneme veřejné API docs/schema – ať se útočníkovi nenabízí mapa API.
-# Lokálně (bez FLY_APP_NAME) zůstávají zapnuté pro vývoj.
-_PROD = bool(os.environ.get("FLY_APP_NAME"))
+# Produkce je na VPS explicitně WEBOS_PROD=1; Fly zůstává kompatibilní fallback.
+_PROD = is_production()
 
 # Sentry: neošetřené výjimky se stacktrace + kontextem requestu (doplněk k Discord 500 alertu,
 # co je jen 1 řádek a má cooldown). No-op bez SENTRY_DSN (Fly secret) → lokál/testy nedotčené.
@@ -470,7 +469,7 @@ async def ip_ban_guard(request: Request, call_next):
     rec = ipban.check(ip)
     if rec is not None:
         return ipban.block_page(ip, rec)
-    if request.headers.get("fly-client-ip"):
+    if request.headers.get("fly-client-ip") or request.headers.get("cf-connecting-ip"):
         rate = ddos.observe(ip)
         if (ddos.autoban_enabled() and rate > ddos.AUTOBAN_PER_MIN
                 and ip not in TRUSTED_IPS and not _is_staff_request(request)):
