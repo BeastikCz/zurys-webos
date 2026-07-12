@@ -223,6 +223,14 @@ def kick_callback(request: Request, code: str = "", state: str = "",
     if not OAUTH_ENABLED:
         raise HTTPException(status_code=400, detail="Kick OAuth není nakonfigurováno.")
     if not code or not hmac.compare_digest(state, request.cookies.get("kick_state", "")):
+        # Chybějící state cookie = login začal jinde (in-app browser → Safari) nebo
+        # vypršel (max_age 600 s). Jednou automaticky restartujeme flow v TOMHLE
+        # prohlížeči, aby se cookie nastavila správně; kick_retry brání smyčce.
+        if code and not request.cookies.get("kick_state") and not request.cookies.get("kick_retry"):
+            resp = RedirectResponse("/auth/kick/login")
+            resp.set_cookie("kick_retry", "1", httponly=True, secure=_secure_cookie(request),
+                            max_age=600, samesite="lax", path="/")
+            return resp
         raise HTTPException(status_code=400, detail="Neplatný OAuth stav.")
     verifier = request.cookies.get("kick_pkce") or ""
 
