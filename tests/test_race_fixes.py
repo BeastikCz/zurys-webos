@@ -53,7 +53,7 @@ def test_daily_claim_no_double_pay(client):
             daily_claim(user=stale, conn=conn)
         assert ex.value.status_code == 400
         assert _points(conn, uid) == after           # žádná druhá výplata
-        n = conn.execute("SELECT COUNT(*) c FROM points_log WHERE user_id=? AND reason LIKE 'Denní streak%'",
+        n = conn.execute("SELECT COUNT(*) c FROM points_log WHERE user_id=? AND reason LIKE 'Snídaně na statku%'",
                          (uid,)).fetchone()["c"]
         assert n == 1
     finally:
@@ -249,3 +249,24 @@ def test_cancel_concurrent_refunds_once(client):
         assert c.execute("SELECT status FROM predictions WHERE id=?", (pid,)).fetchone()["status"] == "cancelled"
     finally:
         c.close()
+
+
+# ---------------- Snídaně na statku: sub ×3 + truhla den 7 ----------------
+def test_daily_breakfast_sub_and_chest(client):
+    from app.db import get_conn
+    from app.routers.misc import daily_claim, DAILY_LADDER, DAILY_SUB_MULT, DAILY_CHEST_SUB
+    conn = get_conn()
+    try:
+        uid = _mk(conn, points=0, is_sub=1, daily_streak=6)   # den 7 (idx 6), sub
+        r = daily_claim(user=_row(conn, uid), conn=conn)
+        base = DAILY_LADDER[6] * DAILY_SUB_MULT
+        assert r["sub"] and r["day"] == 7
+        assert base <= r["reward"] <= base + DAILY_CHEST_SUB
+        assert r["reward"] == base + r["chest"]
+        assert _points(conn, uid) == r["reward"]
+
+        uid2 = _mk(conn, points=0, daily_streak=2)            # den 3, free: bez multu, bez truhly
+        r2 = daily_claim(user=_row(conn, uid2), conn=conn)
+        assert not r2["sub"] and r2["chest"] == 0 and r2["reward"] == DAILY_LADDER[2]
+    finally:
+        conn.close()

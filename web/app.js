@@ -367,7 +367,7 @@ function renderHeader() {
     <nav class="nav">${navLinks}</nav>
     <div class="top-right">
       ${right}
-      <button class="icon-btn hamburger" data-action="toggle-mobile" title="Menu">☰</button>
+      <button class="icon-btn hamburger" data-action="toggle-mobile" title="Další sekce">☰</button>
     </div>`;
 
   $("#mobilenav").innerHTML =
@@ -2799,7 +2799,7 @@ async function loadGarden() {
       return `<div class="grd-plot grd-grow"${pestRefresh}><div class="grd-crop grd-sprout">🌱</div><div class="grd-lbl">${esc(p.name)}</div><div class="grd-time" data-left="${p.seconds_left}">${grdDur(p.seconds_left)}</div>${fert}</div>`;
     }).join("");
     const shop = g.crops.map((c) => `<button class="grd-seed${_gardenSel === c.key ? " sel" : ""}" data-action="grd-pick" data-crop="${c.key}"><span class="grd-si">${c.icon}</span><b>${esc(c.name)}</b><span class="faint">${c.hours} h · semínko ${fmtPts(c.cost)} · oček. <b>${c.expected_no_rescue >= 0 ? "+" : ""}${fmtPts(c.expected_no_rescue || 0)}</b> / aktivně <b>${c.expected_rescue >= 0 ? "+" : ""}${fmtPts(c.expected_rescue || 0)}</b> · 🎟️ <b style="color:var(--farm-green,#46d369)">+${fmtPts(c.xp || 0)} XP</b></span></button>`).join("");
-    const seedNote = `<p class="muted" style="font-size:12px;margin:-4px 0 10px">Semínko stojí <b>${g.seed_pct}%</b> z výnosu${g.sub ? ` — máš <b style="color:var(--accent)">sub slevu (jen ${g.seed_pct_sub}%)</b> 💜` : ` · 💜 sub jen ${g.seed_pct_sub}%`}. Chrobáci: <b>${g.pest_chance || 0}%</b>, záchrana <b>${g.rescue_pct || 0}%</b> výnosu.<br>🎟️ <b>Sklizeň dává XP do levelu i Selské stezce</b> — <b>mimo denní strop</b>, počítá se vždy (i když máš chat vyfarmený)${g.sub ? ", sub ×1.5" : ""}. Chrobáci úrodu i XP půlí. 💩 <b>Hnojivo</b> zkrátí zbývající růst na polovinu (${g.fert_pct || 20} % výnosu, 1× na výsadbu).</p>`;
+    const seedNote = `<p class="muted" style="font-size:12px;margin:-4px 0 10px">Semínko stojí <b>${g.seed_pct}%</b> z výnosu${g.sub ? ` — máš <b style="color:var(--accent)">sub slevu (jen ${g.seed_pct_sub}%)</b> 💜` : ` · 💜 sub jen ${g.seed_pct_sub}%`}. Chrobáci: <b>${g.pest_chance || 0}%</b>, záchrana <b>${g.rescue_pct || 0}%</b> výnosu.<br>🎟️ <b>Sklizeň dává XP do levelu</b> — <b>mimo denní strop</b>, počítá se vždy (i když máš chat vyfarmený)${g.sub ? ", sub ×1.5" : ""}. Chrobáci úrodu i XP půlí. 💩 <b>Hnojivo</b> zkrátí zbývající růst na polovinu (${g.fert_pct || 20} % výnosu, 1× na výsadbu).</p>`;
     const readyPlots = g.plots.filter((p) => !p.empty && p.ready);
     const emptyCount = g.plots.filter((p) => p.empty).length;
     const readySum = readyPlots.reduce((s, p) => s + ((p.pest || p.eaten) ? Math.round(p.reward * 0.5) : p.reward), 0);
@@ -3123,76 +3123,59 @@ async function farmCollectAll() {
   } catch (e) { toast(e.message, "error"); }
 }
 
-/* ---------- Selská stezka (sezónní dráha; data zůstávají na /battlepass) ---------- */
-function harvestDaysLeft(season, serverTime) {
-  const [year, month] = String(season).split("-").map(Number);
-  const harvest = Date.UTC(year, month, 0, 23, 59, 59);
-  return Math.max(0, Math.ceil((harvest - new Date(serverTime || Date.now())) / 86400000));
+/* ---------- Snídaně na statku (denní bonus, reuse /daily) ---------- */
+const SNIDANE_FOODS = ["🥚", "🥛", "🍞", "🧀", "🥓", "🥧", "🧺"];
+function fmtWaitHM(sec) {
+  const mins = Math.ceil(sec / 60), h = Math.floor(mins / 60), m = mins % 60;
+  return h > 0 ? `${h} h ${m} min` : `${Math.max(1, m)} min`;
+}
+function breakfastCard(d) {
+  const ladder = (d.sub ? d.ladder_sub : d.ladder) || [];
+  const num = (n) => Number(n).toLocaleString("cs-CZ");
+  const todayIdx = d.can_claim ? d.done_count : d.done_count - 1;  // po claimu svítí právě snědený den
+  const tiles = ladder.map((val, i) => {
+    const eaten = i < d.done_count;
+    const isToday = i === todayIdx;
+    const chest = i === 6;
+    const label = chest ? (d.sub ? "zlatá truhla 🎁" : "truhla 🎁")
+      : eaten ? "✓ snědeno" : `+${num(val)}`;
+    return `<div class="sn-day${eaten ? " sn-eaten" : ""}${isToday ? " sn-today" : ""}${chest ? " sn-chest" : ""}">
+      ${isToday ? `<b class="sn-badge">DNES</b>` : ""}
+      <span class="sn-num">Den ${i + 1}</span>
+      <span class="sn-food">${SNIDANE_FOODS[i]}</span>
+      <span class="sn-val${eaten && !isToday ? " sn-val-done" : ""}">${eaten && isToday ? "✓ snědeno" : label}</span>
+    </div>`;
+  }).join("");
+  const cta = d.can_claim
+    ? `<button class="sn-claim" data-action="bp-daily">🍳 Sklidit snídani · +${fmtPts(d.reward_now)}${d.day === 7 ? " + 🎁 truhla" : ""}</button>`
+    : `<div class="sn-done">✓ Snídaně snědená! Další ráno za <b>${fmtWaitHM(d.next_in_seconds)}</b> 🌙</div>`;
+  const upsell = (!d.sub && d.can_claim)
+    ? `<div class="sn-upsell">⭐ <b>Jako sub bys dnes sklidil +${num(d.reward_now * 3)}</b> místo +${num(d.reward_now)} sedláků — a sedmý den zlatou truhlu.</div>`
+    : "";
+  const restore = (d.streak_lost > 0 && d.restore_available)
+    ? `<div class="bp-restore">💔 Přišel jsi o streak <b>${d.streak_lost} dní</b>!
+        <button class="btn btn-sm btn-ghost" data-action="daily-restore" data-cost="${d.restore_cost}">Obnovit za ${fmtPts(d.restore_cost)} 🌾</button></div>`
+    : "";
+  return `<section class="sn-card">
+    <header class="sn-head">
+      <div><b class="sn-title">🍳 Snídaně na statku</b>
+        <p class="sn-sub">Každé ráno na tebe na stole čeká výslužka. Sedmý den truhla.</p></div>
+      <div class="sn-chips">
+        ${d.streak_total > 1 ? `<span class="sn-chip">🔥 streak ${d.streak_total}</span>` : ""}
+        ${d.sub ? `<span class="sn-chip sn-chip-sub">⭐ Sub ×3</span>` : ""}
+      </div>
+    </header>
+    <div class="sn-days">${tiles}</div>
+    ${cta}${upsell}${restore}
+  </section>`;
 }
 
-function trailReward(tier, premium, isPremium) {
-  const claimed = premium ? tier.premium_claimed : tier.claimed;
-  const reward = premium ? tier.premium_reward : tier.reward;
-  const status = claimed ? "claimed" : (!premium || isPremium) && tier.reached ? "claimable" : premium && !isPremium ? "locked" : "upcoming";
-  const action = premium ? "bp-claim-premium" : "bp-claim";
-  const title = premium ? "Zlatá brázda" : "Polní cesta";
-  const locked = premium && !isPremium;
-  return `<div class="bp-reward bp-${status}" title="${title}: +${fmtPts(reward)} sedláků">
-    <span class="bp-reward-icon">${tier.milestone ? "🧰" : "🎒"}</span>
-    <span class="bp-reward-value">+${fmtPts(reward)} 🌾</span>
-    ${claimed ? `<span class="bp-reward-state">✓ Sklizeno</span>`
-      : locked ? `<span class="bp-reward-state">🔒 Zamčeno</span>`
-        : tier.reached ? `<button class="bp-claim${premium ? " bp-claim-prem" : ""}" data-action="${action}" data-tier="${tier.tier}">Sklidit</button>`
-          : `<span class="bp-reward-state">${tier.milestone ? "Truhla" : "Připraveno na cestě"}</span>`}
-  </div>`;
-}
-
-async function loadBattlePass() {
+async function loadBattlePass() {   // Selská stezka odstraněna (12.7.) — zůstala jen Snídaně na statku
   const box = document.getElementById("bpCard"); if (!box) return;
   try {
-    const [bp, daily] = await Promise.all([api("/battlepass"), api("/daily/status").catch(() => null)]);
-    let dailyHtml = "";
-    if (daily) {
-      const rew = (daily.reward_now || 0) * (daily.mult || 1);
-      dailyHtml = daily.can_claim
-        ? `<button class="bp-ranec bp-claim" data-action="bp-daily">🎒 Ranec na cestu · Sklidit +${fmtPts(rew)} (den ${daily.day}/7)</button>`
-        : `<div class="bp-daily-done">🎒 Ranec na cestu sebraný (den ${daily.day}/7) · vrať se zítra</div>`;
-      if (daily.streak_lost > 0 && daily.restore_available)   // zmeškal den → nabídka koupit streak zpět (do dalšího claimu, 1×/měsíc)
-        dailyHtml += `<div class="bp-restore">💔 Přišel jsi o streak <b>${daily.streak_lost} dní</b>!
-          <button class="btn btn-sm btn-ghost" data-action="daily-restore" data-cost="${daily.restore_cost}">Obnovit za ${fmtPts(daily.restore_cost)} 🌾</button></div>`;
-    }
-    const currentStop = Math.min(bp.max_tier, Math.max(1, bp.tier + 1));
-    const tractor = Math.min(100, ((bp.tier + bp.pct / 100) / bp.max_tier) * 100);
-    const stops = bp.tiers.map((t) => `<article class="bp-stop${t.milestone ? " bp-milestone" : ""}${t.tier === currentStop ? " bp-current" : ""}" id="bp-stop-${t.tier}">
-      <div class="bp-lane bp-free-lane">${trailReward(t, false, bp.is_premium)}</div>
-      <div class="bp-marker"><span>${t.milestone ? "🧰" : t.tier}</span>${t.tier === currentStop ? "<b class=\"bp-tractor-mobile\">🚜</b>" : ""}</div>
-      <div class="bp-lane bp-gold-lane">${trailReward(t, true, bp.is_premium)}</div>
-    </article>`).join("");
-    const premBanner = bp.is_premium
-      ? `<div class="bp-prem bp-prem-on">✨ Jdeš Zlatou brázdou — sklízíš <b>3× odměny</b>.${bp.claimable_premium ? ` <b style="color:var(--farm-green)">${bp.claimable_premium} k vyzvednutí</b>` : ""}</div>`
-      : `<div class="bp-prem bp-prem-off">✨ <b>Zlatá brázda</b> je pro suby — odemkne <b>3× odměny</b> u každé zastávky.</div>`;
-    box.innerHTML = `<section class="bp-trail panel">
-      <header class="bp-trail-head">
-        <div><div class="section-title" style="margin:0">🛤️ Selská stezka</div><p>Každý měsíc nová cesta. Co nafarmíš, posune tě dál.</p></div>
-        <div class="bp-season"><span>Sezóna ${esc(bp.season)}</span><b>🎉 Dožínky za ${harvestDaysLeft(bp.season, bp._serverTime)} dní</b><span>Zastávka ${bp.tier}/${bp.max_tier}</span></div>
-      </header>
-      ${premBanner}
-      ${dailyHtml}
-      <div class="bp-progress"><div><span>Do zastávky ${Math.min(bp.max_tier, bp.tier + 1)}</span><b>${fmtPts(bp.into)} / ${fmtPts(bp.tier_xp)} sedláků</b></div><i style="width:${bp.pct}%"></i></div>
-      <div class="bp-mobile-jump"><button class="btn btn-ghost btn-sm" data-action="bp-current">🚜 Kde jsem</button></div>
-      <div class="bp-legend"><span>🌾 Polní cesta</span><span>✨ Zlatá brázda</span></div>
-      <div class="bp-stops" style="--tractor:${tractor}%"><div class="bp-road" aria-hidden="true"></div><b class="bp-tractor" aria-hidden="true">🚜</b>${stops}</div>
-    </section>`;
+    const daily = await api("/daily/status");
+    box.innerHTML = `<div class="panel">${breakfastCard(daily)}</div>`;
   } catch (e) { box.innerHTML = ""; }
-}
-async function claimBpTier(tier, premium) {
-  try {
-    const r = await api("/battlepass/claim", { method: "POST", body: { tier: parseInt(tier, 10), premium: !!premium } });
-    if (state.user) state.user.points = r.balance;
-    toast(`${premium ? "✨ Zlatá brázda" : "🌾 Polní cesta"} · zastávka ${r.tier} sklizena! +${fmtPts(r.reward)} 🌾`, "success");
-    try { confettiBurst(); } catch (e) {}
-    renderHeader(); loadBattlePass();
-  } catch (e) { toast(e.message, "error"); }
 }
 
 async function loadLevelPass() {
@@ -3235,12 +3218,7 @@ async function claimLevelPass(level) {
   } catch (e) { toast(e.message, "error"); }
 }
 
-function scrollToCurrentStop() {
-  const behavior = matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth";
-  document.querySelector(".bp-current")?.scrollIntoView({ behavior, block: "center", inline: "center" });
-}
-
-async function claimBpDaily() {     // Ranec na cestu reuse /daily/claim
+async function claimBpDaily() {     // Snídaně na statku reuse /daily/claim
   try {
     const r = await api("/daily/claim", { method: "POST" });
     if (state.user) state.user.points = r.balance;
@@ -3351,13 +3329,13 @@ function pageUkoly() {
       <div class="panel" style="text-align:center;padding:36px 20px">
         <div style="font-size:42px;margin-bottom:8px">📋</div>
         <div class="section-title" style="margin:0 0 6px">Připoj se a plň úkoly</div>
-        <p class="muted" style="font-size:13.5px;max-width:430px;margin:0 auto 18px">Denní a týdenní úkoly ti dají sedláky navíc — a posouvají tě po <b>Selské stezce</b> 🛤️.</p>
+        <p class="muted" style="font-size:13.5px;max-width:430px;margin:0 auto 18px">Denní a týdenní úkoly ti dají sedláky navíc. 🌾</p>
         <button class="btn btn-kick" data-action="connect">🟢 Připojit přes Kick</button>
       </div>`;
     return;
   }
   view.innerHTML = `
-    <div class="page-head with-mascot"><img class="page-mascot" src="/sedlak-cut.png" alt=""><div class="ph-text"><h1>📋 Úkoly</h1><p class="muted">Plň denní a týdenní úkoly, ber sedláky navíc – a posouvej se po Selské stezce 🛤️.</p></div></div>
+    <div class="page-head with-mascot"><img class="page-mascot" src="/sedlak-cut.png" alt=""><div class="ph-text"><h1>📋 Úkoly</h1><p class="muted">Plň denní a týdenní úkoly a ber sedláky navíc. 🌾</p></div></div>
     <div id="questsCard"></div>`;
   loadQuests();
 }
@@ -3471,7 +3449,7 @@ async function refreshBonusDot() {
   try {
     const c = await api("/me/claims");
     claimsData = c;
-    bonusReady = !!(c.daily || c.wheel || c.partner || c.battlepass || c.levelpass);   // tečka na Bonusy
+    bonusReady = !!(c.daily || c.wheel || c.partner || c.levelpass);   // tečka na Bonusy (stezka odstraněna 12.7.)
     questReady = c.quests > 0;                                                        // tečka na Úkoly
   } catch (e) { return; }
   renderHeader();
@@ -6476,7 +6454,7 @@ function welcomeGuide() {
   const steps = [
     ["📺", "Sleduj stream", "Za sledování Zurys streamu ti automaticky naskakují <b>sedláci</b> 🌾 — stačí mít web otevřený."],
     ["🛒", "Utrať v Shopu", "Sedláky vyměníš za <b>skiny a odměny</b> — instantní odměny i tomboly o velké ceny."],
-    ["🛤️", "Jdi Selskou stezku", "Vše co naděláš tě posouvá po <b>Selské stezce</b> — Ranec na cestu, kolo štěstí i odměny za zastávky."],
+    ["🍳", "Sněz snídani", "Každé ráno na tebe v <b>Bonusech</b> čeká Snídaně na statku a kolo štěstí — sedláci zdarma."],
     ["🎮", "Hraj a sázej", "Miny, duely, blackjack, predikce — zariskuj o <b>velké výhry</b> (férově, provably-fair)."],
     ["🏆", "Stoupej výš", "Farmařením rosteš v <b>levelu</b> a šplháš v žebříčku. Staň se #1 sedlákem! 👑"],
   ];
@@ -6511,9 +6489,6 @@ function handleAction(action, el) {
     case "bio-cancel": loadMyBio(); break;
     case "prestige-buy": prestigeBuy(parseInt(el.dataset.cost, 10), parseInt(el.dataset.lvl, 10)); break;
     case "wl-save": saveWagerLimit(); break;
-    case "bp-claim": claimBpTier(el.dataset.tier); break;
-    case "bp-claim-premium": claimBpTier(el.dataset.tier, true); break;
-    case "bp-current": scrollToCurrentStop(); break;
     case "lp-claim": claimLevelPass(el.dataset.level); break;
     case "user-sort": setUserSort(el.dataset.sort); break;
     case "bp-daily": claimBpDaily(); break;

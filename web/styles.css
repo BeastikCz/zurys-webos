@@ -1021,6 +1021,11 @@ footer.site-footer { border-top: 1px solid var(--border); padding: 22px 0; color
   .nav { display: none; } .hamburger { display: grid; }
   .da-head h1 { font-size: 26px; }
 }
+@media (min-width: 1281px) {
+  /* Desktop keeps the primary routes visible; secondary sections stay in the menu. */
+  .nav-link:nth-child(n+7) { display: none; }
+  .hamburger { display: grid; }
+}
 @media (max-width: 720px) {
   .podium { gap: 7px; padding-top: 42px; }
   .podium-card { padding: 14px 5px 0; }
@@ -1844,7 +1849,39 @@ body::before { display: none !important; }
 .bp-trail-head p { color: var(--text-dim); font-size: 12.5px; margin: 4px 0 0; }
 .bp-season { display: flex; align-items: end; flex-direction: column; gap: 2px; color: var(--text-faint); font-size: 11.5px; text-align: right; }
 .bp-season b { color: var(--accent); font-size: 12.5px; }
-.bp-ranec { width: 100%; margin: 0 0 12px; padding: 10px 12px; font-size: 12.5px; }
+/* Snídaně na statku — denní bonus (nahradil Ranec, endpoint /daily zůstal) */
+.sn-card { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 14px 16px; margin: 0 0 14px; }
+.sn-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.sn-title { font-size: 14.5px; letter-spacing: .4px; }
+.sn-sub { color: var(--text-dim); font-size: 12px; margin: 2px 0 0; }
+.sn-chips { display: flex; gap: 6px; }
+.sn-chip { background: var(--surface-3); border: 1px solid var(--border); border-radius: 999px; padding: 3px 10px; font-size: 11.5px; color: var(--accent); white-space: nowrap; }
+.sn-chip-sub { border-color: var(--accent); color: var(--gold); }
+.sn-days { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; margin: 12px 0 0; }
+.sn-day { position: relative; text-align: center; background: var(--surface-2); border: 1px solid var(--surface-3); border-radius: 12px; padding: 8px 3px 7px; opacity: .55; display: flex; flex-direction: column; gap: 1px; }
+.sn-num { font-size: 10.5px; color: var(--text-faint); }
+.sn-food { font-size: 21px; filter: grayscale(.9); line-height: 1.25; }
+.sn-val { font-size: 11px; color: var(--text-faint); font-variant-numeric: tabular-nums; }
+.sn-eaten { opacity: .75; border-color: rgba(126,217,87,.35); }
+.sn-eaten .sn-food { filter: grayscale(.35); }
+.sn-eaten .sn-val, .sn-val-done { color: var(--farm-green, var(--success)); }
+.sn-today { opacity: 1; background: var(--surface-3); border: 2px solid var(--accent); box-shadow: 0 0 14px var(--accent-glow); }
+.sn-today .sn-food { filter: none; font-size: 23px; }
+.sn-today .sn-val { color: var(--gold); font-weight: 700; }
+.sn-badge { position: absolute; top: -8px; left: 50%; transform: translateX(-50%); background: var(--accent); color: var(--accent-ink); font-size: 9.5px; font-weight: 800; border-radius: 999px; padding: 1px 7px; letter-spacing: .5px; }
+.sn-chest { border-color: var(--gold); opacity: .85; }
+.sn-chest .sn-num, .sn-chest .sn-val { color: var(--gold); }
+.sn-chest .sn-food { filter: none; }
+.sn-claim { width: 100%; margin: 12px 0 0; padding: 11px 12px; font-size: 14px; font-weight: 800; border: none; border-radius: 12px; background: var(--accent-grad); color: var(--accent-ink); box-shadow: 0 0 14px var(--accent-glow); }
+.sn-claim:hover { filter: brightness(1.07); }
+.sn-done { margin: 12px 0 0; text-align: center; font-size: 12.5px; font-weight: 700; color: var(--farm-green, var(--success)); background: rgba(126,217,87,.08); border: 1px solid rgba(126,217,87,.28); border-radius: 12px; padding: 10px 12px; }
+.sn-upsell { margin: 8px 0 0; font-size: 12px; color: var(--text-dim); background: var(--surface-2); border: 1px dashed var(--accent); border-radius: 10px; padding: 8px 12px; }
+.sn-upsell b { color: var(--gold); }
+.sn-card .bp-restore { margin: 8px 0 0; }
+@media (max-width: 560px) {
+  .sn-days { grid-template-columns: repeat(4, 1fr); }
+  .sn-food { font-size: 18px; }
+}
 .bp-progress { margin: 0 0 12px; }
 .bp-progress > div { display: flex; justify-content: space-between; gap: 10px; color: var(--text-dim); font-size: 11.5px; margin-bottom: 5px; }
 .bp-progress b { color: var(--text); font-variant-numeric: tabular-nums; }

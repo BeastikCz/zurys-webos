@@ -63,6 +63,7 @@ def test_categorize_known_reasons():
     assert categorize("Komunitní chat cíl 🎉")[0] == "chat"
     assert categorize("Top Chatter dne (1. místo) 🗣️")[0] == "topchat"
     assert categorize("Denní streak – den 3 (×5 liga)")[0] == "daily"
+    assert categorize("Snídaně na statku – den 7 🎁 truhla ⭐sub")[0] == "daily"
     assert categorize("Kolo štěstí 🎡")[0] == "wheel"
     assert categorize("Drop #12 – 1. místo (přes kód)")[0] == "drops"
     assert categorize("Redeem kód VITEJ100")[0] == "codes"

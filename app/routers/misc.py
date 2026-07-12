@@ -1,6 +1,7 @@
 """Leaderboard, redeem kódů a profil (objednávky + historie bodů)."""
 import hashlib
 import json
+import secrets
 import re
 import sqlite3
 import unicodedata
@@ -1170,10 +1171,22 @@ def notifications_mark_read(user: sqlite3.Row = Depends(require_user),
     return {"ok": True}
 
 
-# ---------------- Denní bonus – 7denní streak ----------------
-DAILY_LADDER = [10, 20, 30, 40, 50, 75, 200]  # PTS za den 1..7
+# ---------------- Denní bonus – „Snídaně na statku" (7denní streak) ----------------
+# Liga multiplikátor (×10 top3) nahrazen sub bonusem ×3: daily má být login odměna pro
+# všechny + viditelný sub perk, ne další faucet pro top žebříčku (ti mají ligu jinde).
+DAILY_LADDER = [50, 75, 100, 125, 150, 200, 500]  # sedláci za den 1..7 (free)
+DAILY_SUB_MULT = 3       # sub bere ×3 (stejná logika jako Zlatá brázda)
+DAILY_CHEST_FREE = 1000  # den 7: truhla = bonus navíc 0..N (free)
+DAILY_CHEST_SUB = 2500   # den 7: zlatá truhla = bonus navíc 0..N (sub)
 DAILY_COOLDOWN_H = 20    # jak často lze vyzvednout
 DAILY_RESET_H = 48       # po výpadku se cyklus resetuje
+
+
+def _daily_is_sub(user) -> bool:
+    try:
+        return bool(user["is_sub"]) or user["role"] == ROLE_ADMIN
+    except (KeyError, IndexError, TypeError):
+        return False
 
 # Obnova streaku: zmeškal den → za sedláky si streak koupí zpět (retence + SINK do horké ekonomiky).
 # 1×/měsíc, jen streak ≥ MIN (obnovovat 2 dny nedává smysl), cena roste se streakem (víc dní = víc stojí).
@@ -1216,15 +1229,18 @@ def daily_status(user: sqlite3.Row = Depends(require_user),
     streak, can, next_in = _daily_state(user, now)
     lost, cost, avail = _restore_offer(user)
     done = streak % 7  # vybráno v aktuálním týdnu
-    rank = user_rank(conn, user["points"], user["username"])
+    sub = _daily_is_sub(user)
+    mult = DAILY_SUB_MULT if sub else 1
     return {
         "ladder": DAILY_LADDER,
-        "mult": tier_for_rank(rank)[1],
-        "rank": rank,
+        "ladder_sub": [x * DAILY_SUB_MULT for x in DAILY_LADDER],
+        "mult": mult,
+        "sub": sub,
+        "chest_max": (DAILY_CHEST_SUB if sub else DAILY_CHEST_FREE),
         "done_count": done,
         "day": done + 1,           # DEN x/7
         "can_claim": can,
-        "reward_now": DAILY_LADDER[done],
+        "reward_now": DAILY_LADDER[done] * mult,
         "next_in_seconds": next_in,
         "streak_total": user["daily_streak"] or 0,
         "streak_lost": lost, "restore_cost": cost, "restore_available": avail,
@@ -1240,8 +1256,10 @@ def daily_claim(user: sqlite3.Row = Depends(require_user),
         hrs = round(next_in / 3600, 1)
         raise HTTPException(status_code=400, detail=f"Denní bonus už sis dnes vyzvedl. Vrať se za {hrs} h. ⏳")
     idx = streak % 7
-    mult = tier_for_rank(user_rank(conn, user["points"], user["username"]))[1]
-    reward = DAILY_LADDER[idx] * mult
+    sub = _daily_is_sub(user)
+    mult = DAILY_SUB_MULT if sub else 1
+    chest = secrets.randbelow((DAILY_CHEST_SUB if sub else DAILY_CHEST_FREE) + 1) if idx == 6 else 0
+    reward = DAILY_LADDER[idx] * mult + chest
     # Atomický claim: přepni last_daily JEN když má pořád hodnotu, kterou jsme načetli (optimistic lock).
     # Při souběhu (16 requestů) přepne řádek jen první z nich – zbytek má WHERE last_daily=prev nesplněno
     # (rowcount==0) → odmítnut, takže odměnu i streak připíše právě jeden request, ne všechny.
@@ -1261,7 +1279,7 @@ def daily_claim(user: sqlite3.Row = Depends(require_user),
     if claimed.rowcount == 0:
         conn.commit()
         raise HTTPException(status_code=400, detail="Denní bonus už sis dnes vyzvedl. ⏳")
-    add_points(conn, user["id"], reward, f"Denní streak – den {idx + 1} (×{mult} liga)")
+    add_points(conn, user["id"], reward, f"Snídaně na statku – den {idx + 1}" + (" 🎁 truhla" if idx == 6 else "") + (" ⭐sub" if sub else ""))
     from ..logincal import mark as _mark_cal
     _mark_cal(conn, user["id"])     # login kalendář: označ dnešní den jako aktivní
     conn.commit()
@@ -1269,7 +1287,9 @@ def daily_claim(user: sqlite3.Row = Depends(require_user),
     used = (user["streak_restore_month"] if "streak_restore_month" in user.keys() else "") or ""
     return {
         "ok": True, "reward": reward, "mult": mult, "day": idx + 1, "streak": streak + 1,
-        "balance": fresh["points"], "message": f"🔥 Den {idx + 1}/7 — získáváš +{reward} sedláků (×{mult} liga)!",
+        "chest": chest, "sub": sub, "balance": fresh["points"],
+        "message": (f"🎁 Truhla! Den 7/7 — vysypalo se z ní +{reward} sedláků!" if idx == 6
+                    else f"🍳 Den {idx + 1}/7 snědeno — +{reward} sedláků" + (" (⭐ sub ×3)" if sub else "") + "."),
         "streak_lost": lost, "restore_cost": _restore_cost(lost),
         "restore_available": lost > 0 and used != local_date()[:7],
     }

@@ -19,7 +19,7 @@ _RULES = [
     ("watch",       "📺", "Sledování",           "faucet",   ["sledování stream"]),
     ("chat",        "💬", "Chat",                "faucet",   ["aktivita v chatu", "komunitní chat cíl"]),
     ("topchat",     "🗣️", "Top chatteři",        "faucet",   ["top chatter"]),
-    ("daily",       "📅", "Denní bonus",         "faucet",   ["denní streak"]),
+    ("daily",       "📅", "Denní bonus",         "faucet",   ["denní streak", "snídaně na statku"]),
     ("wheel",       "🎡", "Kolo štěstí",         "faucet",   ["kolo štěstí"]),
     ("drops",       "🎁", "Dropy",               "faucet",   ["drop #"]),
     ("codes",       "🎟️", "Redeem kódy",         "faucet",   ["redeem kód"]),
