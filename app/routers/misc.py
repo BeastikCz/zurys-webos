@@ -16,7 +16,7 @@ from ..db import now_iso, get_setting, local_date
 from ..deps import (db_dep, require_user, require_farm_access, add_points, try_debit, record_audit, client_ip,
                     user_rank, tier_for_rank, self_excluded_until, level_info, classify_xp)
 from ..models import (RedeemIn, TradeUrlIn, GiftIn, QuestClaimIn, CosmeticIn, FairSeedIn, SelfExcludeIn,
-                      ProfileBioIn, WagerLimitIn, ModApplyIn, BattlePassClaimIn, LoginCalClaimIn,
+                      ProfileBioIn, WagerLimitIn, ModApplyIn, BattlePassClaimIn, LoginCalClaimIn, WheelSpinIn,
                       GardenPlantIn, GardenPlantAllIn, GardenHarvestIn, DecorBuyIn, LevelPassClaimIn,
                       EggClaimIn, FarmBuyIn, FarmSlotIn, FarmFoxIn)
 from ..services import product_public, role_allows
@@ -1351,7 +1351,7 @@ def my_claims(user: sqlite3.Row = Depends(require_user),
     from ..quests import get_quests, QUESTS_ENABLED
     now = datetime.now(timezone.utc)
     streak, daily_can, _next = _daily_state(user, now)
-    wheel_can, _n = _wheel_state(user, now)
+    wheel_can, _n, _left, _respin = _wheel_state(user, now)
     garden_ready = conn.execute(
         "SELECT COUNT(*) c FROM garden WHERE user_id = ? AND ready_at <= ?",
         (user["id"], now_iso())).fetchone()["c"]
@@ -1658,27 +1658,41 @@ WHEEL_SEGMENTS = [
     (50, 24), (1500, 3), (100, 18), (350, 9),
     (25, 28), (3000, 1), (200, 12), (750, 5),
 ]
-WHEEL_COOLDOWN_H = 20    # 1 zatočení / ~den (stejně jako denní bonus)
+WHEEL_COOLDOWN_H = 20    # okno spinů / ~den (stejně jako denní bonus)
+WHEEL_SUB_SPINS = 2      # sub točí 2× denně, free 1×
+WHEEL_RESPIN_COST = 150  # placené zatočení navíc (SINK), 1× per okno, až po vyčerpání free spinů
 _WHEEL_JACKPOT = max(a for a, _ in WHEEL_SEGMENTS)
 
 
 def _wheel_state(user: sqlite3.Row, now: datetime):
-    """(can_spin, next_in_s) – 1× za WHEEL_COOLDOWN_H hodin."""
+    """(can_spin, next_in_s, spins_left, respin_available) v aktuálním okně."""
     last = user["last_wheel"]
-    if last:
-        elapsed = (now - datetime.fromisoformat(last)).total_seconds()
-        if elapsed < WHEEL_COOLDOWN_H * 3600:
-            return False, int(WHEEL_COOLDOWN_H * 3600 - elapsed)
-    return True, 0
+    allowed = WHEEL_SUB_SPINS if _daily_is_sub(user) else 1
+    if not last:
+        return True, 0, allowed, False
+    elapsed = (now - datetime.fromisoformat(last)).total_seconds()
+    if elapsed >= WHEEL_COOLDOWN_H * 3600:      # nové okno
+        return True, 0, allowed, False
+    used = (user["wheel_spins"] if "wheel_spins" in user.keys() else 1) or 1
+    left = max(0, allowed - used)
+    respin_ok = left == 0 and not ((user["wheel_respin"] if "wheel_respin" in user.keys() else 0) or 0)
+    next_in = 0 if left else int(WHEEL_COOLDOWN_H * 3600 - elapsed)
+    return left > 0, next_in, left, respin_ok
 
 
 @router.get("/wheel/status")
 def wheel_status(user: sqlite3.Row = Depends(require_user)):
-    can, next_in = _wheel_state(user, datetime.now(timezone.utc))
+    can, next_in, left, respin_ok = _wheel_state(user, datetime.now(timezone.utc))
+    sub = _daily_is_sub(user)
     return {
         "segments": [a for a, _ in WHEEL_SEGMENTS],   # částky v pořadí na kole
         "jackpot": _WHEEL_JACKPOT,
         "can_spin": can,
+        "spins_left": left,
+        "sub": sub,
+        "sub_spins": WHEEL_SUB_SPINS,
+        "respin_available": respin_ok,
+        "respin_cost": WHEEL_RESPIN_COST,
         "next_in_seconds": next_in,
         "cooldown_h": WHEEL_COOLDOWN_H,
     }
@@ -1704,21 +1718,41 @@ def _fair_ensure(conn, uid):
 
 
 @router.post("/wheel/spin")
-def wheel_spin(user: sqlite3.Row = Depends(require_user),
+def wheel_spin(data: WheelSpinIn = None, user: sqlite3.Row = Depends(require_user),
                conn: sqlite3.Connection = Depends(db_dep)):
     now = datetime.now(timezone.utc)
-    # Atomicky „zaberu" dnešní spin – brání dvojímu zatočení i při souběhu requestů
+    paid = bool(data and data.paid)
+    # Atomicky „zaberu" spin – brání dvojímu zatočení i při souběhu requestů
     # (stejný princip jako atomický claim u sledování streamu).
     threshold = (now - timedelta(hours=WHEEL_COOLDOWN_H)).isoformat()
-    cur = conn.execute(
-        "UPDATE users SET last_wheel = ? WHERE id = ? AND (last_wheel IS NULL OR last_wheel < ?)",
+    allowed = WHEEL_SUB_SPINS if _daily_is_sub(user) else 1
+    cur = conn.execute(   # 1. spin nového okna → reset počítadel
+        "UPDATE users SET last_wheel = ?, wheel_spins = 1, wheel_respin = 0 "
+        "WHERE id = ? AND (last_wheel IS NULL OR last_wheel < ?)",
         (now.isoformat(), user["id"], threshold),
     )
-    if cur.rowcount == 0:                       # už dnes točil (nebo souběžný request předběhl)
+    if cur.rowcount == 0 and not paid:          # 2.+ free spin v okně (sub)
+        cur = conn.execute(
+            "UPDATE users SET wheel_spins = wheel_spins + 1 "
+            "WHERE id = ? AND last_wheel >= ? AND wheel_spins < ?",
+            (user["id"], threshold, allowed),
+        )
+    if cur.rowcount == 0 and paid:              # placený re-spin: gate flag → pak debit
+        cur = conn.execute(
+            "UPDATE users SET wheel_respin = 1 "
+            "WHERE id = ? AND last_wheel >= ? AND wheel_respin = 0 AND wheel_spins >= ?",
+            (user["id"], threshold, allowed),
+        )
+        if cur.rowcount and not try_debit(conn, user["id"], WHEEL_RESPIN_COST, "Kolo štěstí 🎡 – re-spin (vklad)"):
+            conn.rollback()
+            raise HTTPException(status_code=400, detail=f"Na re-spin potřebuješ {WHEEL_RESPIN_COST} sedláků. 🌾")
+    if cur.rowcount == 0:                       # vyčerpáno (nebo souběžný request předběhl)
         conn.commit()
-        _, next_in = _wheel_state(user, now)
+        _, next_in, _l, respin_ok = _wheel_state(user, now)
+        if respin_ok and not paid:
+            raise HTTPException(status_code=400, detail=f"Free spiny vyčerpané — můžeš ještě 1× za {WHEEL_RESPIN_COST} sedláků. 🎡")
         hrs = round((next_in or WHEEL_COOLDOWN_H * 3600) / 3600, 1)
-        raise HTTPException(status_code=400, detail=f"Dnes už jsi točil. 🎡 Vrať se za {hrs} h. ⏳")
+        raise HTTPException(status_code=400, detail=f"Dnes už máš dotočeno. 🎡 Vrať se za {hrs} h. ⏳")
     # Výsledek = PROVABLY FAIR (commit-reveal): server ho nevybírá náhodně za běhu, počítá ho
     # z předem zveřejněného server seedu + client seedu + nonce → hráč si ověří, že to nebylo
     # rigged. Stejné šance jako dřív (váhy se nemění). Viz /fair.
@@ -1730,15 +1764,19 @@ def wheel_spin(user: sqlite3.Row = Depends(require_user),
     conn.execute("UPDATE users SET fair_nonce = fair_nonce + 1 WHERE id = ?", (user["id"],))
     amount = WHEEL_SEGMENTS[idx][0]
     jackpot = amount == _WHEEL_JACKPOT
-    add_points(conn, user["id"], amount, "Kolo štěstí 🎡" + (" – JACKPOT! 🎰" if jackpot else ""))
+    add_points(conn, user["id"], amount, "Kolo štěstí 🎡" + (" – re-spin" if paid else "") + (" – JACKPOT! 🎰" if jackpot else ""))
     conn.commit()
-    fresh = conn.execute("SELECT points FROM users WHERE id = ?", (user["id"],)).fetchone()
+    fresh = conn.execute("SELECT * FROM users WHERE id = ?", (user["id"],)).fetchone()
+    _can, _n, left, respin_ok = _wheel_state(fresh, now)
     return {
         "ok": True,
         "index": idx,
         "amount": amount,
         "jackpot": jackpot,
         "balance": fresh["points"],
+        "spins_left": left,
+        "respin_available": respin_ok,
+        "respin_cost": WHEEL_RESPIN_COST,
         "fair": {"server_hash": sh, "client_seed": cs, "nonce": nonce},
         "message": (f"🎰 JACKPOT! +{amount} sedláků!" if jackpot
                     else f"🎡 Padlo ti +{amount} sedláků!"),

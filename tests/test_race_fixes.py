@@ -270,3 +270,35 @@ def test_daily_breakfast_sub_and_chest(client):
         assert not r2["sub"] and r2["chest"] == 0 and r2["reward"] == DAILY_LADDER[2]
     finally:
         conn.close()
+
+
+# ---------------- Kolo štěstí v2: sub 2 spiny + placený re-spin ----------------
+def test_wheel_sub_spins_and_paid_respin(client):
+    from app.db import get_conn
+    from app.routers.misc import wheel_spin, WHEEL_RESPIN_COST
+    from app.models import WheelSpinIn
+    conn = get_conn()
+    try:
+        uid = _mk(conn, points=10_000, is_sub=1)
+        r1 = wheel_spin(data=None, user=_row(conn, uid), conn=conn)
+        assert r1["ok"] and r1["spins_left"] == 1            # sub: zbývá 2. free spin
+        r2 = wheel_spin(data=None, user=_row(conn, uid), conn=conn)
+        assert r2["ok"] and r2["spins_left"] == 0 and r2["respin_available"]
+        with pytest.raises(HTTPException):                   # 3. free spin nejde
+            wheel_spin(data=None, user=_row(conn, uid), conn=conn)
+        before = _points(conn, uid)
+        r3 = wheel_spin(data=WheelSpinIn(paid=True), user=_row(conn, uid), conn=conn)
+        assert r3["ok"] and not r3["respin_available"]
+        assert _points(conn, uid) == before - WHEEL_RESPIN_COST + r3["amount"]
+        with pytest.raises(HTTPException):                   # 2. re-spin nejde
+            wheel_spin(data=WheelSpinIn(paid=True), user=_row(conn, uid), conn=conn)
+
+        uid2 = _mk(conn, points=0)                           # free hráč: 1 spin, re-spin bez sedláků neprojde
+        r = wheel_spin(data=None, user=_row(conn, uid2), conn=conn)
+        assert r["spins_left"] == 0 and r["respin_available"]
+        with pytest.raises(HTTPException) as ex:
+            wheel_spin(data=WheelSpinIn(paid=True), user=_row(conn, uid2), conn=conn)
+        assert "potřebuješ" in ex.value.detail
+        assert _points(conn, uid2) == r["amount"]            # nic se nestrhlo
+    finally:
+        conn.close()

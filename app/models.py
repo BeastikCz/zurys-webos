@@ -386,6 +386,11 @@ class DmIn(BaseModel):
     body: str = Field(min_length=1, max_length=2000)
 
 
+class WheelSpinIn(BaseModel):
+    """Kolo štěstí – paid=True je placený re-spin po vyčerpání free spinů."""
+    paid: bool = False
+
+
 class FairSeedIn(BaseModel):
     """Provably fair – nový client seed (prázdný = vygeneruje se náhodný)."""
     client_seed: str = Field(default="", max_length=64)

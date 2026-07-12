@@ -687,14 +687,17 @@ footer.site-footer { border-top: 1px solid var(--border); padding: 22px 0; color
 .wheel-wrap { position: relative; width: 268px; height: 268px; margin: 8px auto 18px; }
 .wheel {
   width: 100%; height: 100%; border-radius: 50%; position: relative;
-  border: 6px solid #15102b;
+  border: 6px solid #221b11;
   box-shadow: 0 0 0 4px #e8b923, 0 12px 34px rgba(0,0,0,.55), inset 0 0 28px rgba(0,0,0,.45);
   transition: transform 4.6s cubic-bezier(0.16, 1, 0.3, 1);
   will-change: transform;
 }
-.wheel-lbl { position: absolute; inset: 0; display: flex; justify-content: center; align-items: flex-start; padding-top: 15px; pointer-events: none; }
-.wheel-lbl span { font-weight: 900; font-size: 14px; color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,.8); }
-.wheel-lbl.jp span { color: #15102b; text-shadow: 0 1px 1px rgba(255,255,255,.4); }
+.wheel-lbl { position: absolute; inset: 0; display: flex; justify-content: center; align-items: flex-start; padding-top: 11px; pointer-events: none; }
+.wheel-lbl span { font-weight: 900; font-size: 13px; line-height: 1.15; text-align: center; color: #f2e7d0; text-shadow: 0 1px 3px rgba(0,0,0,.8); }
+.wheel-lbl.jp span { color: #2a1c00; text-shadow: 0 1px 1px rgba(255,255,255,.4); }
+.wheel-badge-sub { background: rgba(232,185,35,.22); border-color: #e8b923; }
+.wheel-respin { background: transparent; border: 1px dashed #e8b923; color: #e8b923; font-weight: 800; }
+.wheel-respin:hover { background: rgba(232,185,35,.1); }
 .wheel-hub { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 50px; height: 50px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #fff3c4, #e8b923); display: flex; align-items: center; justify-content: center; font-size: 23px; box-shadow: 0 2px 10px rgba(0,0,0,.55); z-index: 3; }
 .wheel-pointer { position: absolute; top: -7px; left: 50%; transform: translateX(-50%); width: 0; height: 0; border-left: 14px solid transparent; border-right: 14px solid transparent; border-top: 25px solid #e8b923; z-index: 4; filter: drop-shadow(0 2px 3px rgba(0,0,0,.55)); }
 .wheel.jackpot-win { animation: jackpotPulse 0.9s ease-in-out 3; }
@@ -1020,11 +1023,6 @@ footer.site-footer { border-top: 1px solid var(--border); padding: 22px 0; color
   /* hamburger – plná nav (8 položek) se i po kompresi do ~1280 px nevejde, tak ji schovej do menu */
   .nav { display: none; } .hamburger { display: grid; }
   .da-head h1 { font-size: 26px; }
-}
-@media (min-width: 1281px) {
-  /* Desktop keeps the primary routes visible; secondary sections stay in the menu. */
-  .nav-link:nth-child(n+7) { display: none; }
-  .hamburger { display: grid; }
 }
 @media (max-width: 720px) {
   .podium { gap: 7px; padding-top: 42px; }

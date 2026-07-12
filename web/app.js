@@ -367,7 +367,7 @@ function renderHeader() {
     <nav class="nav">${navLinks}</nav>
     <div class="top-right">
       ${right}
-      <button class="icon-btn hamburger" data-action="toggle-mobile" title="Další sekce">☰</button>
+      <button class="icon-btn hamburger" data-action="toggle-mobile" title="Menu">☰</button>
     </div>`;
 
   $("#mobilenav").innerHTML =
@@ -3251,27 +3251,30 @@ async function loadWheel() {
     wheelState = s;
     const segs = s.segments || [];
     const n = segs.length || 1;
-    // barevné výseče (conic-gradient) – jackpot zlatě, jinak střídavě fialová
+    // barevné výseče (conic-gradient) – dřevěné mlýnské kolo, jackpot zlatě
     const stops = segs.map((amt, i) => {
-      const c = (amt === s.jackpot) ? "#e8b923" : (i % 2 ? "#281f4d" : "#3a2d6e");
+      const c = (amt === s.jackpot) ? "#e8b923" : (i % 2 ? "#2a2114" : "#4a3a20");
       return `${c} ${(i * 360 / n).toFixed(2)}deg ${((i + 1) * 360 / n).toFixed(2)}deg`;
     }).join(",");
+    // ikona podle výše výhry (vejce → pytel → prase → koruna)
+    const segIcon = (amt) => amt === s.jackpot ? "👑" : amt >= 750 ? "🐷" : amt >= 200 ? "🌾" : "🥚";
     // popisky částek po obvodu (každý natočený do středu své výseče, text srovnaný nahoru)
     const labels = segs.map((amt, i) => {
       const mid = (i + 0.5) * 360 / n;
       const isJp = amt === s.jackpot;
       return `<div class="wheel-lbl${isJp ? " jp" : ""}" style="transform:rotate(${mid}deg)">`
-           + `<span style="display:inline-block;transform:rotate(${(-mid).toFixed(2)}deg)">${amt}</span></div>`;
+           + `<span style="display:inline-block;transform:rotate(${(-mid).toFixed(2)}deg)">${segIcon(amt)}<br>${amt}</span></div>`;
     }).join("");
     const fmtWait = (sec) => sec >= 3600 ? Math.ceil(sec / 3600) + " h" : Math.max(1, Math.ceil(sec / 60)) + " min";
-    const btn = s.can_spin
-      ? `<button class="btn btn-primary btn-block" data-action="spin-wheel" id="wheelBtn">🎡 Zatočit kolem</button>`
-      : `<button class="btn btn-block" disabled>Další zatočení za ${fmtWait(s.next_in_seconds)}</button>`;
+    const btn = wheelButtonHtml(s);
+    const subNote = s.sub
+      ? `<span class="wheel-badge wheel-badge-sub">⭐ Sub ${s.sub_spins}× / den</span>`
+      : `<span class="wheel-badge">1× / den · ⭐ sub ${s.sub_spins}×</span>`;
     box.innerHTML = `<div class="panel wheel-panel">
       <div class="row-between" style="margin-bottom:10px">
         <div><div class="section-title" style="margin:0">🎡 Kolo štěstí</div>
-          <div class="muted" style="font-size:12.5px;margin-top:5px">Zatoč si <b style="color:#e8b923">1× denně</b> o sedláky — jackpot <b style="color:#e8b923">${s.jackpot}</b>! 🍀</div></div>
-        <span class="wheel-badge">1× / den</span>
+          <div class="muted" style="font-size:12.5px;margin-top:5px">Zatoč si o sedláky — jackpot <b style="color:#e8b923">${s.jackpot}</b>! 🍀</div></div>
+        ${subNote}
       </div>
       <div class="wheel-wrap">
         <div class="wheel-pointer"></div>
@@ -3280,19 +3283,28 @@ async function loadWheel() {
           <div class="wheel-hub">🌾</div>
         </div>
       </div>
-      ${btn}
+      <div id="wheelBtnBox">${btn}</div>
     </div>`;
   } catch (e) { box.innerHTML = ""; }
 }
-async function doSpinWheel() {
+function wheelButtonHtml(s) {
+  const fmtWait = (sec) => sec >= 3600 ? Math.ceil(sec / 3600) + " h" : Math.max(1, Math.ceil(sec / 60)) + " min";
+  if (s.can_spin)
+    return `<button class="btn btn-primary btn-block" data-action="spin-wheel" id="wheelBtn">🎡 Zatočit kolem${s.spins_left > 1 ? ` (${s.spins_left} zatočení)` : ""}</button>`;
+  if (s.respin_available)
+    return `<button class="btn btn-block wheel-respin" data-action="spin-wheel" data-paid="1" id="wheelBtn">🔁 Zatočit ještě jednou za ${s.respin_cost} 🌾</button>`;
+  return `<button class="btn btn-block" disabled>Další zatočení za ${fmtWait(s.next_in_seconds)}</button>`;
+}
+async function doSpinWheel(paid) {
   if (wheelBusy) return;
   const wheelEl = document.getElementById("wheelSpin");
   const btn = document.getElementById("wheelBtn");
   if (!wheelEl) return;
+  if (paid && !confirm(`Zatočit ještě jednou za ${(wheelState && wheelState.respin_cost) || 150} sedláků?`)) return;
   wheelBusy = true;
   if (btn) { btn.disabled = true; btn.textContent = "Točím… 🎡"; }
   try {
-    const r = await api("/wheel/spin", { method: "POST" });
+    const r = await api("/wheel/spin", { method: "POST", body: { paid: !!paid } });
     const n = (wheelState && wheelState.segments) ? wheelState.segments.length : 8;
     const seg = 360 / n;
     const mid = (r.index + 0.5) * seg;
@@ -3309,7 +3321,9 @@ async function doSpinWheel() {
       toast(r.message, "success");
       try { confettiBurst(); } catch (e) {}
       if (r.jackpot) wheelEl.classList.add("jackpot-win");
-      if (btn) btn.outerHTML = `<button class="btn btn-block" disabled>Další zatočení za ~${(wheelState && wheelState.cooldown_h) || 20} h</button>`;
+      if (wheelState) { wheelState.can_spin = r.spins_left > 0; wheelState.spins_left = r.spins_left; wheelState.respin_available = r.respin_available; wheelState.next_in_seconds = ((wheelState.cooldown_h || 20) * 3600); }
+      const bb = document.getElementById("wheelBtnBox");
+      if (bb && wheelState) bb.innerHTML = wheelButtonHtml(wheelState);
       refreshBonusDot();
       wheelBusy = false;
     }, 4750);
@@ -6479,7 +6493,7 @@ function handleAction(action, el) {
   switch (action) {
     case "nav": navigate(el.dataset.href); break;
     case "connect": openConnect(); break;
-    case "spin-wheel": doSpinWheel(); break;
+    case "spin-wheel": doSpinWheel(el.dataset.paid === "1"); break;
     case "mines-start": minesStart(); break;
     case "mines-reveal": minesReveal(parseInt(el.dataset.tile, 10)); break;
     case "mines-cashout": minesCashout(); break;

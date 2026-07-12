@@ -947,6 +947,10 @@ _MIGRATIONS = [
     ("crews", "motd", "TEXT"),
     ("crews", "private", "INTEGER NOT NULL DEFAULT 0"),
     ("users", "crew_left_at", "TEXT"),
+    # Kolo štěstí v2: počet zatočení v aktuálním okně (okno kotví last_wheel prvního spinu)
+    # + gate placeného re-spinu (1× per okno). Sub má 2 free spiny, free 1.
+    ("users", "wheel_spins", "INTEGER NOT NULL DEFAULT 0"),
+    ("users", "wheel_respin", "INTEGER NOT NULL DEFAULT 0"),
     # BJ split: druhá ruka (rozdělení páru). state2 NULL = seat bez splitu.
     ("bj_seats", "hand2", "TEXT NOT NULL DEFAULT '[]'"),
     ("bj_seats", "bet2", "INTEGER NOT NULL DEFAULT 0"),
