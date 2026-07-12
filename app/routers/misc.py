@@ -1712,7 +1712,6 @@ def _fair_ensure(conn, uid):
         "UPDATE users SET fair_server_seed = ?, fair_server_hash = ?, fair_client_seed = ?, fair_nonce = 0 "
         "WHERE id = ? AND fair_server_seed IS NULL",
         (ss, fairness.seed_hash(ss), fairness.new_client_seed(), uid))
-    conn.commit()
     row = conn.execute(
         "SELECT fair_server_seed, fair_server_hash, fair_client_seed, fair_nonce FROM users WHERE id = ?",
         (uid,)).fetchone()
@@ -1797,6 +1796,8 @@ def wheel_spin(data: WheelSpinIn = None, user: sqlite3.Row = Depends(require_use
 def fair_me(user: sqlite3.Row = Depends(require_user), conn: sqlite3.Connection = Depends(db_dep)):
     """Provably-fair stav: aktuální commit (hash), client seed, nonce + posledních 20 her k ověření."""
     _ss, sh, cs, nonce = _fair_ensure(conn, user["id"])
+    # Tady se seed pouze zveřejňuje; spin si naopak drží seed, gate i výhru v jednom commitu.
+    conn.commit()
     recent = [dict(r) for r in conn.execute(
         "SELECT game, server_hash, client_seed, nonce, result, created_at FROM fair_log "
         "WHERE user_id = ? ORDER BY id DESC LIMIT 20", (user["id"],))]

@@ -305,6 +305,49 @@ def test_wheel_sub_spins_and_paid_respin(client):
         conn.close()
 
 
+def test_wheel_first_two_sub_spins_use_distinct_fair_nonces(client):
+    """První paralelní sub spiny nesmí sdílet nonce ani commitnout gate zvlášť."""
+    from app.db import get_conn
+    from app.routers.misc import wheel_spin
+
+    conn = get_conn()
+    try:
+        uid = _mk(conn, points=0, is_sub=1)
+        conn.commit()
+    finally:
+        conn.close()
+
+    gate = threading.Barrier(2)
+    results, errors = [], []
+
+    def spin():
+        c = get_conn()
+        try:
+            user = _row(c, uid)
+            gate.wait()
+            results.append(wheel_spin(data=None, user=user, conn=c))
+        except Exception as exc:
+            errors.append(exc)
+        finally:
+            c.close()
+
+    threads = [threading.Thread(target=spin) for _ in range(2)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+
+    assert not errors
+    assert len(results) == 2
+    conn = get_conn()
+    try:
+        nonces = [r["nonce"] for r in conn.execute(
+            "SELECT nonce FROM fair_log WHERE user_id=? AND game='wheel' ORDER BY id", (uid,))]
+        assert nonces == [0, 1]
+    finally:
+        conn.close()
+
+
 def test_wheel_bonus_spins_from_kick_support(client):
     from app.db import get_conn
     from app import kickevents

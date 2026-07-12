@@ -49,6 +49,10 @@ def _send_command_reply(text: str) -> None:
 def _process_webhook(body: bytes, msg_id: str, ts: str, etype: str, sig: str,
                      background: BackgroundTasks) -> Response:
 
+    # Bez Kick message ID nelze událost bezpečně deduplikovat po retry/replay.
+    if not msg_id:
+        return Response(status_code=400)
+
     # 1) ověření podpisu – jen reálný Kick smí spustit přičtení bodů
     if not kickevents.verify(msg_id, ts, body, sig):
         return Response(status_code=403)
@@ -107,7 +111,9 @@ def _process_webhook(body: bytes, msg_id: str, ts: str, etype: str, sig: str,
                     key=("kick:db-locked" if locked else "kick:" + str(etype)),
                     cooldown=(900 if locked else 300))
 
-    return Response(status_code=200)
+    # Kick musí retryovat: INSERT do webhook_seen byl ve stejné transakci jako
+    # handle_event a close necommitnuté spojení rollbackne.
+    return Response(status_code=503, headers={"Retry-After": "1"})
 
 
 @router.post("/kick/webhook")
