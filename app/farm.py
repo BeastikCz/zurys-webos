@@ -24,7 +24,7 @@ FOX_RANSOM_MIN, FOX_RANSOM_MAX = 50, 200   # …sevřeno, ať to není nula ani 
 FOX_RANSOM = 200               # fallback pro pending lišky z doby fixního výkupného
 
 STARTER_COST = 500             # první zvíře vůbec (slepice) za zlomek ceny – onboarding nováčka
-FARM_DAILY_FULL = 8000         # sedláci z produkce/den v plné výši; nad strop jen FARM_SOFT_RATE
+FARM_DAILY_FULL = 20000        # sedláci z produkce/den v plné výši; nad strop jen FARM_SOFT_RATE
 FARM_SOFT_RATE = 0.25          # (XP jde ze snížené částky taky – měkký strop, ne tvrdý blok)
 
 # Zakázky: denní kontrakt z vlastněných druhů („dodej 3× vejce + 2× mléko"). Odměna sedláci BEZ XP,
