@@ -5,6 +5,32 @@
 "use strict";
 
 const API = "/api";
+let deferredInstallPrompt = null;
+
+function isStandalone() { return window.matchMedia("(display-mode: standalone)").matches || navigator.standalone === true; }
+function canShowInstall() { return !!deferredInstallPrompt || (/iP(ad|hone|od)/.test(navigator.userAgent) && !isStandalone()); }
+async function installApp() {
+  if (deferredInstallPrompt) {
+    const prompt = deferredInstallPrompt;
+    deferredInstallPrompt = null;
+    await prompt.prompt();
+    const choice = await prompt.userChoice;
+    renderHeader();
+    if (choice.outcome === "accepted") toast("Aplikace se instaluje 🌾", "success");
+    return;
+  }
+  openModal(`<div class="wg"><h2 class="wg-title">Přidat Zurys na plochu</h2><p class="wg-sub">V Safari klepni na Sdílet a zvol „Přidat na plochu“. Aplikace pak poběží přes celou obrazovku.</p><button class="btn btn-primary btn-block" data-action="close-modal">Rozumím</button></div>`, "modal-wg");
+}
+
+window.addEventListener("beforeinstallprompt", (event) => {
+  event.preventDefault();
+  deferredInstallPrompt = event;
+  renderHeader();
+});
+window.addEventListener("appinstalled", () => {
+  deferredInstallPrompt = null;
+  renderHeader();
+});
 
 const state = {
   user: null,
@@ -348,8 +374,8 @@ function renderHeader() {
     + (isStaff(u) ? `<a href="#/admin" class="nav-link ${route === "admin" ? "active" : ""}">${u.role === "admin" ? "Admin" : "Panel"}</a>` : "");
 
   const cartBtn = `<button class="icon-btn" data-action="nav" data-href="cart" title="Košík">🛒${cartCount() ? `<span class="cart-badge">${cartCount()}</span>` : ""}</button>`;
-  const msgBtn = u ? `<button class="icon-btn" data-action="nav" data-href="zpravy" title="Zprávy">✉️${u.dm_unread ? `<span class="cart-badge">${u.dm_unread}</span>` : ""}</button>` : "";
-  const notifBtn = u ? `<button class="icon-btn" data-action="open-notifs" title="Notifikace">🔔${u.notif_unread ? `<span class="cart-badge">${u.notif_unread}</span>` : ""}</button>` : "";
+  const msgBtn = u ? `<button class="icon-btn top-msg" data-action="nav" data-href="zpravy" title="Zprávy">✉️${u.dm_unread ? `<span class="cart-badge">${u.dm_unread}</span>` : ""}</button>` : "";
+  const notifBtn = u ? `<button class="icon-btn top-notifs" data-action="open-notifs" title="Notifikace">🔔${u.notif_unread ? `<span class="cart-badge">${u.notif_unread}</span>` : ""}</button>` : "";
   let right;
   if (u) {
     const streakN = claimsData ? (claimsData.streak || 0) : 0;
@@ -373,6 +399,7 @@ function renderHeader() {
   $("#mobilenav").innerHTML =
     items.map(([k, l]) => `<a href="#/${k}" class="${route === k ? "active" : ""}">${l}${navDot(k)}</a>`).join("")
     + `<a href="#/cart" class="${route === "cart" ? "active" : ""}">🛒 Košík${cartCount() ? ` (${cartCount()})` : ""}</a>`
+    + (canShowInstall() ? `<a href="#" data-action="install-app">📲 Nainstalovat aplikaci</a>` : "")
     + (u
       ? `<a href="#/zpravy" class="${route === "zpravy" ? "active" : ""}">✉️ Zprávy${u.dm_unread ? ` (${u.dm_unread})` : ""}</a><a href="#" data-action="open-notifs">🔔 Notifikace${u.notif_unread ? ` (${u.notif_unread})` : ""}</a><a href="#/profile" class="${route === "profile" ? "active" : ""}">👤 Profil</a>${isStaff(u) ? `<a href="#/admin" class="${route === "admin" ? "active" : ""}">🛠️ ${u.role === "admin" ? "Admin" : "Panel"}</a>` : ""}<a href="#" data-action="logout">🚪 Odhlásit</a>`
       : `<a href="#" data-action="connect">🟢 Připojit přes Kick</a>`);
@@ -3274,7 +3301,7 @@ async function loadWheel() {
       <div class="row-between" style="margin-bottom:10px">
         <div><div class="section-title" style="margin:0">🎡 Kolo štěstí</div>
           <div class="muted" style="font-size:12.5px;margin-top:5px">Zatoč si o sedláky — jackpot <b style="color:#e8b923">${s.jackpot}</b>! 🍀</div></div>
-        ${subNote}
+        <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:flex-end">${subNote}${s.bonus_spins ? `<span class="wheel-badge">🎁 +${s.bonus_spins} za suby</span>` : ""}</div>
       </div>
       <div class="wheel-wrap">
         <div class="wheel-pointer"></div>
@@ -6492,6 +6519,7 @@ function handleAction(action, el) {
   const id = el.dataset.id ? parseInt(el.dataset.id, 10) : null;
   switch (action) {
     case "nav": navigate(el.dataset.href); break;
+    case "install-app": installApp(); break;
     case "connect": openConnect(); break;
     case "spin-wheel": doSpinWheel(el.dataset.paid === "1"); break;
     case "mines-start": minesStart(); break;
@@ -6782,7 +6810,7 @@ document.addEventListener("click", (e) => {
 
 /* Service worker pro Web Push (notifikace do mobilu). Registruje se 1× na pozadí. */
 if ("serviceWorker" in navigator) {
-  window.addEventListener("load", () => { navigator.serviceWorker.register("/sw.js").catch(() => {}); });
+  window.addEventListener("load", () => { navigator.serviceWorker.register("/sw.js?v=2026071221").catch(() => {}); });
 }
 
 document.addEventListener("change", (e) => {

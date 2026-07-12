@@ -1668,13 +1668,14 @@ def _wheel_state(user: sqlite3.Row, now: datetime):
     """(can_spin, next_in_s, spins_left, respin_available) v aktuálním okně."""
     last = user["last_wheel"]
     allowed = WHEEL_SUB_SPINS if _daily_is_sub(user) else 1
+    bonus = (user["wheel_bonus_spins"] if "wheel_bonus_spins" in user.keys() else 0) or 0
     if not last:
-        return True, 0, allowed, False
+        return True, 0, allowed + bonus, False
     elapsed = (now - datetime.fromisoformat(last)).total_seconds()
     if elapsed >= WHEEL_COOLDOWN_H * 3600:      # nové okno
-        return True, 0, allowed, False
+        return True, 0, allowed + bonus, False
     used = (user["wheel_spins"] if "wheel_spins" in user.keys() else 1) or 1
-    left = max(0, allowed - used)
+    left = max(0, allowed - used) + bonus
     respin_ok = left == 0 and not ((user["wheel_respin"] if "wheel_respin" in user.keys() else 0) or 0)
     next_in = 0 if left else int(WHEEL_COOLDOWN_H * 3600 - elapsed)
     return left > 0, next_in, left, respin_ok
@@ -1691,6 +1692,7 @@ def wheel_status(user: sqlite3.Row = Depends(require_user)):
         "spins_left": left,
         "sub": sub,
         "sub_spins": WHEEL_SUB_SPINS,
+        "bonus_spins": (user["wheel_bonus_spins"] if "wheel_bonus_spins" in user.keys() else 0) or 0,
         "respin_available": respin_ok,
         "respin_cost": WHEEL_RESPIN_COST,
         "next_in_seconds": next_in,
@@ -1726,21 +1728,29 @@ def wheel_spin(data: WheelSpinIn = None, user: sqlite3.Row = Depends(require_use
     # (stejný princip jako atomický claim u sledování streamu).
     threshold = (now - timedelta(hours=WHEEL_COOLDOWN_H)).isoformat()
     allowed = WHEEL_SUB_SPINS if _daily_is_sub(user) else 1
-    cur = conn.execute(   # 1. spin nového okna → reset počítadel
-        "UPDATE users SET last_wheel = ?, wheel_spins = 1, wheel_respin = 0 "
-        "WHERE id = ? AND (last_wheel IS NULL OR last_wheel < ?)",
-        (now.isoformat(), user["id"], threshold),
-    )
-    if cur.rowcount == 0 and not paid:          # 2.+ free spin v okně (sub)
-        cur = conn.execute(
-            "UPDATE users SET wheel_spins = wheel_spins + 1 "
-            "WHERE id = ? AND last_wheel >= ? AND wheel_spins < ?",
-            (user["id"], threshold, allowed),
+    cur = None
+    if not paid:
+        cur = conn.execute(   # 1. spin nového okna → reset počítadel
+            "UPDATE users SET last_wheel = ?, wheel_spins = 1, wheel_respin = 0 "
+            "WHERE id = ? AND (last_wheel IS NULL OR last_wheel < ?)",
+            (now.isoformat(), user["id"], threshold),
         )
-    if cur.rowcount == 0 and paid:              # placený re-spin: gate flag → pak debit
+        if cur.rowcount == 0:                   # 2.+ free spin v okně (sub)
+            cur = conn.execute(
+                "UPDATE users SET wheel_spins = wheel_spins + 1 "
+                "WHERE id = ? AND last_wheel >= ? AND wheel_spins < ?",
+                (user["id"], threshold, allowed),
+            )
+        if cur.rowcount == 0:                   # bonus získaný za sub/resub/gift
+            cur = conn.execute(
+                "UPDATE users SET wheel_bonus_spins = wheel_bonus_spins - 1 "
+                "WHERE id = ? AND wheel_bonus_spins > 0",
+                (user["id"],),
+            )
+    if paid:                                    # placený re-spin: až po denních i bonusových spinech
         cur = conn.execute(
             "UPDATE users SET wheel_respin = 1 "
-            "WHERE id = ? AND last_wheel >= ? AND wheel_respin = 0 AND wheel_spins >= ?",
+            "WHERE id = ? AND last_wheel >= ? AND wheel_respin = 0 AND wheel_spins >= ? AND wheel_bonus_spins = 0",
             (user["id"], threshold, allowed),
         )
         if cur.rowcount and not try_debit(conn, user["id"], WHEEL_RESPIN_COST, "Kolo štěstí 🎡 – re-spin (vklad)"):

@@ -2,9 +2,12 @@
   "name": "Zurys",
   "short_name": "Zurys",
   "description": "Sbírej sedláky, utrácej v shopu, pěstuj zahrádku.",
+  "id": "/",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
+  "display_override": ["standalone"],
+  "orientation": "any",
   "background_color": "#0c0d18",
   "theme_color": "#ff9d2e",
   "icons": [

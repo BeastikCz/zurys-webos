@@ -303,3 +303,26 @@ def test_wheel_sub_spins_and_paid_respin(client):
         assert _points(conn, uid2) == r["amount"]            # nic se nestrhlo
     finally:
         conn.close()
+
+
+def test_wheel_bonus_spins_from_kick_support(client):
+    from app.db import get_conn
+    from app import kickevents
+    from app.routers.misc import wheel_spin, wheel_status
+    conn = get_conn()
+    try:
+        uid = _mk(conn, points=0)
+        name = _row(conn, uid)["kick_username"]
+        kickevents.handle_event(conn, "channel.subscription.new", {"subscriber": {"username": name}})
+        kickevents.handle_event(conn, "channel.subscription.renewal", {"subscriber": {"username": name}})
+        kickevents.handle_event(conn, "channel.subscription.gifts", {
+            "gifter": {"username": name}, "giftees": [{"username": "wheel_gift_a"}, {"username": "wheel_gift_b"}],
+        })
+        assert _row(conn, uid)["wheel_bonus_spins"] == 4
+        assert wheel_status(_row(conn, uid))["spins_left"] == 6  # 2× sub denně + 4 bonusové
+        wheel_spin(data=None, user=_row(conn, uid), conn=conn)
+        wheel_spin(data=None, user=_row(conn, uid), conn=conn)
+        wheel_spin(data=None, user=_row(conn, uid), conn=conn)
+        assert _row(conn, uid)["wheel_bonus_spins"] == 3
+    finally:
+        conn.close()

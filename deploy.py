@@ -1,10 +1,12 @@
-"""Deploy brana pro zurys.live: pre-flight -> bump cache -> flyctl deploy -> health -> CF purge.
+"""Deploy brana pro zurys.live: pre-flight -> bump cache -> sync na Contabo -> health -> CF purge.
 
+Od 12.7.2026 bezi produkce na Contabo VPS (169.58.8.1), NE na Fly. Deploy = tar
+pracovniho stromu (app/ web/ requirements.txt) pres SSH + restart systemd service.
 Zabaluje rucni kroky co se pri deployi zapominaji (maintenance gate, bump cache verze)
 a nechava ostry deploy za explicitni pojistkou.
 
   python deploy.py            # DRY-RUN: overi udrzbu + predeploy, ukaze pristi cache verzi. NIC nenasadi.
-  python deploy.py --deploy   # OSTRY: bump cache -> flyctl deploy -> health -> CF Purge Everything
+  python deploy.py --deploy   # OSTRY: bump cache -> sync na server -> health -> CF Purge Everything
   python deploy.py --selftest # jen self-test bump logiky (bez site)
 
 Exit 0 = OK. Exit 1 = neco je spatne / STOP.
@@ -13,9 +15,12 @@ Proc skript a ne /deploy slash-command: desktop app custom commandy nenacita.
 Cache bump zustava jako necommitnuta zmena web/index.html -> commitni ji sam.
 """
 import json
+import os
 import re
 import subprocess
 import sys
+import tarfile
+import tempfile
 import time
 import urllib.error
 import urllib.request
@@ -27,6 +32,10 @@ except Exception:
     pass
 
 HEALTHZ = "https://zurys.live/api/monitor/healthz"
+SERVER = "root@169.58.8.1"                                     # Contabo VPS
+SSH_KEY = str(Path.home() / ".ssh" / "hetzner_zurys")
+SSH = ["ssh", "-i", SSH_KEY, "-o", "BatchMode=yes", SERVER]
+DEPLOY_DIRS = ["app", "web", "requirements.txt"]               # co se syncuje na server
 INDEX = Path(__file__).parent / "web" / "index.html"
 CF_TOKEN_FILE = Path(__file__).parent / "cf_purge_token.txt"   # gitignored; viz purge_cloudflare()
 CF_ZONE = "zurys.live"
@@ -101,8 +110,34 @@ def wait_healthy(tries=6, gap=5):
             pass
         if i < tries - 1:
             time.sleep(gap)
-    print("NOK  produkce po deployi neodpovida zdrave - zkontroluj Fly monitoring")
+    print("NOK  produkce po deployi neodpovida zdrave - zkontroluj: ssh " + SERVER + " 'journalctl -u webos -n 50'")
     return False
+
+
+def deploy_contabo():
+    """Zabali app/ web/ requirements.txt do tar.gz, posle na server, rozbali
+    do /opt/webos/app a restartne webos.service. Stary kod na serveru prepise,
+    smazane soubory NEmaze (neva - server je jinak disposable, viz contabo_setup.sh)."""
+    root = Path(__file__).parent
+    fd, tmp = tempfile.mkstemp(suffix=".tar.gz")
+    os.close(fd)
+    try:
+        with tarfile.open(tmp, "w:gz") as tf:
+            for name in DEPLOY_DIRS:
+                tf.add(root / name, arcname=name,
+                       filter=lambda ti: None if "__pycache__" in ti.name else ti)
+        if subprocess.run(["scp", "-i", SSH_KEY, tmp, SERVER + ":/tmp/deploy.tar.gz"]).returncode != 0:
+            print("NOK  scp selhal")
+            return False
+        cmd = ("tar xzf /tmp/deploy.tar.gz -C /opt/webos/app && rm /tmp/deploy.tar.gz"
+               " && chown -R webos:webos /opt/webos/app && systemctl restart webos")
+        if subprocess.run(SSH + [cmd]).returncode != 0:
+            print("NOK  rozbaleni/restart na serveru selhal")
+            return False
+        print("OK   kod nasazen + webos.service restartovan")
+        return True
+    finally:
+        os.unlink(tmp)
 
 
 def _cf(path, token, payload=None):
@@ -176,10 +211,15 @@ def main():
 
     print("\n[3/4] Bump cache verze %s -> %s..." % (old, new))
     INDEX.write_text(bump_version(html)[0], encoding="utf-8")
+    # sw.js drzi APP_SHELL urls + jmeno cache, app.js registraci sw.js -> stejny bump,
+    # jinak by offline shell po deployi cachoval stare soubory.
+    for f in (INDEX.parent / "sw.js", INDEX.parent / "app.js"):
+        t = f.read_text(encoding="utf-8")
+        f.write_text(t.replace("?v=" + old, "?v=" + new)
+                      .replace("zurys-shell-" + old, "zurys-shell-" + new), encoding="utf-8")
 
-    print("\n[4/4] flyctl deploy...")
-    if subprocess.run(["flyctl", "deploy"]).returncode != 0:
-        print("NOK  flyctl deploy selhal")
+    print("\n[4/4] Sync na Contabo + restart...")
+    if not deploy_contabo():
         return 1
 
     print("\nOveruji health po deployi...")

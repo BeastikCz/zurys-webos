@@ -3,143 +3,83 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>ZURYS — SUB cíl overlay (Zlatá sklizeň)</title>
+<title>ZURYS — SUB cíl overlay</title>
 <style>
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  html, body { background: transparent; overflow: hidden; font-family: "Rajdhani", "Segoe UI", system-ui, Arial, sans-serif; }
-  :root {
-    --g: #9bee4f; --g2: #7fe03a; --gd: #4fae22;
-    --gold: #f4b41a; --gold2: #ffd24a; --gold-d: #b9760c;
-    --pp: #9147ff; --ink: #eef3e6; --dim: #8c9a82;
-  }
-  #wrap { padding: 26px; display: inline-block; }
-  #wrap.hidden { display: none; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  :root { --green:#9bee4f; --green-dark:#4fae22; --gold:#f4b41a; --gold-light:#ffe48a; --purple:#9147ff; --ink:#eef3e6; --dim:#a6aea0; }
+  html, body { overflow:hidden; background:transparent; font-family:"Rajdhani", "Segoe UI", system-ui, sans-serif; }
+  #wrap { display:inline-block; padding:28px 48px; }
+  #wrap.hidden { display:none; }
 
   .panel {
-    position: relative; width: 760px; padding: 26px 30px 20px;
-    background: linear-gradient(160deg, #0c1109 0%, #0a0d07 55%, #0c0f08 100%);
-    clip-path: polygon(0 16px, 22px 0, calc(100% - 70px) 0, 100% 34px, 100% 100%, 70px 100%, 0 calc(100% - 22px));
-    box-shadow: inset 0 0 0 1.5px rgba(155,238,79,.28), inset 0 0 70px rgba(0,0,0,.6), 0 0 40px rgba(127,224,58,.10);
+    position:relative; width:min(1510px, calc(100vw - 96px)); min-width:900px; height:178px;
+    display:grid; grid-template-columns:176px 370px minmax(300px, 1fr) 340px; align-items:center; gap:26px;
+    padding:22px 34px 22px 26px; overflow:hidden; color:var(--ink); background:rgba(8,12,8,.94);
+    clip-path:polygon(0 44px,44px 0,calc(100% - 34px) 0,100% 34px,100% calc(100% - 14px),calc(100% - 30px) 100%,0 100%);
+    box-shadow:inset 0 1px 0 rgba(255,210,74,.62), inset 0 -1px 0 rgba(255,255,255,.10), 0 16px 45px rgba(0,0,0,.48);
   }
-  .panel.done { box-shadow: inset 0 0 0 1.5px rgba(255,210,74,.55), inset 0 0 70px rgba(0,0,0,.6), 0 0 50px rgba(255,210,74,.30); }
+  .panel::before { content:""; position:absolute; inset:0; pointer-events:none; border:1px solid rgba(244,180,26,.38); clip-path:inherit; }
+  .panel.done { box-shadow:inset 0 1px 0 rgba(255,228,138,.95), inset 0 -1px 0 rgba(255,210,74,.48), 0 0 45px rgba(244,180,26,.28); }
+  .accent { position:absolute; bottom:16px; width:22px; height:5px; background:var(--purple); transform:skewX(-22deg); box-shadow:0 0 8px rgba(145,71,255,.65); }
+  .accent.left { left:29px; } .accent.right { right:30px; }
 
-  .corner { position: absolute; width: 26px; height: 26px; pointer-events: none; }
-  .corner.tl { top: 8px; left: 8px; border-top: 2px solid var(--g); border-left: 2px solid var(--g); }
-  .corner.bl { bottom: 8px; left: 8px; border-bottom: 2px solid var(--g); border-left: 2px solid var(--g); }
-  .pp-tick { position: absolute; pointer-events: none; }
-  .pp-tick.tr { top: 13px; right: 16px; }
-  .pp-tick.br { bottom: 13px; right: 16px; }
-  .pp-tick span { display: inline-block; width: 7px; height: 7px; margin-left: 3px; transform: skewX(-18deg);
-    background: var(--pp); box-shadow: 0 0 7px rgba(145,71,255,.7); }
-  .dots { position: absolute; bottom: 14px; left: 30px; color: var(--pp); letter-spacing: 3px; font-size: 13px; opacity: .8; }
+  .brand { align-self:stretch; display:grid; place-items:center; border-right:1px solid rgba(244,180,26,.2); }
+  .emblem { width:130px; height:130px; filter:drop-shadow(0 0 13px rgba(244,180,26,.22)); }
+  .goal { min-width:0; }
+  .eyebrow { color:var(--green); font-size:18px; font-weight:800; letter-spacing:5px; white-space:nowrap; }
+  .count { margin-top:8px; line-height:1; white-space:nowrap; }
+  .count .now { color:var(--green); font-size:76px; font-weight:800; font-variant-numeric:tabular-nums; text-shadow:0 0 24px rgba(127,224,58,.42); }
+  .count .sl { color:#68715f; font-size:52px; font-weight:600; margin:0 5px; }
+  .count .tgt { color:var(--ink); font-size:58px; font-weight:800; font-variant-numeric:tabular-nums; }
+  .count .unit { color:#b7c0ae; font-size:23px; font-weight:800; letter-spacing:3px; margin-left:12px; }
 
-  .head { display: flex; align-items: center; gap: 9px; margin-bottom: 14px; }
-  .head .cross { color: var(--g); font-size: 15px; }
-  .head .url { color: var(--g); font-size: 19px; font-weight: 700; letter-spacing: .5px; }
-  .head .rule { flex: 1; height: 2px; max-width: 120px; margin-left: 4px;
-    background: linear-gradient(90deg, rgba(155,238,79,.5), transparent); }
-  .head .rule2 { width: 24px; height: 2px; background: repeating-linear-gradient(90deg, var(--dim) 0 5px, transparent 5px 9px); }
+  .progress { min-width:0; align-self:center; padding-top:27px; }
+  .barwrap { position:relative; }
+  .bar { position:relative; height:37px; overflow:hidden; border-radius:20px; background:#0a0e07; box-shadow:inset 0 0 0 1.5px rgba(127,224,58,.28), inset 0 4px 11px rgba(0,0,0,.68); }
+  .bar > i { position:absolute; inset:0 auto 0 0; width:46%; border-radius:inherit; background:linear-gradient(180deg,#c6ff72,var(--green) 56%,var(--green-dark)); box-shadow:0 0 20px rgba(127,224,58,.58), inset 0 2px 0 rgba(255,255,255,.36); transition:width 1s cubic-bezier(.2,.8,.2,1); }
+  .stripe { position:absolute; inset:0; background:repeating-linear-gradient(115deg,transparent 0 14px,rgba(244,180,26,.1) 14px 16px); }
+  .bar-target { display:block; margin-top:13px; color:var(--gold); font-size:22px; font-weight:800; font-variant-numeric:tabular-nums; text-align:center; }
 
-  .body { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; }
-  .left { flex: 1; min-width: 0; }
-  .eyebrow { color: var(--g); font-size: 14px; font-weight: 700; letter-spacing: 4px; }
-  .title { font-size: 52px; font-weight: 800; line-height: .95; letter-spacing: 1px; text-transform: uppercase;
-    margin-top: 2px; color: var(--ink); text-shadow: 0 2px 14px rgba(0,0,0,.6); }
-  .title .gold { color: var(--gold2);
-    background: linear-gradient(180deg, #ffe48a, var(--gold) 60%, var(--gold-d));
-    -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
-    filter: drop-shadow(0 0 16px rgba(244,180,26,.4)); }
-  .sub { display: flex; align-items: center; gap: 7px; margin-top: 10px; color: var(--dim); font-size: 15px; font-weight: 600; }
-  .sub .t { color: var(--g); font-size: 12px; }
-  .sub b { color: #c7d2bd; font-weight: 700; }
+  .reward { min-width:0; padding-left:16px; border-left:1px solid rgba(244,180,26,.22); color:var(--dim); font-size:20px; line-height:1.25; }
+  .reward::before { content:"◇"; color:var(--green); font-size:26px; margin-right:9px; vertical-align:-2px; }
+  .reward b { display:block; margin:6px 0 0 34px; color:var(--green); font-size:20px; font-weight:800; white-space:nowrap; }
 
-  .count { text-align: right; padding-top: 6px; white-space: nowrap; }
-  .count .now { font-size: 60px; font-weight: 800; color: var(--g); line-height: 1;
-    font-variant-numeric: tabular-nums; text-shadow: 0 0 24px rgba(127,224,58,.5); }
-  .count .sl { font-size: 40px; font-weight: 700; color: #4d5647; transform: skewX(-10deg); margin: 0 2px; display: inline-block; }
-  .count .tgt { font-size: 40px; font-weight: 800; color: var(--ink); font-variant-numeric: tabular-nums; }
-  .count .unit { font-size: 16px; font-weight: 700; letter-spacing: 2px; color: var(--dim); margin-left: 6px; }
-
-  .emblem { flex: none; width: 118px; height: 118px; }
-
-  .barwrap { position: relative; margin: 18px 0 4px; }
-  .bar { position: relative; height: 30px; border-radius: 16px; overflow: hidden;
-    background: linear-gradient(180deg, #11160d, #0a0e07); box-shadow: inset 0 0 0 1.5px rgba(127,224,58,.30), inset 0 4px 10px rgba(0,0,0,.5); }
-  .bar > i { position: absolute; left: 0; top: 0; bottom: 0; width: 46%; border-radius: 16px;
-    background: linear-gradient(180deg, #c2ff6e, var(--g2) 55%, var(--gd));
-    box-shadow: 0 0 18px rgba(127,224,58,.6), inset 0 2px 0 rgba(255,255,255,.35);
-    transition: width 1s cubic-bezier(.2,.8,.2,1); }
-  .bar .stripe { position: absolute; inset: 0; background: repeating-linear-gradient(115deg, transparent 0 12px, rgba(244,180,26,.10) 12px 14px); }
-  .barwrap .glow { position: absolute; left: 4px; right: 4px; bottom: -3px; height: 4px; border-radius: 4px;
-    background: linear-gradient(90deg, transparent, rgba(244,180,26,.7), transparent); filter: blur(1px); }
-
-  .foot { display: flex; align-items: center; gap: 16px; margin-top: 16px; padding-left: 70px; }
-  .foot .it { display: flex; align-items: center; gap: 7px; color: var(--g); font-size: 14px; font-weight: 700; letter-spacing: 1px; }
-  .foot .it .ic { font-size: 15px; }
-  .foot .it .lbl { color: #cdd7c2; }
-  .foot .sep { width: 1px; height: 16px; background: rgba(155,238,79,.3); }
-  .foot .dash { width: 22px; height: 2px; background: repeating-linear-gradient(90deg, var(--dim) 0 4px, transparent 4px 8px); }
+  @media (max-width:1000px) {
+    #wrap { padding:20px; }
+    .panel { width:960px; grid-template-columns:128px 280px 1fr 230px; gap:18px; padding-right:25px; }
+    .brand { border-right:0; } .emblem { width:110px; height:110px; }
+    .eyebrow { font-size:14px; letter-spacing:3px; } .count .now { font-size:59px; } .count .sl { font-size:43px; } .count .tgt { font-size:48px; } .count .unit { font-size:16px; margin-left:7px; }
+    .reward { font-size:15px; padding-left:12px; } .reward b { margin-left:31px; font-size:17px; }
+  }
 </style>
 </head>
 <body>
 <div id="wrap" class="hidden">
   <div class="panel" id="panel">
-    <span class="corner tl"></span><span class="corner bl"></span>
-    <span class="pp-tick tr"><span></span></span>
-    <span class="pp-tick br"><span></span><span></span></span>
-    <span class="dots">• • •</span>
-
-    <div class="head">
-      <span class="cross">◎</span><span class="url">zurys.live</span>
-      <span class="rule"></span><span class="rule2"></span>
-    </div>
-
-    <div class="body">
-      <div class="left">
-        <div class="eyebrow" id="eyebrow">SUB CÍL</div>
-        <div class="title"><span class="gold">ZLATÁ</span> SKLIZEŇ</div>
-        <div class="sub"><span class="t">◈</span> <span id="subtext">Po dosažení: <b>komunitní event + odměny pro chat</b></span></div>
-      </div>
-      <div class="count">
-        <span class="now" id="num">0</span><span class="sl">/</span><span class="tgt" id="tgt">0</span><span class="unit">SUBŮ</span>
-      </div>
+    <span class="accent left"></span><span class="accent right"></span>
+    <div class="brand">
       <svg class="emblem" viewBox="0 0 100 100" aria-hidden="true">
         <polygon points="50,6 88,28 88,72 50,94 12,72 12,28" fill="none" stroke="#3a2e0a" stroke-width="6"/>
-        <polygon points="50,6 88,28 88,72 50,94 12,72 12,28" fill="none" stroke="url(#gg)" stroke-width="2.5"/>
-        <defs><linearGradient id="gg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffe48a"/><stop offset="1" stop-color="#b9760c"/></linearGradient></defs>
-        <g stroke="url(#gg)" stroke-width="4.5" stroke-linecap="round" fill="none">
-          <path d="M50 78 V40"/>
-          <path d="M50 44 L38 34 M50 44 L62 34"/>
-          <path d="M50 52 L37 42 M50 52 L63 42"/>
-          <path d="M50 60 L38 51 M50 60 L62 51"/>
-          <path d="M50 40 L43 31 M50 40 L57 31"/>
-        </g>
+        <polygon points="50,6 88,28 88,72 50,94 12,72 12,28" fill="none" stroke="url(#crestGold)" stroke-width="2.5"/>
+        <defs><linearGradient id="crestGold" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffe48a"/><stop offset="1" stop-color="#b9760c"/></linearGradient></defs>
+        <g stroke="url(#crestGold)" stroke-width="4.5" stroke-linecap="round" fill="none"><path d="M50 78 V40"/><path d="M50 44 L38 34 M50 44 L62 34"/><path d="M50 52 L37 42 M50 52 L63 42"/><path d="M50 60 L38 51 M50 60 L62 51"/><path d="M50 40 L43 31 M50 40 L57 31"/></g>
       </svg>
     </div>
-
-    <div class="barwrap">
-      <div class="bar"><i id="bar"></i><span class="stripe"></span></div>
-      <span class="glow"></span>
+    <div class="goal">
+      <div class="eyebrow" id="eyebrow">SUB CÍL · TIER 1</div>
+      <div class="count"><span class="now" id="num">0</span><span class="sl">/</span><span class="tgt" id="tgt">0</span><span class="unit">SUBŮ</span></div>
     </div>
-
-    <div class="foot">
-      <span class="it"><span class="ic">◎</span><span class="lbl">FARMI</span></span><span class="dash"></span>
-      <span class="sep"></span>
-      <span class="it"><span class="ic">🎁</span><span class="lbl">ODMĚNY</span></span><span class="dash"></span>
-      <span class="sep"></span>
-      <span class="it"><span class="ic">👥</span><span class="lbl">KOMUNITA</span></span><span class="dash"></span>
-    </div>
+    <div class="progress"><div class="barwrap"><div class="bar"><i id="bar"></i><span class="stripe"></span></div><span class="bar-target" id="barTarget">0</span></div></div>
+    <div class="reward"><span>Po dosažení:</span><span id="subtext"><b>komunitní event</b></span></div>
   </div>
 </div>
 <script>
-  // Náhled bez API: /overlay/subgoal.html?demo  (volitelně ?demo=23,50,2000,2 = progress,target,reward,tier)
   function demoData() {
     var p = new URLSearchParams(location.search);
     if (!p.has("demo")) return null;
     var v = (p.get("demo") || "").split(",").map(function (x) { return parseInt(x, 10); });
     var prog = v[0] || 23, tgt = v[1] || 50, rew = (v[2] === 0 ? 0 : v[2] || 2000), tier = v[3] || 2;
-    return { enabled: true, progress: prog, target: tgt, reward: rew, tier: tier, tier_max: 10,
-             maxed: false, done: false, pct: Math.min(100, Math.round(prog * 100 / tgt)) };
+    return { enabled:true, progress:prog, target:tgt, reward:rew, tier:tier, tier_max:10, maxed:false, done:false, pct:Math.min(100, Math.round(prog * 100 / tgt)) };
   }
   var last = -1;
   function paint(g) {
@@ -148,24 +88,18 @@
     wrap.classList.remove("hidden");
     document.getElementById("num").textContent = g.progress;
     document.getElementById("tgt").textContent = g.target;
+    document.getElementById("barTarget").textContent = g.target;
     document.getElementById("bar").style.width = Math.max(2, g.pct || 0) + "%";
     document.getElementById("panel").classList.toggle("done", !!g.done);
-    var tierTxt = g.maxed ? "MAX TIER 🏆" : (g.tier != null ? "SUB CÍL · TIER " + ((g.tier || 0) + 1) : "SUB CÍL");
-    document.getElementById("eyebrow").textContent = tierTxt;
-    if (g.reward != null && g.reward > 0) {
-      document.getElementById("subtext").innerHTML = "Po dosažení: <b>+" + g.reward.toLocaleString("cs-CZ") + " sedláků</b> gifterům";
-    }
-    if (last >= 0 && g.progress > last) {
-      var po = document.getElementById("panel");
-      po.style.transform = "scale(1.012)"; setTimeout(function () { po.style.transform = ""; }, 240);
-    }
+    document.getElementById("eyebrow").textContent = g.maxed ? "MAX TIER" : (g.tier != null ? "SUB CÍL · TIER " + ((g.tier || 0) + 1) : "SUB CÍL");
+    if (g.reward != null && g.reward > 0) document.getElementById("subtext").innerHTML = "<b>+" + g.reward.toLocaleString("cs-CZ") + " sedláků gifterům</b>";
+    if (last >= 0 && g.progress > last) { var panel = document.getElementById("panel"); panel.style.transform = "scale(1.012)"; setTimeout(function () { panel.style.transform = ""; }, 240); }
     last = g.progress;
   }
   function poll() {
-    var d = demoData();
-    if (d) { paint(d); return; }
-    fetch("/api/sub-goal", { cache: "no-store" })
-      .then(function (r) { return r.json(); }).then(paint).catch(function () {});
+    var demo = demoData();
+    if (demo) { paint(demo); return; }
+    fetch("/api/sub-goal", { cache:"no-store" }).then(function (r) { return r.json(); }).then(paint).catch(function () {});
   }
   poll();
   setInterval(poll, 4000);

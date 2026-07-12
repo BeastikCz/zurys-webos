@@ -1052,6 +1052,9 @@ footer.site-footer { border-top: 1px solid var(--border); padding: 22px 0; color
 
 /* --- Telefon: hutnější layout, topbar bez přetékání --- */
 @media (max-width: 600px) {
+  :root { --header-h: calc(64px + env(safe-area-inset-top)); }
+  .topbar { padding-top: env(safe-area-inset-top); }
+  .site-footer { padding-bottom: max(0px, env(safe-area-inset-bottom)); }
   .container { padding: 0 14px; }
   .page-head { margin: 20px 0 16px; } .page-head h1 { font-size: 23px; }
   .da-head { margin: 20px 0 14px; } .da-head h1 { font-size: 23px; }
@@ -1067,9 +1070,11 @@ footer.site-footer { border-top: 1px solid var(--border); padding: 22px 0; color
   .logout-top { display: none; }                 /* Odhlásit je v hamburger menu */
   .lvl-pill { display: none !important; }         /* level je na profilu; base .lvl-pill je v CSS níž (v7), proto !important */
   .user-chip { display: none; }                   /* avatar/profil je v hamburger menu (👤 Profil) → v topbaru zbytečný */
+  .top-msg, .top-notifs { display: none; }        /* obě položky jsou v menu; lišta se tak vejde i na 390 px */
   .kick-long { display: none; } .kick-short { display: inline; }
   .pts-pill { padding: 6px 11px; font-size: 13px; }
-  .icon-btn { width: 38px; height: 38px; }
+  .icon-btn { width: 44px; height: 44px; }
+  .btn, .mobile-nav a { min-height: 44px; }
 
   /* filtry – ať „Jen subs" neplave daleko vpravo */
   .da-filters { gap: 8px; } .da-filters .spacer { display: none; }
@@ -1103,7 +1108,7 @@ footer.site-footer { border-top: 1px solid var(--border); padding: 22px 0; color
   .logo .brand { display: none; }
   .container { padding: 0 12px; }
   .topbar-inner { gap: 6px; } .top-right { gap: 5px; }
-  .icon-btn { width: 33px; height: 33px; }        /* malé telefony: zhustit, ať se topbar vejde i na 320 px */
+  .icon-btn { width: 40px; height: 40px; }        /* malé telefony: zhustit, ať se topbar vejde i na 320 px */
 }
 
 /* ============================================================

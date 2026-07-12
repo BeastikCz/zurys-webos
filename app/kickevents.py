@@ -134,6 +134,14 @@ def _award_kick_user(conn, kick_username, points, reason, set_sub=None, sub_expi
     return uid
 
 
+def _grant_wheel_spins(conn, user_id, count, source):
+    """Přidá odměnu za podporu; webhook dedup zaručuje, že stejný event nepřipíše spin dvakrát."""
+    if not user_id or count <= 0:
+        return
+    conn.execute("UPDATE users SET wheel_bonus_spins = wheel_bonus_spins + ? WHERE id = ?", (count, user_id))
+    notify(conn, user_id, "🎡", "Bonusové zatočení", f"Za {source} máš +{count} zatočení kola štěstí.", "#/bonusy")
+
+
 def _norm_iso(ts):
     """Kickovo expires_at → ISO UTC (kompatibilní s now_iso pro spolehlivé string-porovnání)."""
     if not ts:
@@ -187,7 +195,8 @@ def handle_event(conn, event_type: str, payload: dict) -> dict:
         pts = (eco["eco_sub_pts"] if is_new else eco["eco_resub_pts"]) * mult
         exp = payload.get("expires_at")
         label = ("Kick sub 🟣" if is_new else "Kick resub 🔁") + (" (happy 2×)" if mult > 1 else "")
-        _award_kick_user(conn, uname, pts, label, set_sub=True, sub_expires_at=exp, log_event=True, crew_bonus=True)
+        uid = _award_kick_user(conn, uname, pts, label, set_sub=True, sub_expires_at=exp, log_event=True, crew_bonus=True)
+        _grant_wheel_spins(conn, uid, 1, "sub" if is_new else "resub")
         subgoal.tick(conn, 1)                    # komunitní sub cíl: +1
         return {"ok": True, "type": event_type, "user": uname, "pts": pts, "mult": mult}
 
@@ -218,6 +227,7 @@ def handle_event(conn, event_type: str, payload: dict) -> dict:
             subgoal.record_gifter(conn, gifter_uid, n, in_hh=(mult > 1))
             from . import farm
             farm.grant_turbo_tokens(conn, gifter_uid, n)
+            _grant_wheel_spins(conn, gifter_uid, n, f"{n}× gifted sub")
         gexp = payload.get("expires_at")
         for g in giftees:                                        # příjemci se stávají suby
             gu = (g or {}).get("username")
