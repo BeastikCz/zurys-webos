@@ -187,8 +187,15 @@ def test_stream_end_resets_subgoal(client, monkeypatch):
         subgoal.tick(conn, 4)
         conn.commit()
         monkeypatch.setattr("app.live.is_live", lambda c: False)   # stream skončil
-        live_events._check(conn)                              # přechod live→offline → reset
-        assert subgoal.status(conn)["progress"] == 0, "konec streamu měl vynulovat lištu"
+        live_events._check(conn)                              # přechod live→offline → reset ODLOŽEN
+        assert subgoal.status(conn)["progress"] == 4, "hned po konci streamu progres drží"
+        # posuň konec streamu do minulosti za RESET_DELAY_MIN → další tick daemonu resetne
+        from datetime import datetime, timezone, timedelta
+        old = (datetime.now(timezone.utc) - timedelta(minutes=live_events.RESET_DELAY_MIN + 1)).isoformat()
+        set_setting(conn, "live_went_offline_at", old)
+        conn.commit()
+        live_events._check(conn)                              # offline > 2 h → odložený reset
+        assert subgoal.status(conn)["progress"] == 0, "2 h po konci streamu se lišta nuluje"
         assert conn.execute("SELECT COUNT(*) c FROM subgoal_gifters").fetchone()["c"] == 0
     finally:
         conn.close()

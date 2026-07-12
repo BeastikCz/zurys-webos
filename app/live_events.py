@@ -140,7 +140,27 @@ def _reset_cgoal_on_stream_end(conn) -> None:
         traceback.print_exc()
 
 
-RESET_GRACE_MIN = 60     # reset cílů jen když byl stream offline DÉLE — pád+restart uvnitř večera nemaže
+RESET_DELAY_MIN = 120    # cíle se nulují až TAKHLE dlouho po konci streamu (návrat dřív = progres drží)
+RESET_GRACE_MIN = RESET_DELAY_MIN  # start-reset pojistka drží stejné okno jako odložený reset
+
+
+def _deferred_goal_reset(conn) -> None:
+    """Odložený reset cílů: RESET_DELAY_MIN po konci streamu (ne hned). Když se stream vrátí
+    dřív, reset se nekoná a progres jede dál. Idempotence přes goals_reset_done_for = timestamp
+    konce, pro který už reset proběhl. Volá se z _check jen když je offline."""
+    off_at = get_setting(conn, "live_went_offline_at", "") or ""
+    if not off_at or (get_setting(conn, "goals_reset_done_for", "") or "") == off_at:
+        return
+    try:
+        off_min = (datetime.now(timezone.utc) - datetime.fromisoformat(off_at)).total_seconds() / 60
+    except (ValueError, TypeError):
+        off_min = RESET_DELAY_MIN                 # rozbitý timestamp → radši resetni
+    if off_min < RESET_DELAY_MIN:
+        return
+    _reset_subgoal_on_stream_end(conn)
+    _reset_cgoal_on_stream_end(conn)
+    set_setting(conn, "goals_reset_done_for", off_at)
+    conn.commit()
 
 
 def _reset_goals_on_stream_start(conn) -> None:
@@ -196,9 +216,10 @@ def _check(conn) -> None:
         # přechod LIVE → offline (konec streamu) — zapamatuj KDY (grace okno pro reset na startu)
         set_setting(conn, "live_was_live", "0")
         set_setting(conn, "live_went_offline_at", datetime.now(timezone.utc).isoformat())
-        _reset_subgoal_on_stream_end(conn)
-        _reset_cgoal_on_stream_end(conn)
-        conn.commit()
+        conn.commit()                             # reset cílů až za RESET_DELAY_MIN (_deferred_goal_reset)
+    elif not is_live and not was:
+        # trvale offline → zkontroluj odložený reset cílů (2 h po konci streamu)
+        _deferred_goal_reset(conn)
 
 
 def _loop() -> None:
