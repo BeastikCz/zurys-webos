@@ -17,6 +17,7 @@ Cache bump zustava jako necommitnuta zmena web/index.html -> commitni ji sam.
 import json
 import os
 import re
+import shlex
 import subprocess
 import sys
 import tarfile
@@ -36,6 +37,9 @@ SERVER = "root@169.58.8.1"                                     # Contabo VPS
 SSH_KEY = str(Path.home() / ".ssh" / "hetzner_zurys")
 SSH = ["ssh", "-i", SSH_KEY, "-o", "BatchMode=yes", SERVER]
 DEPLOY_DIRS = ["app", "web", "requirements.txt"]               # co se syncuje na server
+RELEASES_DIR = "/opt/webos/releases"
+APP_LINK = "/opt/webos/app"
+RELEASE_KEEP = 3
 INDEX = Path(__file__).parent / "web" / "index.html"
 CF_TOKEN_FILE = Path(__file__).parent / "cf_purge_token.txt"   # gitignored; viz purge_cloudflare()
 CF_ZONE = "zurys.live"
@@ -114,27 +118,75 @@ def wait_healthy(tries=6, gap=5):
     return False
 
 
+def _release_id():
+    return "webos-" + str(time.time_ns())
+
+
+def _remote_release_command(release_id):
+    """Server-side release: build before symlink switch, then rollback on failed health."""
+    archive = "/tmp/%s.tar.gz" % release_id
+    release = "%s/%s" % (RELEASES_DIR, release_id)
+    return f'''set -euo pipefail
+releases="{RELEASES_DIR}"
+app="{APP_LINK}"
+release="{release}"
+archive="{archive}"
+next="$app.next"
+
+mkdir -p "$releases"
+# One-time migration from the old real directory preserves the running release.
+if [ -d "$app" ] && [ ! -L "$app" ]; then
+    legacy="$releases/legacy-{release_id}"
+    mv "$app" "$legacy"
+    ln -s "$legacy" "$app"
+fi
+old="$(readlink -f "$app")"
+test -d "$old"
+
+mkdir "$release"
+tar xzf "$archive" -C "$release"
+rm -f "$archive"
+chown -R webos:webos "$release"
+runuser -u webos -- /opt/webos/venv/bin/pip install -q -r "$release/requirements.txt"
+
+switch_release() {{
+    rm -f "$next"
+    ln -s "$1" "$next"
+    mv -Tf "$next" "$app"
+}}
+
+switch_release "$release"
+if ! systemctl restart webos || ! curl -fsS --max-time 10 http://127.0.0.1:8080/api/monitor/healthz | grep -q '"db":"ok"'; then
+    switch_release "$old"
+    systemctl restart webos || true
+    exit 1
+fi
+
+find "$releases" -mindepth 1 -maxdepth 1 -type d -printf '%T@ %p\\n' | sort -rn | awk 'NR > {RELEASE_KEEP} {{print $2}}' | xargs -r rm -rf
+'''
+
+
 def deploy_contabo():
-    """Zabali app/ web/ requirements.txt do tar.gz, posle na server, rozbali
-    do /opt/webos/app a restartne webos.service. Stary kod na serveru prepise,
-    smazane soubory NEmaze (neva - server je jinak disposable, viz contabo_setup.sh)."""
+    """Build a clean release, atomically switch /opt/webos/app, then verify locally."""
     root = Path(__file__).parent
     fd, tmp = tempfile.mkstemp(suffix=".tar.gz")
     os.close(fd)
+    release_id = _release_id()
+    remote_tar = "/tmp/%s.tar.gz" % release_id
     try:
         with tarfile.open(tmp, "w:gz") as tf:
             for name in DEPLOY_DIRS:
                 tf.add(root / name, arcname=name,
                        filter=lambda ti: None if "__pycache__" in ti.name else ti)
-        if subprocess.run(["scp", "-i", SSH_KEY, tmp, SERVER + ":/tmp/deploy.tar.gz"]).returncode != 0:
+        if subprocess.run(["scp", "-i", SSH_KEY, "-o", "BatchMode=yes", tmp,
+                           SERVER + ":" + remote_tar]).returncode != 0:
             print("NOK  scp selhal")
             return False
-        cmd = ("tar xzf /tmp/deploy.tar.gz -C /opt/webos/app && rm /tmp/deploy.tar.gz"
-               " && chown -R webos:webos /opt/webos/app && systemctl restart webos")
-        if subprocess.run(SSH + [cmd]).returncode != 0:
-            print("NOK  rozbaleni/restart na serveru selhal")
+        cmd = _remote_release_command(release_id)
+        if subprocess.run(SSH + ["bash -lc " + shlex.quote(cmd)]).returncode != 0:
+            print("NOK  release/restart/health na serveru selhal; stary release zustal aktivni")
             return False
-        print("OK   kod nasazen + webos.service restartovan")
+        print("OK   release nasazen + webos.service restartovan")
         return True
     finally:
         os.unlink(tmp)

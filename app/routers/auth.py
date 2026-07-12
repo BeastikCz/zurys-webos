@@ -18,7 +18,7 @@ from ..config import (SESSION_COOKIE, SESSION_DAYS, ROLE_USER, ROLE_ADMIN,
                       ADMIN_KICK_USERNAMES, KICK_CLIENT_ID, KICK_CLIENT_SECRET,
                       KICK_REDIRECT_URI, KICK_AUTH_URL, KICK_TOKEN_URL,
                       KICK_USER_URL, KICK_SCOPE, KICK_BOT_SCOPE,
-                      KICK_BROADCASTER_CHANNEL)
+                      KICK_BROADCASTER_CHANNEL, is_production)
 from ..db import now_iso, get_setting
 from ..deps import (db_dep, get_current_user, require_admin, require_user, can_access,
                     to_public, client_ip, record_login, user_rank)
@@ -29,7 +29,7 @@ from .. import kickbot
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
-IS_PRODUCTION = bool(os.environ.get("FLY_APP_NAME"))
+IS_PRODUCTION = is_production()
 # Na produkci musí být OAuth creds kompletní – jinak by chybějící secret otevřel demo login.
 if IS_PRODUCTION and not (KICK_CLIENT_ID and KICK_CLIENT_SECRET):
     raise RuntimeError(
@@ -42,7 +42,7 @@ OAUTH_ENABLED = bool(KICK_CLIENT_ID and KICK_CLIENT_SECRET and IS_PRODUCTION)
 # ---------------- Session ----------------
 def _secure_cookie(request: Request) -> bool:
     """Secure cookie zapínej jen na produkci/HTTPS; lokální HTTP vývoj musí dál fungovat."""
-    return bool(os.environ.get("FLY_APP_NAME")
+    return bool(is_production()
                 or request.headers.get("x-forwarded-proto") == "https"
                 or request.url.scheme == "https")
 

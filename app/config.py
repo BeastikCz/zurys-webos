@@ -6,6 +6,11 @@ from pathlib import Path
 # Kořen projektu (složka webos/)
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+
+def is_production() -> bool:
+    """Production is explicit on VPS; Fly remains compatible fallback."""
+    return os.environ.get("WEBOS_PROD") == "1" or bool(os.environ.get("FLY_APP_NAME"))
+
 # Datová složka + SQLite databáze.
 # Na hostingu (Fly.io) se nastaví WEBOS_DATA_DIR=/data (trvalý disk) – lokálně zůstává ./data.
 DATA_DIR = Path(os.environ.get("WEBOS_DATA_DIR") or (BASE_DIR / "data"))
