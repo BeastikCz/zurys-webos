@@ -146,23 +146,35 @@ function uLink(name) {
   const n = (name == null ? "" : String(name)).trim();
   return n ? `<a class="prof-link" href="#/u/${encodeURIComponent(n)}">${tagPre(n)}${esc(n)}</a>` : esc(name || "?");
 }
+
+// Switch the global profile badge look here: pill | medal | patch | metal.
+const PROFILE_BADGE_THEME = "badge-theme-metal";
+document.documentElement.classList.add(PROFILE_BADGE_THEME);
+
+function profileBadge(cls, icon, label, tip = label) {
+  return `<span class="badge badge-role badge-emote ${cls}" data-tip="${tip}" aria-label="${tip}"><span class="badge-icon" aria-hidden="true">${icon}</span><span class="badge-label">${label}</span></span>`;
+}
+
 function roleBadge(role) {
-  const map = { admin: ["badge-admin", "🛡️", "Admin"], broadcaster: ["badge-admin", "👑", "Broadcaster"], mod: ["badge-vip-role", "🔨", "Moderátor"], predictor: ["badge-vip-role", "🎯", "Predikce-mod"], vip: ["badge-vip-role", "💎", "VIP"], sub: ["badge-sub-role", "💜", "Sub"], user: ["badge-user-role", "👤", "Divák"] };
-  const [cls, icon, label] = map[role] || map.user;
-  // Admin = výrazně (ikona + text ADMIN + glow), ať na něj dávají bacha. Ostatní = jen emote + tooltip.
-  if (role === "admin") {
-    return `<span class="badge badge-role badge-admin-loud" data-tip="Admin" aria-label="Admin">${icon} ADMIN</span>`;
-  }
-  return `<span class="badge badge-role badge-emote ${cls}" data-tip="${label}" aria-label="${label}">${icon}</span>`;
+  const map = {
+    admin: ["badge-admin-loud", "🛡️", "ADMIN", "Admin"],
+    broadcaster: ["badge-admin badge-broadcaster", "👑", "TVŮRCE", "Broadcaster"],
+    mod: ["badge-vip-role badge-mod", "🔨", "MOD", "Moderátor"],
+    predictor: ["badge-vip-role badge-predictor", "🎯", "TIPÉR", "Predikce-mod"],
+    vip: ["badge-vip-role", "💎", "VIP", "VIP"],
+    sub: ["badge-sub-role", "👨‍🌾", "SUB", "Sub"],
+    user: ["badge-user-role", "👤", "DIVÁK", "Divák"],
+  };
+  return profileBadge(...(map[role] || map.user));
 }
 // Odznáčky SUB / VIP / OG (Kick status – display only, nezávislé na roli). Můžou být i víc naráz.
 function subVipBadges(u) {
-  let s = "";
-  if (u && u.is_og) s += `<span class="badge badge-role badge-emote badge-admin" data-tip="OG" aria-label="OG">🏅</span> `;
-  if (u && u.egg_found) s += `<span class="badge badge-role badge-emote" data-tip="Našel Tajného sedláka 🥚" aria-label="Egg" style="background:rgba(255,211,77,.18)">🥚</span> `;
-  if (u && u.is_sub) s += `<span class="badge badge-role badge-emote badge-sub-role" data-tip="Sub" aria-label="Sub">💜</span> `;
-  if (u && u.is_vip) s += `<span class="badge badge-role badge-emote badge-vip-role" data-tip="VIP" aria-label="VIP">💎</span> `;
-  return s;
+  const badges = [];
+  if (u && u.is_og) badges.push(profileBadge("badge-admin badge-og", "🏅", "OG"));
+  if (u && u.egg_found) badges.push(profileBadge("badge-egg", "🥚", "TAJNÝ", "Našel Tajného sedláka 🥚"));
+  if (u && u.is_sub) badges.push(profileBadge("badge-sub-role", "👨‍🌾", "SUB", "Sub"));
+  if (u && u.is_vip) badges.push(profileBadge("badge-vip-role", "💎", "VIP"));
+  return badges.join(" ");
 }
 // Pro leaderboard: staff dostane svůj badge + sub/vip; běžný divák jen sub/vip (jinak „Divák").
 function lbBadges(r) {
@@ -268,6 +280,7 @@ function render() {
   if (gameClockTimer) { clearInterval(gameClockTimer); gameClockTimer = null; gameClockBase = null; }
   if (duelTimer) { clearInterval(duelTimer); duelTimer = null; }
   if (dmThreadTimer) { clearInterval(dmThreadTimer); dmThreadTimer = null; }
+  if (_partnerRefreshTimer) { clearInterval(_partnerRefreshTimer); _partnerRefreshTimer = null; }
   stopPredPoll();
   if (_crewPoll) { clearInterval(_crewPoll); _crewPoll = null; }
   const r = parseRoute();
@@ -2410,6 +2423,7 @@ function pageBonusy() {
   loadBattlePass();
   loadWheel();
   loadPartnerLinks();
+  _partnerRefreshTimer = setInterval(() => { if (!document.hidden) loadPartnerLinks(); }, 5000);
   loadCommunityGoal();
   loadSubGoal();
   dropTimer = setInterval(() => { if (!document.hidden) { loadCommunityGoal(); loadSubGoal(); } }, 12000);
@@ -3424,6 +3438,7 @@ async function claimQuest(key) {
 
 /* ---------- Partnerské/sponzorské odkazy (1× navždy / ⚡ flash okna) ---------- */
 let _partnerTimer = null;
+let _partnerRefreshTimer = null;
 async function loadPartnerLinks() {
   const box = document.getElementById("partnersCard"); if (!box) return;
   if (_partnerTimer) { clearInterval(_partnerTimer); _partnerTimer = null; }
@@ -3697,7 +3712,7 @@ function economyHealthHTML(h) {
   const cols = series.map((s) => {
     const mh = Math.max(s.minted ? 2 : 0, Math.round(s.minted / maxv * 42));
     const bh = Math.max(s.burned ? 2 : 0, Math.round(s.burned / maxv * 42));
-    const tip = `${dayLbl(s.date)} — vytvořeno +${nf(s.minted)} · spáleno −${nf(s.burned)} · aktivních diváků: ${s.dau}`;
+    const tip = `${dayLbl(s.date)} — připsáno +${nf(s.minted)} · odepsáno −${nf(s.burned)} · aktivních diváků: ${s.dau}`;
     return `<div style="flex:1;min-width:15px;display:flex;flex-direction:column;align-items:center" title="${tip}">
       <div style="height:44px;width:100%;display:flex;align-items:flex-end;justify-content:center"><div style="width:62%;height:${mh}px;background:#e0a857;border-radius:3px 3px 0 0"></div></div>
       <div style="height:44px;width:100%;display:flex;align-items:flex-start;justify-content:center;border-top:1px solid #ffffff2e"><div style="width:62%;height:${bh}px;background:#46d369;border-radius:0 0 3px 3px"></div></div>
@@ -3708,12 +3723,11 @@ function economyHealthHTML(h) {
     ? `<div style="overflow-x:auto"><div style="display:flex;gap:3px;align-items:stretch;min-width:${Math.min(900, series.length * 18)}px">${cols}</div></div>`
     : `<div class="empty">Zatím žádná data.</div>`;
   const cats = h.by_category || [];
-  const inflow = cats.filter((c) => c.net > 0).sort((a, b) => b.net - a.net);
-  const outflow = cats.filter((c) => c.net < 0).sort((a, b) => a.net - b.net);
-  const inSum = inflow.reduce((a, c) => a + c.net, 0) || 1;
-  const outSum = outflow.reduce((a, c) => a + Math.abs(c.net), 0) || 1;
-  const catRow = (c, total, col) => {
-    const val = Math.abs(c.net);
+  const inflow = cats.filter((c) => c.kind === "faucet" && c.minted).sort((a, b) => b.minted - a.minted);
+  const outflow = cats.filter((c) => c.kind === "sink" && c.burned).sort((a, b) => b.burned - a.burned);
+  const inSum = inflow.reduce((a, c) => a + c.minted, 0) || 1;
+  const outSum = outflow.reduce((a, c) => a + c.burned, 0) || 1;
+  const catRow = (c, total, col, val) => {
     const pct = Math.round(val * 100 / total);
     const transfer = c.kind === "transfer" ? " ♻️" : "";
     return `<div style="margin:7px 0" title="vytvořeno +${nf(c.minted)} · spáleno −${nf(c.burned)}">
@@ -3734,20 +3748,21 @@ function economyHealthHTML(h) {
     <p class="muted" style="font-size:12.5px;margin:0 0 12px">Hlídá rovnováhu měny: 🟠 <b>vytvořeno</b> = nové sedláky diváci dostali (odměny za sledování, chat, dropy…). 🟢 <b>spáleno</b> = sedláci zmizeli z oběhu (nákupy v shopu, rake). Když se dlouhodobě tvoří víc než pálí, sedlák ztrácí hodnotu a je čas zvednout ceny v shopu nebo přidat odměny, za které se utrácí.</p>
     <div class="stat-grid">
       ${statBox(nf(h.circulation), "Sedláků v oběhu", "accent")}
-      ${statBox("+" + nf(h.faucet_total), "Vytvořeno / " + h.days + " d")}
-      ${statBox("−" + nf(h.sink_total), "Spáleno / " + h.days + " d")}
-      ${statBox((h.net_total > 0 ? "+" : "") + nf(h.net_total), "Net (vytvořeno − spáleno)", h.net_total > 0 ? "warn" : "accent")}
+      ${statBox("+" + nf(h.faucet_total), "Skutečná emise / " + h.days + " d")}
+      ${statBox("−" + nf(h.sink_total), "Skutečné burny / " + h.days + " d")}
+      ${statBox((h.net_total > 0 ? "+" : "") + nf(h.net_total), "Změna oběhu", h.net_total > 0 ? "warn" : "accent")}
     </div>
-    <div class="faint" style="font-size:12px;margin-top:8px">Z každých <b>100</b> vytvořených sedláků se zase spálí <b>${burnedRatio}</b>. ${inflNote}</div>
+    <div class="faint" style="font-size:12px;margin-top:8px">Z každých <b>100</b> nově emitovaných sedláků se zase spálí <b>${burnedRatio}</b>. ${inflNote}</div>
+    ${h.soft_faucet_guard_active ? `<div class="faint" style="font-size:12px;margin-top:6px;color:#e0a857">⚖️ Pojistka je aktivní: kolo, dropy a partnerské odměny se vyplácí na 50 %.</div>` : ""}
     <div style="display:flex;justify-content:space-between;align-items:baseline;margin:16px 0 6px">
       <b style="font-size:13.5px">Den po dni</b>
       <span class="faint" style="font-size:12px">aktivních diváků ø ${h.dau_avg} · max ${h.dau_peak}</span>
     </div>
     ${chart}
-    <div class="faint" style="font-size:11.5px;margin-top:4px">Nahoře 🟠 kolik sedláků ten den vzniklo, dole 🟢 kolik se spálilo. Najeď myší na den pro detail.</div>
+    <div class="faint" style="font-size:11.5px;margin-top:4px">Nahoře 🟠 všechny přípisy, dole 🟢 všechny odpisy; přesuny a hry proto nejsou emisní metrika. Najeď myší na den pro detail.</div>
     <div class="dash-columns" style="margin-top:16px">
-      <div><b style="font-size:13.5px">🟠 Odkud sedláci přitékají</b>${inflow.map((c) => catRow(c, inSum, "#e0a857")).join("") || `<div class="empty">Nic za období.</div>`}</div>
-      <div><b style="font-size:13.5px">🟢 Kde sedláci mizí</b>${outflow.map((c) => catRow(c, outSum, "#46d369")).join("") || `<div class="empty">Nic za období.</div>`}</div>
+      <div><b style="font-size:13.5px">🟠 Zdroje nové měny</b>${inflow.map((c) => catRow(c, inSum, "#e0a857", c.minted)).join("") || `<div class="empty">Nic za období.</div>`}</div>
+      <div><b style="font-size:13.5px">🟢 Co měnu pálí</b>${outflow.map((c) => catRow(c, outSum, "#46d369", c.burned)).join("") || `<div class="empty">Nic za období.</div>`}</div>
     </div>
     <div class="faint" style="font-size:11.5px;margin-top:10px">♻️ = hry a sázky: sedláci hlavně kolují mezi diváky, počítá se jen čistý rozdíl (rake / rozehrané sázky). Procenta = podíl ve sloupci. Najetím na řádek uvidíš hrubé částky.</div>
   </div>`;
@@ -6810,7 +6825,7 @@ document.addEventListener("click", (e) => {
 
 /* Service worker pro Web Push (notifikace do mobilu). Registruje se 1× na pozadí. */
 if ("serviceWorker" in navigator) {
-  window.addEventListener("load", () => { navigator.serviceWorker.register("/sw.js?v=2026071224").catch(() => {}); });
+  window.addEventListener("load", () => { navigator.serviceWorker.register("/sw.js?v=2026071228").catch(() => {}); });
 }
 
 document.addEventListener("change", (e) => {

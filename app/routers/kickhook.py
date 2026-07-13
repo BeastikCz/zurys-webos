@@ -8,7 +8,7 @@ import json
 import time
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, BackgroundTasks, Request, Response
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Request, Response
 from starlette.concurrency import run_in_threadpool
 
 from ..db import get_conn, now_iso
@@ -21,6 +21,23 @@ router = APIRouter(tags=["kick-webhook"])
 PRUNE_EVERY = 2000        # po kolika zpracováních zkusit úklid starých ID
 SEEN_TTL_DAYS = 3         # ID se drží 3 dny (Kick retryuje v řádu minut) → pak se smaže
 _since_prune = 0
+MAX_WEBHOOK_BODY = 256 * 1024
+
+
+async def _read_webhook_body(request: Request) -> bytes:
+    try:
+        content_length = int(request.headers.get("content-length", "0"))
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Neplatná délka webhooku.")
+    if content_length > MAX_WEBHOOK_BODY:
+        raise HTTPException(status_code=413, detail="Webhook je příliš velký.")
+    chunks, total = [], 0
+    async for chunk in request.stream():
+        total += len(chunk)
+        if total > MAX_WEBHOOK_BODY:
+            raise HTTPException(status_code=413, detail="Webhook je příliš velký.")
+        chunks.append(chunk)
+    return b"".join(chunks)
 
 
 def _maybe_prune(conn) -> None:
@@ -100,6 +117,7 @@ def _process_webhook(body: bytes, msg_id: str, ts: str, etype: str, sig: str,
             print(f"[kick-webhook] event {etype} -> {result}")
         if result and result.get("reply"):           # chat příkaz → bot odpoví po vrácení 200
             background.add_task(_send_command_reply, result["reply"])
+        return Response(status_code=200)             # úspěch → Kick NEsmí retryovat
     else:
         e = last_exc
         print("[kick-webhook] handle error:", etype, e)
@@ -118,7 +136,7 @@ def _process_webhook(body: bytes, msg_id: str, ts: str, etype: str, sig: str,
 
 @router.post("/kick/webhook")
 async def kick_webhook(request: Request, background: BackgroundTasks):
-    body = await request.body()
+    body = await _read_webhook_body(request)
     h = request.headers
     return await run_in_threadpool(
         _process_webhook,
