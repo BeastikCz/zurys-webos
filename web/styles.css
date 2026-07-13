@@ -2096,3 +2096,296 @@ details.prof-safe .inner { margin-top: 10px; }
   .prof-bal .acts { justify-content: flex-start; }
   .prof-tiles { grid-template-columns: repeat(2, 1fr); }
 }
+
+/* ============================================================
+   REDESIGN v8 „Farm Arcade polish" (2026-07-13)
+   Vizuální vrstva NAD původními styly — barvy beze změny.
+   Měkčí tvary, typografická hierarchie, focus-visible (a11y),
+   mikrointerakce s respektem k prefers-reduced-motion.
+   Revert = smazat tento blok.
+   ============================================================ */
+:root {
+  --r: 16px; --r-sm: 11px; --r-lg: 20px;
+  --ease-out: cubic-bezier(.22, 1, .36, 1);
+}
+::selection { background: rgba(255, 157, 46, .35); color: #fff; }
+
+/* Focus ring: viditelný pro klávesnici, neotravuje myš */
+:where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+.input:focus-visible, .select:focus-visible { outline: none; } /* mají vlastní glow */
+
+/* --- Topbar: světelná linka místo tvrdé čáry, nav jako pilulky --- */
+.topbar { border-bottom: 0; }
+.topbar::after {
+  content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 1px;
+  background: linear-gradient(90deg, transparent, var(--border) 12%, var(--border) 88%, transparent);
+}
+.nav { gap: 4px; }
+.nav-link { padding: 8px 11px; border-radius: 999px; white-space: nowrap; transition: color .14s, background .14s; }
+.nav-link:hover { background: var(--surface-2); }
+.nav-link.active { background: rgba(255, 157, 46, .14); color: var(--accent); }
+.nav-link.active::after { display: none; }
+
+/* --- Ticker: fade okraje, ať text nekončí říznutě --- */
+.ticker {
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 4%, #000 96%, transparent);
+          mask-image: linear-gradient(90deg, transparent, #000 4%, #000 96%, transparent);
+}
+
+/* --- Typografie: kicker + větší display nadpisy --- */
+.page-head { margin: 34px 0 26px; }
+.page-head h1, .da-head h1 { font-size: clamp(28px, 4vw, 38px); letter-spacing: -.025em; }
+.da-head { margin: 34px 0 20px; }
+.page-head p, .da-head p { margin-top: 7px; max-width: 62ch; }
+.section-title { display: flex; align-items: center; gap: 12px; }
+.section-title::after { content: ""; flex: 1; height: 1px; background: linear-gradient(90deg, var(--border), transparent); }
+
+/* --- Tlačítka: press stav + plynulejší hover --- */
+.btn, .da-btn, .chip, .icon-btn { transition: transform .13s var(--ease-out), background .14s, border-color .14s, color .14s, box-shadow .18s, filter .14s; }
+.btn:not(:disabled):active, .da-btn:not(:disabled):active, .icon-btn:active { transform: translateY(1px) scale(.985); }
+.btn { border-radius: 12px; }
+.btn-primary:not(:disabled):hover { box-shadow: 0 10px 28px var(--accent-glow); }
+
+/* --- Chipy: pilulky --- */
+.chip { border-radius: 999px; padding: 9px 17px; }
+.chip:not(.active):hover { background: var(--surface-3); }
+
+/* --- Karty: stagger nájezd gridu + jemnější hover --- */
+@media (prefers-reduced-motion: no-preference) {
+  .da-grid > .da-card { animation: card-in .38s var(--ease-out) backwards; }
+  .da-grid > .da-card:nth-child(2) { animation-delay: .04s; }
+  .da-grid > .da-card:nth-child(3) { animation-delay: .08s; }
+  .da-grid > .da-card:nth-child(4) { animation-delay: .12s; }
+  .da-grid > .da-card:nth-child(n+5) { animation-delay: .16s; }
+  @keyframes card-in { from { opacity: 0; transform: translateY(10px); } }
+}
+.da-card { transition: transform .18s var(--ease-out), border-color .18s, box-shadow .22s; }
+.da-card:hover { transform: translateY(-5px); }
+
+/* --- Formuláře + modal: sjednocený radius, měkčí vstup --- */
+.input, .select, textarea.input { border-radius: var(--r-sm); }
+.modal { animation: modal-in .22s var(--ease-out); }
+@keyframes modal-in { from { opacity: 0; transform: translateY(14px) scale(.985); } }
+@media (prefers-reduced-motion: reduce) { .modal { animation: none; } }
+
+/* --- Pts pill: ať dýchá a číslo vede --- */
+.pts-pill { padding: 8px 15px; box-shadow: var(--hairline); }
+
+/* --- Scrollbar do tématu --- */
+::-webkit-scrollbar-thumb { background: var(--surface-3); border: 2px solid var(--bg); border-radius: 8px; }
+::-webkit-scrollbar-thumb:hover { background: #3a4060; }
+
+/* --- v8.2: hlubší pass ve stejném stylu --- */
+
+/* Shop hero: skutečný hero — rarity záře, větší hierarchie, živý obrázek */
+.shop-hero:not(.da-head) { position: relative; padding: 22px; border-radius: var(--r-lg); overflow: hidden; box-shadow: var(--hairline), var(--shadow-sm); }
+.shop-hero:not(.da-head)::before { content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: radial-gradient(640px 300px at 8% 55%, color-mix(in srgb, var(--rar) 20%, transparent), transparent 68%); }
+.shop-hero:not(.da-head) > * { position: relative; }
+.shop-hero-img { width: 212px; height: 128px; border-radius: 14px; box-shadow: 0 14px 32px rgba(0, 0, 0, .45); transition: transform .2s var(--ease-out); }
+.shop-hero-img:hover { transform: scale(1.03) rotate(-.6deg); }
+.shop-hero-name { font-size: clamp(21px, 2.6vw, 26px); letter-spacing: -.02em; }
+.shop-hero-name:hover { color: var(--accent); }
+@media (max-width: 560px) { .shop-hero-img { height: 150px; } }
+
+/* Sold feed: pilulka s dýchající tečkou */
+.sold-feed { border-radius: 999px; padding: 8px 16px; }
+@media (prefers-reduced-motion: no-preference) { .sold-live { animation: sold-breathe 2.4s ease-in-out infinite; } }
+@keyframes sold-breathe { 50% { opacity: .55; } }
+
+/* Karty: kicker (typ) NAD názvem = katalogová hierarchie; cena vede */
+.da-body { gap: 7px; }
+.da-type { order: -1; }
+.da-name { font-size: 16px; }
+.da-price { font-size: 18px; letter-spacing: -.01em; font-variant-numeric: tabular-nums; }
+
+/* Mobilní menu: sheet — zaoblený spodek, vzdušnější řádky, jemný nájezd */
+.mobile-nav { padding: 12px 12px 16px; border-radius: 0 0 var(--r-lg) var(--r-lg); border-bottom: 0; box-shadow: var(--shadow-lg); }
+.mobile-nav::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 1px;
+  background: linear-gradient(90deg, transparent, var(--border) 15%, var(--border) 85%, transparent); }
+.mobile-nav a { border-radius: 12px; padding: 14px 16px; transition: background .13s, color .13s; }
+.mobile-nav a:active { background: var(--surface-3); }
+@media (prefers-reduced-motion: no-preference) {
+  .mobile-nav.open { animation: sheet-in .22s var(--ease-out); }
+  @keyframes sheet-in { from { opacity: 0; transform: translateY(-8px); } }
+}
+
+/* Panely: accent proužek jemně zaoblený, ať nelepí na hranu */
+.panel { border-left: 0; position: relative; }
+.panel::before { content: ""; position: absolute; left: 0; top: 12px; bottom: 12px; width: 3px; border-radius: 3px; background: var(--accent); }
+.panel.ok::before { background: var(--success); }
+.panel.bad::before { background: var(--danger); }
+.panel.gold::before { background: var(--gold); }
+
+/* Prázdné/miss stavy čitelněji */
+.miss { font-variant-numeric: tabular-nums; }
+
+/* ============================================================
+   PROFILE BADGES
+   Switch PROFILE_BADGE_THEME in app.js:
+   badge-theme-pill | badge-theme-medal | badge-theme-patch
+   ============================================================ */
+.badge-role {
+  --badge-tone: var(--text-dim);
+  display: inline-flex !important;
+  flex-direction: row !important;
+  align-items: center !important;
+  justify-content: center;
+  gap: 5px !important;
+  min-height: 24px;
+  padding: 0 9px !important;
+  border: 1px solid transparent !important;
+  border-radius: 999px !important;
+  line-height: 1 !important;
+  text-align: left;
+  vertical-align: middle;
+  white-space: nowrap;
+  isolation: isolate;
+}
+.badge-role .badge-icon { display: inline-grid; place-items: center; font-size: 13px; line-height: 1; }
+.badge-role .badge-label { font-size: 9.5px; font-weight: 900; letter-spacing: .055em; line-height: 1; }
+.badge-role.badge-admin-loud { --badge-tone: #ff5b6e; }
+.badge-role.badge-broadcaster { --badge-tone: #ffb52e; }
+.badge-role.badge-mod { --badge-tone: #65c98f; }
+.badge-role.badge-predictor { --badge-tone: #4db4ff; }
+.badge-role.badge-og { --badge-tone: #e8b923; }
+.badge-role.badge-egg { --badge-tone: #dca05c; }
+.badge-role.badge-sub-role { --badge-tone: #a76dff; }
+.badge-role.badge-vip-role:not(.badge-mod):not(.badge-predictor) { --badge-tone: #56d5ff; }
+.badge-role.badge-user-role { --badge-tone: #aaa69c; }
+
+/* Variant 1: quiet outlined pill; admin gets animated shine. */
+.badge-theme-pill .badge-role {
+  color: var(--badge-tone) !important;
+  background: color-mix(in srgb, var(--badge-tone) 16%, var(--surface-2)) !important;
+  border-color: color-mix(in srgb, var(--badge-tone) 52%, transparent) !important;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.06), 0 4px 12px -8px var(--badge-tone) !important;
+}
+.badge-theme-pill .badge-admin-loud {
+  color: #fff4ee !important;
+  background: linear-gradient(110deg, #641d27 0%, #a82d3d 38%, #e04a57 50%, #8d2533 62%, #641d27 100%) !important;
+  background-size: 220% 100% !important;
+  border-color: #ff6b79 !important;
+  box-shadow: 0 0 16px -2px rgba(255,91,110,.78), inset 0 1px 0 rgba(255,255,255,.22) !important;
+  animation: badge-admin-shine 3.4s ease-in-out infinite;
+}
+
+/* Variant 2: coin/medal icon with a restrained text key. */
+.badge-theme-medal .badge-role {
+  min-height: 27px;
+  padding: 0 5px 0 0 !important;
+  color: var(--badge-tone) !important;
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+}
+.badge-theme-medal .badge-role .badge-icon {
+  width: 27px;
+  height: 27px;
+  border: 2px solid color-mix(in srgb, var(--badge-tone) 76%, #fff) !important;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 28%, color-mix(in srgb, var(--badge-tone) 55%, #fff), var(--badge-tone) 56%, color-mix(in srgb, var(--badge-tone) 72%, #000)) !important;
+  box-shadow: inset 0 -3px 0 rgba(0,0,0,.3), 0 4px 9px -4px rgba(0,0,0,.75) !important;
+}
+.badge-theme-medal .badge-role .badge-label { color: var(--badge-tone); }
+.badge-theme-medal .badge-admin-loud .badge-icon {
+  box-shadow: inset 0 -3px 0 rgba(0,0,0,.3), 0 0 15px rgba(255,91,110,.82) !important;
+  animation: badge-admin-pulse 2.4s ease-in-out infinite;
+}
+.badge-theme-medal .badge-admin-loud .badge-label { color: #ff7b88; text-shadow: 0 0 10px rgba(255,91,110,.65); }
+
+/* Variant 3: full-color farm patch with a chunky dark lower edge. */
+.badge-theme-patch .badge-role {
+  min-height: 26px;
+  color: #1a1200 !important;
+  background: var(--badge-tone) !important;
+  border: 2px solid color-mix(in srgb, var(--badge-tone) 70%, #fff) !important;
+  border-radius: 8px !important;
+  box-shadow: inset 0 -3px 0 rgba(35,20,5,.38), inset 0 1px 0 rgba(255,255,255,.35), 0 5px 10px -7px #000 !important;
+}
+.badge-theme-patch .badge-admin-loud {
+  background: linear-gradient(110deg, #ff5b6e 0%, #ff5b6e 38%, #ff9d2e 50%, #ff5b6e 62%, #ff5b6e 100%) !important;
+  background-size: 220% 100% !important;
+  border-color: #ffadb5 !important;
+  box-shadow: inset 0 -3px 0 rgba(72,12,19,.45), inset 0 1px 0 rgba(255,255,255,.42), 0 0 17px rgba(255,91,110,.72) !important;
+  animation: badge-admin-shine 3.4s ease-in-out infinite;
+}
+
+/* Variant 4: PSN-style metal pill — rarity = metal (platina/zlato/stříbro/bronz). */
+.badge-theme-metal .badge-role {
+  --metal-a: #e8a06a; --metal-b: #8a4a20; --metal-c: #c97a45; --metal-ink: #33170a; --metal-rim: #f0b888;
+  min-height: 25px;
+  color: var(--metal-ink) !important;
+  background: linear-gradient(135deg, var(--metal-a), var(--metal-b) 60%, var(--metal-c)) !important;
+  border: 1px solid var(--metal-rim) !important;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.45), inset 0 -2px 3px rgba(0,0,0,.28), 0 4px 9px -5px rgba(0,0,0,.7) !important;
+}
+.badge-theme-metal .badge-role .badge-label { color: var(--metal-ink); }
+/* platina: admin + broadcaster */
+.badge-theme-metal .badge-admin-loud,
+.badge-theme-metal .badge-broadcaster {
+  --metal-a: #e5e4e2; --metal-b: #8e9eab; --metal-c: #c9d6de; --metal-ink: #243038; --metal-rim: #dfe9ef;
+}
+/* zlato: OG + VIP */
+.badge-theme-metal .badge-og,
+.badge-theme-metal .badge-vip-role:not(.badge-mod):not(.badge-predictor) {
+  --metal-a: #ffe27a; --metal-b: #c98910; --metal-c: #ffd94d; --metal-ink: #3d2a00; --metal-rim: #ffe9a0;
+}
+/* stříbro: egg + mod */
+.badge-theme-metal .badge-egg,
+.badge-theme-metal .badge-mod {
+  --metal-a: #f0f0f0; --metal-b: #9aa4ad; --metal-c: #d8dee3; --metal-ink: #2a3238; --metal-rim: #e8eef2;
+}
+/* bronz: sub + predictor (default nahoře) */
+/* divák: tichý tmavý, žádný kov */
+.badge-theme-metal .badge-user-role {
+  --metal-a: #2e2a20; --metal-b: #211d15; --metal-c: #2a261c; --metal-ink: #aaa69c; --metal-rim: #3a3325;
+  box-shadow: none !important;
+}
+/* ADMIN navíc svítí (platina + glow + shine) */
+.badge-theme-metal .badge-admin-loud {
+  background: linear-gradient(110deg, var(--metal-b) 0%, var(--metal-a) 45%, #ffffff 50%, var(--metal-a) 55%, var(--metal-b) 100%) !important;
+  background-size: 220% 100% !important;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.6), inset 0 -2px 3px rgba(0,0,0,.25), 0 0 14px -2px rgba(210,230,245,.65) !important;
+  animation: badge-admin-shine 3.4s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .badge-theme-metal .badge-admin-loud { animation: none !important; }
+}
+
+@keyframes badge-admin-shine {
+  0%, 100% { background-position: 100% 0; }
+  50% { background-position: 0 0; }
+}
+@keyframes badge-admin-pulse {
+  0%, 100% { transform: scale(1); filter: brightness(1); }
+  50% { transform: scale(1.06); filter: brightness(1.14); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .badge-theme-pill .badge-admin-loud,
+  .badge-theme-patch .badge-admin-loud,
+  .badge-theme-medal .badge-admin-loud .badge-icon { animation: none !important; }
+}
+
+/* Leaderboards stay icon-only on narrow phones; profile keeps ADMIN readable. */
+@media (max-width: 400px) {
+  :is(.pod-badges, .lb-sub, .lb-row) .badge-role {
+    width: 22px;
+    min-width: 22px;
+    min-height: 22px;
+    height: 22px;
+    gap: 0 !important;
+    padding: 0 !important;
+  }
+  :is(.pod-badges, .lb-sub, .lb-row) .badge-role .badge-label { display: none; }
+  .badge-theme-medal :is(.pod-badges, .lb-sub, .lb-row) .badge-role .badge-icon { width: 22px; height: 22px; }
+  :is(.prof-name, .profile-hero h1) .badge-role:not(.badge-admin-loud) {
+    min-width: 24px;
+    padding: 0 5px !important;
+  }
+  :is(.prof-name, .profile-hero h1) .badge-role:not(.badge-admin-loud) .badge-label { display: none; }
+}

@@ -11,6 +11,8 @@ volající smaže z DB (push_subs).
 import json
 import os
 
+import requests
+
 from .config import BASE_DIR
 
 _PRIVATE_PEM = None      # PEM string EC P-256 privátního klíče
@@ -65,6 +67,12 @@ class DeadSubscription(Exception):
     """Subscription je mrtvá (404/410) → volající ji má smazat z push_subs."""
 
 
+def _push_session() -> requests.Session:
+    session = requests.Session()
+    session.max_redirects = 0
+    return session
+
+
 def send(subscription_info: dict, title: str, body: str = "", url: str = "/", icon: str = "") -> bool:
     """Pošle 1 web push. True = OK. Mrtvá sub → DeadSubscription. Jiná chyba → False (best-effort)."""
     if not enabled():
@@ -73,7 +81,8 @@ def send(subscription_info: dict, title: str, body: str = "", url: str = "/", ic
     payload = json.dumps({"title": title, "body": body, "url": url or "/", "icon": icon or "/sedlak-cut.png"})
     try:
         webpush(subscription_info=subscription_info, data=payload,
-                vapid_private_key=_VAPID, vapid_claims={"sub": _SUBJECT}, ttl=600, timeout=5)
+                vapid_private_key=_VAPID, vapid_claims={"sub": _SUBJECT}, ttl=600, timeout=5,
+                requests_session=_push_session())
         return True
     except WebPushException as e:
         code = getattr(getattr(e, "response", None), "status_code", None)

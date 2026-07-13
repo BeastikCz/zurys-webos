@@ -5,12 +5,47 @@ nákupy ani výhry z dropů. Vše je omezené denním stropem + cooldownem (anti
 Nastavitelné v admin panelu (ukládá se do app_settings).
 """
 import sqlite3
+import time
 from datetime import datetime, timedelta, timezone
 
 from .config import ROLE_SUB, ROLE_VIP, ROLE_ADMIN
 from .db import now_iso, get_setting, set_setting, local_date
 from .deps import add_points
 from . import live
+
+SOFT_FAUCET_GUARD_PCT = 5.0
+SOFT_FAUCET_GUARD_FACTOR = 0.5
+_soft_faucet_guard_cache = {"checked_at": 0.0, "factor": 1.0}
+
+
+def soft_faucet_factor(conn: sqlite3.Connection) -> float:
+    """Return the current multiplier for wheel, drop, and partner rewards."""
+    now = time.monotonic()
+    if now - _soft_faucet_guard_cache["checked_at"] < 60:
+        return _soft_faucet_guard_cache["factor"]
+
+    since = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
+    net = conn.execute(
+        "SELECT COALESCE(SUM(change), 0) FROM points_log WHERE created_at >= ?", (since,)
+    ).fetchone()[0]
+    circulation = conn.execute("SELECT COALESCE(SUM(points), 0) FROM users").fetchone()[0]
+    factor = (
+        SOFT_FAUCET_GUARD_FACTOR
+        if circulation > 0 and (net * 100.0 / circulation) >= SOFT_FAUCET_GUARD_PCT
+        else 1.0
+    )
+    _soft_faucet_guard_cache.update(checked_at=now, factor=factor)
+    return factor
+
+
+def award_soft_faucet(conn: sqlite3.Connection, user_id: int, amount: int, reason: str) -> dict:
+    """Award a soft faucet, reducing it only while the inflation guard is active."""
+    requested = max(0, int(amount))
+    factor = soft_faucet_factor(conn)
+    awarded = max(1, round(requested * factor)) if requested else 0
+    if awarded:
+        add_points(conn, user_id, awarded, reason)
+    return {"amount": awarded, "guarded": factor < 1.0}
 
 # Výchozí hodnoty (přepíše admin v UI). Odpovídají referenčnímu screenshotu.
 DEFAULTS = {

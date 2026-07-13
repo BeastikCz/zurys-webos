@@ -27,8 +27,12 @@ _RULES = [
     ("kick",        "💜", "Kick eventy",         "faucet",   ["kick sub", "kick resub", "kick gift sub", "kick follow", "sub cíl"]),
     ("partners",    "🤝", "Partneři",            "faucet",   ["partner:", "flash partner"]),
     ("import",      "📦", "Import / start",      "faucet",   ["import ze staré", "počáteční body od admina"]),
+    ("farm_h",      "🐄", "Statek – produkce",   "faucet",   ["statek: vejce", "statek: vlnu", "statek: mléko", "statek: sýr", "statek: zlaté", "statek: zakázka", "statek: prodej", "statek: hnůj"]),
+    ("garden_h",    "🌾", "Zahrádka – sklizeň",  "faucet",   ["sklizeň (chrobáci)", "zlatý bonus"]),
     ("garden_h",    "🌾", "Zahrádka – sklizeň",  "faucet",   ["sklizeň:"]),
     ("shop",        "🛒", "Nákupy v shopu",      "sink",     ["nákup odměn", "nákup"]),
+    ("farm_s",      "🐄", "Statek – náklady",    "sink",     ["statek: koupě", "statek: stodola", "statek: krmivo", "statek: výkupné"]),
+    ("garden_s",    "🌱", "Zahrádka – semínka",  "sink",     ["hnojivo:", "záchrana před chrobáky"]),
     ("garden_s",    "🌱", "Zahrádka – semínka",  "sink",     ["zasazení:"]),
     ("garden_d",    "🪴", "Zahrádka – dekorace", "sink",     ["dekorace zahrádky"]),
     ("prestige",    "🔥", "Prestige (spáleno)",  "sink",     ["prestige"]),
@@ -90,9 +94,9 @@ def health(conn: sqlite3.Connection, days: int = 14) -> dict:
         by_category.append(c)
     by_category.sort(key=lambda c: abs(c["net"]), reverse=True)
 
-    faucet_total = sum(c["minted"] for c in by_category)
-    sink_total = sum(c["burned"] for c in by_category)
-    net_total = faucet_total - sink_total
+    faucet_total = sum(c["minted"] for c in by_category if c["kind"] == "faucet")
+    sink_total = sum(c["burned"] for c in by_category if c["kind"] == "sink")
+    net_total = sum(c["net"] for c in by_category)
 
     # --- denní řada: minted / burned / DAU (aktivní = měl pohyb bodů) ---
     series_rows = conn.execute(
@@ -132,6 +136,7 @@ def health(conn: sqlite3.Connection, days: int = 14) -> dict:
         "sink_total": sink_total,
         "net_total": net_total,
         "inflation_pct": inflation_pct,
+        "soft_faucet_guard_active": inflation_pct >= 5.0,
         "by_category": by_category,
         "series": series,
         "active_users": active_users,

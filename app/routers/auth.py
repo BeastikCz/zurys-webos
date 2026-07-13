@@ -218,7 +218,8 @@ def kick_bot_login(request: Request, user: sqlite3.Row = Depends(require_user)):
 
 @router.get("/kick/callback")
 def kick_callback(request: Request, code: str = "", state: str = "",
-                  conn: sqlite3.Connection = Depends(db_dep)):
+                  conn: sqlite3.Connection = Depends(db_dep),
+                  user: Optional[sqlite3.Row] = Depends(get_current_user)):
     """Zpracuje návrat z Kicku: vymění kód za token, načte profil, přihlásí."""
     if not OAUTH_ENABLED:
         raise HTTPException(status_code=400, detail="Kick OAuth není nakonfigurováno.")
@@ -236,6 +237,9 @@ def kick_callback(request: Request, code: str = "", state: str = "",
             return resp
         raise HTTPException(status_code=400, detail="Neplatný OAuth stav.")
     verifier = request.cookies.get("kick_pkce") or ""
+    is_bot_flow = request.cookies.get("kick_flow") == "bot"
+    if is_bot_flow and (user is None or not can_access(user["role"], "bot")):
+        raise HTTPException(status_code=403, detail="Na připojení bota nemáš oprávnění.")
 
     # 1) výměna kódu za access token
     token_body = urllib.parse.urlencode({
@@ -246,7 +250,6 @@ def kick_callback(request: Request, code: str = "", state: str = "",
         "code_verifier": verifier,
         "code": code,
     }).encode()
-    is_bot_flow = request.cookies.get("kick_flow") == "bot"
     try:
         req = urllib.request.Request(KICK_TOKEN_URL, data=token_body,
                                      headers={"Content-Type": "application/x-www-form-urlencoded"})

@@ -768,13 +768,16 @@ def _try_claim_drop(conn, user, request, raw_code):
     position = conn.execute(
         "SELECT position FROM drop_claims WHERE drop_id = ? AND user_id = ?", (d["id"], user["id"]),
     ).fetchone()["position"]
-    add_points(conn, user["id"], d["points"], f"Drop #{d['id']} – {position}. místo (přes kód)")
+    award = economy.award_soft_faucet(
+        conn, user["id"], d["points"], f"Drop #{d['id']} – {position}. místo (přes kód)"
+    )
     if position >= d["max_winners"]:
         conn.execute("UPDATE drops SET active = 0, ended_at = ? WHERE id = ?", (ts, d["id"]))
     conn.commit()
     fresh = conn.execute("SELECT points FROM users WHERE id = ?", (user["id"],)).fetchone()
     return {"ok": True, "balance": fresh["points"],
-            "message": f"🎁 Drop chycen! {position}. místo · +{d['points']} sedláků 🌾"}
+            "message": f"🎁 Drop chycen! {position}. místo · +{award['amount']} sedláků 🌾"
+                       + (" ⚖️ Ekonomická pojistka je aktivní." if award["guarded"] else "")}
 
 
 @router.post("/redeem")
@@ -1773,7 +1776,11 @@ def wheel_spin(data: WheelSpinIn = None, user: sqlite3.Row = Depends(require_use
     conn.execute("UPDATE users SET fair_nonce = fair_nonce + 1 WHERE id = ?", (user["id"],))
     amount = WHEEL_SEGMENTS[idx][0]
     jackpot = amount == _WHEEL_JACKPOT
-    add_points(conn, user["id"], amount, "Kolo štěstí 🎡" + (" – re-spin" if paid else "") + (" – JACKPOT! 🎰" if jackpot else ""))
+    award = economy.award_soft_faucet(
+        conn, user["id"], amount,
+        "Kolo štěstí 🎡" + (" – re-spin" if paid else "") + (" – JACKPOT! 🎰" if jackpot else ""),
+    )
+    amount = award["amount"]
     conn.commit()
     fresh = conn.execute("SELECT * FROM users WHERE id = ?", (user["id"],)).fetchone()
     _can, _n, left, respin_ok = _wheel_state(fresh, now)
@@ -1787,8 +1794,9 @@ def wheel_spin(data: WheelSpinIn = None, user: sqlite3.Row = Depends(require_use
         "respin_available": respin_ok,
         "respin_cost": WHEEL_RESPIN_COST,
         "fair": {"server_hash": sh, "client_seed": cs, "nonce": nonce},
-        "message": (f"🎰 JACKPOT! +{amount} sedláků!" if jackpot
-                    else f"🎡 Padlo ti +{amount} sedláků!"),
+        "message": ((f"🎰 JACKPOT! +{amount} sedláků!" if jackpot
+                     else f"🎡 Padlo ti +{amount} sedláků!")
+                    + (" ⚖️ Ekonomická pojistka je aktivní." if award["guarded"] else "")),
     }
 
 

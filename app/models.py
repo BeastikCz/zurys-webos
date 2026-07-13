@@ -34,13 +34,11 @@ def _validate_push_endpoint(v: str) -> str:
     if not host:
         raise ValueError("endpoint has no host")
     try:
-        addr = ipaddress.ip_address(host)
+        ipaddress.ip_address(host)
     except ValueError:
         pass  # hostname, not an IP literal — check allowlist below
     else:
-        if not addr.is_global:
-            raise ValueError("endpoint: private/loopback IP not allowed")
-        return v  # public IP literal — pass (exotic but valid push services can use these)
+        raise ValueError("endpoint: IP address not allowed")
     h = host.lower()
     if h in _PUSH_ALLOWED_EXACT or any(h.endswith(s) for s in _PUSH_ALLOWED_SUFFIXES):
         return v

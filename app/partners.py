@@ -8,7 +8,7 @@ Dva režimy u každého odkazu:
 Ověřuje se klik na NAŠE tlačítko (proti farmení), ne reálná návštěva cíle.
 """
 from .db import now_iso
-from .deps import add_points
+from .economy import award_soft_faucet
 
 
 def active_round(conn):
@@ -76,7 +76,10 @@ def claim(conn, user_id: int, link_id: int) -> dict:
             raise ValueError("Tuhle odměnu už máš vyzvednutou. ✓")
         reason, msg = f"Partner: {link['label']} 🤝", f"🤝 Díky! +{reward} sedláků 🌾"
     if reward > 0:
-        add_points(conn, user_id, reward, reason)
+        award = award_soft_faucet(conn, user_id, reward, reason)
+        reward = award["amount"]
+        if award["guarded"]:
+            msg += " ⚖️ Ekonomická pojistka je aktivní."
     conn.commit()
     bal = conn.execute("SELECT points FROM users WHERE id=?", (user_id,)).fetchone()["points"]
     return {"ok": True, "reward": reward, "balance": bal, "message": msg}

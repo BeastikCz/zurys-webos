@@ -5,51 +5,162 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>ZURYS — SUB cíl overlay</title>
 <style>
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  :root { --green:#9bee4f; --green-dark:#4fae22; --gold:#f4b41a; --gold-light:#ffe48a; --purple:#9147ff; --ink:#eef3e6; --dim:#a6aea0; }
-  html, body { overflow:hidden; background:transparent; font-family:"Rajdhani", "Segoe UI", system-ui, sans-serif; }
-  #wrap { display:inline-block; padding:28px 48px; }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  :root {
+    --green:#9cf64c;
+    --green-dark:#53b722;
+    --gold:#f4b41a;
+    --gold-light:#ffe48a;
+    --purple:#9147ff;
+    --ink:#f2f3ed;
+    --dim:#adb2a8;
+  }
+  html, body {
+    overflow:hidden;
+    background:transparent;
+    font-family:"Bahnschrift Condensed", "Arial Narrow", "Segoe UI", sans-serif;
+  }
+  #wrap { display:inline-block; padding:72px 52px; }
   #wrap.hidden { display:none; }
 
   .panel {
-    position:relative; width:min(1510px, calc(100vw - 96px)); min-width:900px; height:178px;
-    display:grid; grid-template-columns:176px 370px minmax(300px, 1fr) 340px; align-items:center; gap:26px;
-    padding:22px 34px 22px 26px; overflow:hidden; color:var(--ink); background:rgba(8,12,8,.94);
-    clip-path:polygon(0 44px,44px 0,calc(100% - 34px) 0,100% 34px,100% calc(100% - 14px),calc(100% - 30px) 100%,0 100%);
-    box-shadow:inset 0 1px 0 rgba(255,210,74,.62), inset 0 -1px 0 rgba(255,255,255,.10), 0 16px 45px rgba(0,0,0,.48);
+    position:relative;
+    width:min(1320px, calc(100vw - 104px));
+    min-width:860px;
+    height:124px;
+    display:grid;
+    grid-template-columns:130px 285px minmax(360px, 1fr) 330px;
+    align-items:center;
+    gap:20px;
+    padding:12px 24px 12px 16px;
+    overflow:hidden;
+    color:var(--ink);
+    background:linear-gradient(100deg, rgba(6,9,6,.98), rgba(12,15,12,.97) 48%, rgba(8,10,8,.98));
+    clip-path:polygon(0 18px,18px 0,calc(100% - 30px) 0,100% 30px,100% calc(100% - 18px),calc(100% - 18px) 100%,0 100%);
+    box-shadow:0 14px 34px rgba(0,0,0,.46), inset 0 1px 0 rgba(255,228,138,.12);
+    transform-origin:center;
+    transition:transform .24s ease, box-shadow .24s ease;
   }
-  .panel::before { content:""; position:absolute; inset:0; pointer-events:none; border:1px solid rgba(244,180,26,.38); clip-path:inherit; }
-  .panel.done { box-shadow:inset 0 1px 0 rgba(255,228,138,.95), inset 0 -1px 0 rgba(255,210,74,.48), 0 0 45px rgba(244,180,26,.28); }
-  .accent { position:absolute; bottom:16px; width:22px; height:5px; background:var(--purple); transform:skewX(-22deg); box-shadow:0 0 8px rgba(145,71,255,.65); }
-  .accent.left { left:29px; } .accent.right { right:30px; }
+  .panel::before {
+    content:"";
+    position:absolute;
+    inset:0;
+    pointer-events:none;
+    border:1px solid rgba(244,180,26,.66);
+    clip-path:inherit;
+  }
+  .panel.done { box-shadow:0 0 34px rgba(244,180,26,.28), inset 0 1px 0 rgba(255,228,138,.32); }
+  .accent {
+    position:absolute;
+    bottom:10px;
+    width:18px;
+    height:4px;
+    background:var(--purple);
+    transform:skewX(-24deg);
+    box-shadow:0 0 8px rgba(145,71,255,.72);
+  }
+  .accent.left { left:13px; }
+  .accent.right { right:18px; }
 
-  .brand { align-self:stretch; display:grid; place-items:center; border-right:1px solid rgba(244,180,26,.2); }
-  .emblem { width:130px; height:130px; filter:drop-shadow(0 0 13px rgba(244,180,26,.22)); }
+  .brand {
+    align-self:stretch;
+    display:grid;
+    place-items:center;
+    border-right:1px solid rgba(244,180,26,.22);
+  }
+  .emblem {
+    width:86px;
+    height:86px;
+    filter:drop-shadow(0 0 10px rgba(244,180,26,.24));
+  }
   .goal { min-width:0; }
-  .eyebrow { color:var(--green); font-size:18px; font-weight:800; letter-spacing:5px; white-space:nowrap; }
-  .count { margin-top:8px; line-height:1; white-space:nowrap; }
-  .count .now { color:var(--green); font-size:76px; font-weight:800; font-variant-numeric:tabular-nums; text-shadow:0 0 24px rgba(127,224,58,.42); }
-  .count .sl { color:#68715f; font-size:52px; font-weight:600; margin:0 5px; }
-  .count .tgt { color:var(--ink); font-size:58px; font-weight:800; font-variant-numeric:tabular-nums; }
-  .count .unit { color:#b7c0ae; font-size:23px; font-weight:800; letter-spacing:3px; margin-left:12px; }
+  .eyebrow {
+    color:var(--green);
+    font-size:14px;
+    font-weight:800;
+    letter-spacing:3.2px;
+    line-height:1;
+    white-space:nowrap;
+  }
+  .count {
+    margin-top:8px;
+    display:flex;
+    align-items:baseline;
+    line-height:.82;
+    white-space:nowrap;
+  }
+  .count .now {
+    color:var(--green);
+    font-size:58px;
+    font-weight:900;
+    font-variant-numeric:tabular-nums;
+    text-shadow:0 0 18px rgba(127,224,58,.4);
+  }
+  .count .sl { color:#626860; font-size:42px; font-weight:600; margin:0 5px; }
+  .count .tgt { color:var(--ink); font-size:50px; font-weight:900; font-variant-numeric:tabular-nums; }
+  .count .unit { color:#b9beb5; font-size:19px; font-weight:800; letter-spacing:2px; margin-left:9px; }
 
-  .progress { min-width:0; align-self:center; padding-top:27px; }
-  .barwrap { position:relative; }
-  .bar { position:relative; height:37px; overflow:hidden; border-radius:20px; background:#0a0e07; box-shadow:inset 0 0 0 1.5px rgba(127,224,58,.28), inset 0 4px 11px rgba(0,0,0,.68); }
-  .bar > i { position:absolute; inset:0 auto 0 0; width:46%; border-radius:inherit; background:linear-gradient(180deg,#c6ff72,var(--green) 56%,var(--green-dark)); box-shadow:0 0 20px rgba(127,224,58,.58), inset 0 2px 0 rgba(255,255,255,.36); transition:width 1s cubic-bezier(.2,.8,.2,1); }
-  .stripe { position:absolute; inset:0; background:repeating-linear-gradient(115deg,transparent 0 14px,rgba(244,180,26,.1) 14px 16px); }
-  .bar-target { display:block; margin-top:13px; color:var(--gold); font-size:22px; font-weight:800; font-variant-numeric:tabular-nums; text-align:center; }
+  .progress { min-width:0; }
+  .bar {
+    position:relative;
+    height:16px;
+    overflow:hidden;
+    border-radius:999px;
+    background:#090d07;
+    box-shadow:inset 0 0 0 1px rgba(139,232,66,.25), inset 0 3px 7px rgba(0,0,0,.7);
+  }
+  .bar > i {
+    position:absolute;
+    inset:0 auto 0 0;
+    width:0;
+    border-radius:inherit;
+    background:linear-gradient(180deg, #d0ff82, var(--green) 55%, var(--green-dark));
+    box-shadow:0 0 16px rgba(127,224,58,.7), inset 0 2px 0 rgba(255,255,255,.36);
+    transition:width 1s cubic-bezier(.2,.8,.2,1);
+  }
+  .bar > i::after {
+    content:"";
+    position:absolute;
+    top:3px;
+    right:3px;
+    width:7px;
+    height:7px;
+    border-radius:50%;
+    background:#efffc7;
+    box-shadow:0 0 8px #caff72;
+  }
+  .stripe {
+    position:absolute;
+    inset:0;
+    background:repeating-linear-gradient(115deg, transparent 0 13px, rgba(244,180,26,.09) 13px 15px);
+  }
 
-  .reward { min-width:0; padding-left:16px; border-left:1px solid rgba(244,180,26,.22); color:var(--dim); font-size:20px; line-height:1.25; }
-  .reward::before { content:"◇"; color:var(--green); font-size:26px; margin-right:9px; vertical-align:-2px; }
-  .reward b { display:block; margin:6px 0 0 34px; color:var(--green); font-size:20px; font-weight:800; white-space:nowrap; }
+  .reward {
+    min-width:0;
+    display:flex;
+    align-items:center;
+    gap:12px;
+    padding-left:18px;
+    border-left:1px solid rgba(244,180,26,.18);
+    color:var(--gold);
+    font-size:20px;
+    font-weight:900;
+    line-height:1.1;
+    white-space:nowrap;
+  }
+  .reward::before {
+    content:"◇";
+    color:var(--green);
+    font-size:25px;
+    font-family:"Segoe UI", sans-serif;
+    text-shadow:0 0 9px rgba(156,246,76,.38);
+  }
 
   @media (max-width:1000px) {
     #wrap { padding:20px; }
-    .panel { width:960px; grid-template-columns:128px 280px 1fr 230px; gap:18px; padding-right:25px; }
-    .brand { border-right:0; } .emblem { width:110px; height:110px; }
-    .eyebrow { font-size:14px; letter-spacing:3px; } .count .now { font-size:59px; } .count .sl { font-size:43px; } .count .tgt { font-size:48px; } .count .unit { font-size:16px; margin-left:7px; }
-    .reward { font-size:15px; padding-left:12px; } .reward b { margin-left:31px; font-size:17px; }
+    .panel { width:900px; grid-template-columns:105px 230px minmax(220px, 1fr) 250px; gap:14px; padding-right:18px; }
+    .emblem { width:70px; height:70px; }
+    .reward { font-size:17px; padding-left:14px; }
   }
 </style>
 </head>
@@ -57,20 +168,13 @@
 <div id="wrap" class="hidden">
   <div class="panel" id="panel">
     <span class="accent left"></span><span class="accent right"></span>
-    <div class="brand">
-      <svg class="emblem" viewBox="0 0 100 100" aria-hidden="true">
-        <polygon points="50,6 88,28 88,72 50,94 12,72 12,28" fill="none" stroke="#3a2e0a" stroke-width="6"/>
-        <polygon points="50,6 88,28 88,72 50,94 12,72 12,28" fill="none" stroke="url(#crestGold)" stroke-width="2.5"/>
-        <defs><linearGradient id="crestGold" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffe48a"/><stop offset="1" stop-color="#b9760c"/></linearGradient></defs>
-        <g stroke="url(#crestGold)" stroke-width="4.5" stroke-linecap="round" fill="none"><path d="M50 78 V40"/><path d="M50 44 L38 34 M50 44 L62 34"/><path d="M50 52 L37 42 M50 52 L63 42"/><path d="M50 60 L38 51 M50 60 L62 51"/><path d="M50 40 L43 31 M50 40 L57 31"/></g>
-      </svg>
-    </div>
+    <div class="brand"><img class="emblem" src="../img/subgoal-crest.svg" alt=""></div>
     <div class="goal">
       <div class="eyebrow" id="eyebrow">SUB CÍL · TIER 1</div>
       <div class="count"><span class="now" id="num">0</span><span class="sl">/</span><span class="tgt" id="tgt">0</span><span class="unit">SUBŮ</span></div>
     </div>
-    <div class="progress"><div class="barwrap"><div class="bar"><i id="bar"></i><span class="stripe"></span></div><span class="bar-target" id="barTarget">0</span></div></div>
-    <div class="reward"><span>Po dosažení:</span><span id="subtext"><b>komunitní event</b></span></div>
+    <div class="progress"><div class="bar"><i id="bar"></i><span class="stripe"></span></div></div>
+    <div class="reward" id="reward">KOMUNITNÍ EVENT</div>
   </div>
 </div>
 <script>
@@ -81,26 +185,35 @@
     var prog = v[0] || 23, tgt = v[1] || 50, rew = (v[2] === 0 ? 0 : v[2] || 2000), tier = v[3] || 2;
     return { enabled:true, progress:prog, target:tgt, reward:rew, tier:tier, tier_max:10, maxed:false, done:false, pct:Math.min(100, Math.round(prog * 100 / tgt)) };
   }
+
   var last = -1;
   function paint(g) {
     var wrap = document.getElementById("wrap");
     if (!g || !g.enabled) { wrap.classList.add("hidden"); last = -1; return; }
+
+    var pct = g.pct != null ? g.pct : Math.round((g.progress || 0) * 100 / Math.max(1, g.target || 1));
     wrap.classList.remove("hidden");
     document.getElementById("num").textContent = g.progress;
     document.getElementById("tgt").textContent = g.target;
-    document.getElementById("barTarget").textContent = g.target;
-    document.getElementById("bar").style.width = Math.max(2, g.pct || 0) + "%";
+    document.getElementById("bar").style.width = Math.max(0, Math.min(100, pct)) + "%";
     document.getElementById("panel").classList.toggle("done", !!g.done);
     document.getElementById("eyebrow").textContent = g.maxed ? "MAX TIER" : (g.tier != null ? "SUB CÍL · TIER " + ((g.tier || 0) + 1) : "SUB CÍL");
-    if (g.reward != null && g.reward > 0) document.getElementById("subtext").innerHTML = "<b>+" + g.reward.toLocaleString("cs-CZ") + " sedláků gifterům</b>";
-    if (last >= 0 && g.progress > last) { var panel = document.getElementById("panel"); panel.style.transform = "scale(1.012)"; setTimeout(function () { panel.style.transform = ""; }, 240); }
+    document.getElementById("reward").textContent = g.reward > 0 ? "+" + g.reward.toLocaleString("cs-CZ") + " sedláků gifterům" : (g.maxed ? "CÍL SPLNĚN" : "KOMUNITNÍ EVENT");
+
+    if (last >= 0 && g.progress > last) {
+      var panel = document.getElementById("panel");
+      panel.style.transform = "scale(1.012)";
+      setTimeout(function () { panel.style.transform = ""; }, 240);
+    }
     last = g.progress;
   }
+
   function poll() {
     var demo = demoData();
     if (demo) { paint(demo); return; }
     fetch("/api/sub-goal", { cache:"no-store" }).then(function (r) { return r.json(); }).then(paint).catch(function () {});
   }
+
   poll();
   setInterval(poll, 4000);
 </script>

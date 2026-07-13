@@ -5,6 +5,7 @@
 import secrets
 from datetime import datetime, timezone, timedelta
 
+from app import economy
 from app.config import SESSION_COOKIE
 from app.db import get_conn, now_iso
 from app.econ_health import categorize, health
@@ -69,6 +70,9 @@ def test_categorize_known_reasons():
     assert categorize("Redeem kód VITEJ100")[0] == "codes"
     assert categorize("Kick gift sub 🎁 ×3")[0] == "kick"
     assert categorize("Partner: Sponzor 🤝")[0] == "partners"
+    assert categorize("Statek: vejce")[0] == "farm_h"
+    assert categorize("Statek: krmivo")[0] == "farm_s"
+    assert categorize("Hnojivo: mrkev")[0] == "garden_s"
     # sink
     assert categorize("Nákup odměn (2 ks)")[0] == "shop"
     assert categorize("Nákup odměn (2 ks)")[3] == "sink"
@@ -108,8 +112,29 @@ def test_health_aggregates_faucet_sink_and_categories(client):
     assert shop["kind"] == "sink" and shop["burned"] >= 300
     assert isinstance(h["series"], list)
     assert h["active_users"] >= 1
-    # net = faucet - sink
-    assert h["net_total"] == h["faucet_total"] - h["sink_total"]
+    # net zahrnuje i hry a jiné převody, které nejsou ani faucet, ani sink.
+    assert h["net_total"] == sum(c["net"] for c in h["by_category"])
+
+
+def test_soft_faucet_guard_halves_rewards():
+    uid = _mk_user(10_000)
+    _mk_log(uid, 1, "Sledování streamu")
+    old_pct = economy.SOFT_FAUCET_GUARD_PCT
+    old_cache = dict(economy._soft_faucet_guard_cache)
+    conn = get_conn()
+    try:
+        economy.SOFT_FAUCET_GUARD_PCT = 0.000001
+        economy._soft_faucet_guard_cache.update(checked_at=0.0, factor=1.0)
+        award = economy.award_soft_faucet(conn, uid, 100, "Kolo štěstí 🎡")
+        conn.commit()
+        balance = conn.execute("SELECT points FROM users WHERE id = ?", (uid,)).fetchone()["points"]
+    finally:
+        economy.SOFT_FAUCET_GUARD_PCT = old_pct
+        economy._soft_faucet_guard_cache.clear()
+        economy._soft_faucet_guard_cache.update(old_cache)
+        conn.close()
+    assert award == {"amount": 50, "guarded": True}
+    assert balance == 10_050
 
 
 def test_health_endpoint_access_control(client):

@@ -7,9 +7,22 @@ DB je session-scoped → každý test si na začátku vyčistí kola (globální
 import secrets
 from datetime import datetime, timezone, timedelta
 
+import pytest
+from app import economy
 from app.config import SESSION_COOKIE
 from app.db import get_conn, now_iso
 from app import partners_flash
+
+
+@pytest.fixture(autouse=True)
+def _disable_soft_faucet_guard(monkeypatch):
+    """Keep flash-round tests independent of the global inflation state."""
+    old_cache = dict(economy._soft_faucet_guard_cache)
+    monkeypatch.setattr(economy, "SOFT_FAUCET_GUARD_PCT", float("inf"))
+    economy._soft_faucet_guard_cache.update(checked_at=0.0, factor=1.0)
+    yield
+    economy._soft_faucet_guard_cache.clear()
+    economy._soft_faucet_guard_cache.update(old_cache)
 
 
 def _login_as(role="user"):

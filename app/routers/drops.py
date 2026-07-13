@@ -7,7 +7,8 @@ from ..anticheat import (check_or_block, fp_drop_cooldown_remaining, is_new_acco
                           new_account_drop_count, NEW_ACCOUNT_MAX_CLAIMS,
                           FP_DROP_COOLDOWN_SEC)
 from ..db import now_iso
-from ..deps import db_dep, require_user, add_points, client_ip
+from ..deps import db_dep, require_user, client_ip
+from ..economy import award_soft_faucet
 from ..models import DropClaimIn
 from ..ratelimit import rate_limit
 
@@ -116,7 +117,7 @@ def claim_drop(data: DropClaimIn, request: Request, user: sqlite3.Row = Depends(
     position = conn.execute(
         "SELECT position FROM drop_claims WHERE drop_id = ? AND user_id = ?", (d["id"], user["id"]),
     ).fetchone()["position"]
-    add_points(conn, user["id"], d["points"], f"Drop #{d['id']} – {position}. místo")
+    award = award_soft_faucet(conn, user["id"], d["points"], f"Drop #{d['id']} – {position}. místo")
     if position >= d["max_winners"]:
         conn.execute("UPDATE drops SET active = 0, ended_at = ? WHERE id = ?", (ts, d["id"]))
     conn.commit()
@@ -125,7 +126,8 @@ def claim_drop(data: DropClaimIn, request: Request, user: sqlite3.Row = Depends(
     return {
         "ok": True,
         "position": position,
-        "points": d["points"],
+        "points": award["amount"],
         "balance": fresh["points"],
-        "message": f"🏆 {position}. místo! Získáváš {d['points']} b.",
+        "message": f"🏆 {position}. místo! Získáváš {award['amount']} b."
+                   + (" ⚖️ Ekonomická pojistka je aktivní." if award["guarded"] else ""),
     }

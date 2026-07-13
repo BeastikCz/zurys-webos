@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" role="img" aria-label="ZURYS wheat crest">
+  <defs>
+    <linearGradient id="gold" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffe48a"/>
+      <stop offset="1" stop-color="#b9760c"/>
+    </linearGradient>
+  </defs>
+  <polygon points="50,6 88,28 88,72 50,94 12,72 12,28" fill="#090b08" stroke="#3a2e0a" stroke-width="6"/>
+  <polygon points="50,6 88,28 88,72 50,94 12,72 12,28" fill="none" stroke="url(#gold)" stroke-width="2.5"/>
+  <g stroke="url(#gold)" stroke-width="4.5" stroke-linecap="round" fill="none">
+    <path d="M50 78V40"/>
+    <path d="M50 44 38 34M50 44 62 34"/>
+    <path d="M50 52 37 42M50 52 63 42"/>
+    <path d="M50 60 38 51M50 60 62 51"/>
+    <path d="M50 40 43 31M50 40 57 31"/>
+  </g>
+</svg>
