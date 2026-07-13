@@ -619,6 +619,25 @@ def feed(conn, user, slot: int, turbo: bool = False) -> dict:
             "turbo": turbo, "turbo_left": _turbo_status(conn, user["id"])["count"]}
 
 
+def feed_all(conn, user) -> dict:
+    """Nakrmí všechna hladová produkční zvířata (krmivo přednostně, pak sedláci). Přeskočí, na co nejsou prostředky."""
+    hungry = [r for r in conn.execute(
+        "SELECT slot, animal_key FROM farm_animals WHERE user_id = ? AND ready_at = '' ORDER BY slot",
+        (user["id"],)) if not _BY_KEY.get(r["animal_key"], {}).get("utility")]
+    count = krmivo_used = 0
+    for r in hungry:
+        res = feed(conn, user, r["slot"])   # commituje per slot; nedostatek vrátí ok=False → skip
+        if not res.get("ok"):
+            continue
+        count += 1
+        if res["used_krmivo"]:
+            krmivo_used += 1
+    bal = conn.execute("SELECT points FROM users WHERE id = ?", (user["id"],)).fetchone()["points"]
+    skipped = len(hungry) - count
+    return {"ok": True, "count": count, "krmivo_used": krmivo_used,
+            "skipped": skipped, "balance": bal}
+
+
 def _award_product(conn, user_id, a, level, bonus):
     from .deps import add_points
     base = _reward_at(a, level, bonus)

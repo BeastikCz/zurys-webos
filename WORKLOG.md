@@ -1,10 +1,12 @@
-# Worklog — sdílený deník změn (Claude + Codex + člověk)
+﻿# Worklog — sdílený deník změn (Claude + Codex + člověk)
 
 Každý agent sem PŘIDÁ záznam hned po každé dokončené práci (změna kódu, deploy, zásah do prod DB, rozhodnutí). Nové záznamy NAHORU. Formát: datum, kdo, co, stav (lokálně / NASAZENO / prod-data).
 
 ---
 
 ## 2026-07-13
+
+- **[Claude] Statek UX batch (nakrmit vse / stavy zvirat / nejblizsi udalost) — lokalne, NEnasazeno** — backend farm.feed_all + POST /farm/feed-all (krmivo prednostne, preskoci nedostatek; test pridan, 19/19 pass). Frontend: zelene CTA Nakrmit vse (N× · cena) pod scenou (>=2 hladova; odhad ceny pocita krmivo zdarma), stavove tridy .is-hungry (ztlumene + spici zzz) / .is-growing / .is-ready (glow) / .is-fox, idle lista misto Zatim neni co sebrat ukazuje nejblizsi produkt (Slepice doda vejce za 1h 59m, zivy countdown). Soubory: app/farm.py, app/routers/misc.py, web/app.js, web/farm.css, tests/test_farm.py. Overeno v prohlizeci na dev DB, predeploy OK.
 
 - **[Codex] Synchronizace nasazeného stavu do `origin/main` — NASAZENO** — ekonomická pojistka a reporting, bezpečnostní opravy OAuth/webpush, regresní testy, UI polish a subgoal overlay včetně crest SVG. Všechny změněné soubory z `app/` a `web/` ověřeny SHA-256 proti aktivní Contabo release; pouze commit + push, bez deploye.
 - **[Claude] AGENTS.md + WORKLOG.md** — pravidla pro Kick webhook response kódy + tenhle sdílený deník. Lokálně, untracked.

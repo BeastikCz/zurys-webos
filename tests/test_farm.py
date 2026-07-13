@@ -406,3 +406,25 @@ def test_sell_keeps_level_in_stable():
         assert farm.status(conn, _row(conn, uid))["slots"][0]["level"] == 2, "level přežil prodej"
     finally:
         conn.close()
+
+
+def test_feed_all_uses_krmivo_then_points_and_skips_broke():
+    from app.db import get_conn
+    from app import farm
+    conn = get_conn()
+    try:
+        uid = _user(conn); conn.commit()
+        farm.buy(conn, _row(conn, uid), "chicken")
+        farm.buy(conn, _row(conn, uid), "goat")
+        conn.execute("UPDATE users SET feed_stock=1 WHERE id=?", (uid,)); conn.commit()
+        r = farm.feed_all(conn, _row(conn, uid))
+        assert r["ok"] and r["count"] == 2 and r["krmivo_used"] == 1
+        st = farm.status(conn, _row(conn, uid))
+        assert all(s["state"] == "growing" for s in st["slots"] if not s.get("empty"))
+        # bez prostredku: dalsi kolo preskoci (hlad zpet, 0 sedlaku, 0 krmiva)
+        conn.execute("UPDATE farm_animals SET ready_at='' WHERE user_id=?", (uid,))
+        conn.execute("UPDATE users SET points=0, feed_stock=0 WHERE id=?", (uid,)); conn.commit()
+        r2 = farm.feed_all(conn, _row(conn, uid))
+        assert r2["count"] == 0 and r2["skipped"] == 2
+    finally:
+        conn.close()

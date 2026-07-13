@@ -1610,6 +1610,14 @@ def farm_collect_all(user: sqlite3.Row = Depends(require_farm_access),
     return farm.collect_all(conn, user)
 
 
+@router.post("/farm/feed-all")
+def farm_feed_all(user: sqlite3.Row = Depends(require_farm_access),
+                  conn: sqlite3.Connection = Depends(db_dep)):
+    """Nakrmí všechna hladová zvířata naráz (krmivo přednostně, pak sedláci)."""
+    from .. import farm
+    return farm.feed_all(conn, user)
+
+
 @router.post("/farm/contract/claim")
 def farm_contract_claim(user: sqlite3.Row = Depends(require_user),
                         conn: sqlite3.Connection = Depends(db_dep)):
