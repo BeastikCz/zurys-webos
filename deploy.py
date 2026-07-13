@@ -87,14 +87,15 @@ def check_production():
 
 
 def bump_version(html):
-    """Najde ?v=<cislo> a inkrementuje o 1. Vraci (new_html, old, new).
-    Obe URL (styles.css + app.js) sdili tutez verzi -> replace zmeni obe."""
-    m = re.search(r"\?v=(\d+)", html)
-    if not m:
+    """Najde nejvyssi ?v=<cislo> a VSECHNY ?v= sjednoti na +1. Vraci (new_html, old, new).
+    Regex pres vsechny vyskyty (ne replace jedne stare verze): soubor pridany pozdeji
+    s jinym cislem (farm.css 13.7.) by jinak zustal na stare verzi = divaci drzi cache."""
+    versions = re.findall(r"\?v=(\d+)", html)
+    if not versions:
         raise ValueError("v index.html nenalezen ?v=<cislo>")
-    old = m.group(1)
+    old = max(versions)
     new = str(int(old) + 1)
-    return html.replace("?v=" + old, "?v=" + new), old, new
+    return re.sub(r"\?v=\d+", "?v=" + new, html), old, new
 
 
 def run_predeploy():
@@ -238,6 +239,11 @@ def _selftest():
     out, o, n = bump_version(h)
     assert (o, n) == ("2026070207", "2026070208"), (o, n)
     assert out.count("?v=2026070208") == 2 and "?v=2026070207" not in out
+    # zaostavajici soubor s jinou (starsi) verzi se musi sjednotit na novou
+    h2 = '<link href="/styles.css?v=2026071229"><link href="/farm.css?v=2026071018">'
+    out2, o2, n2 = bump_version(h2)
+    assert (o2, n2) == ("2026071229", "2026071230"), (o2, n2)
+    assert out2.count("?v=2026071230") == 2 and "?v=2026071018" not in out2
     try:
         bump_version("<html>no version</html>")
         assert False, "melo hodit ValueError"
@@ -276,8 +282,8 @@ def main():
     # jinak by offline shell po deployi cachoval stare soubory.
     for f in (INDEX.parent / "sw.js", INDEX.parent / "app.js"):
         t = f.read_text(encoding="utf-8")
-        f.write_text(t.replace("?v=" + old, "?v=" + new)
-                      .replace("zurys-shell-" + old, "zurys-shell-" + new), encoding="utf-8")
+        f.write_text(re.sub(r"\?v=\d+", "?v=" + new, t)
+                     .replace("zurys-shell-" + old, "zurys-shell-" + new), encoding="utf-8")
 
     print("\n[4/4] Sync na Contabo + restart...")
     if not deploy_contabo():

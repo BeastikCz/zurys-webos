@@ -2980,7 +2980,7 @@ async function loadFarm() {
       : !hasAnimals && f.starter
       ? `<button class="stk-cta" data-action="farm-buy" data-animal="chicken" data-name="Slepice" data-icon="🐣" data-cost="${f.starter_cost}"><span class="stk-cta-ic">🐣</span> Kup první slepici za ${fmtPts(f.starter_cost)} (startovací sleva!)</button>`
       : next
-      ? `<div class="stk-cta stk-cta-idle"><span class="stk-cta-ic">${next.pico || "🕒"}</span> ${esc(next.name)} dodá ${esc(next.product)} za <b class="grd-time" data-left="${next.seconds_left}" style="font-variant-numeric:tabular-nums">${grdDur(next.seconds_left)}</b></div>`
+      ? `<div class="stk-cta stk-cta-idle"><span class="stk-cta-ic">${next.pico || "🕒"}</span> ${esc(next.name)} dodá ${esc(next.product)} za <b class="grd-time" data-left="${next.seconds_left}" style="font-variant-numeric:tabular-nums;color:inherit;font-size:inherit">${grdDur(next.seconds_left)}</b></div>`
       : feedBtn ? ""
       : `<div class="stk-cta stk-cta-idle"><span class="stk-cta-ic">🕒</span> Zatím není co sebrat — nakrm zvířata</div>`;
     box.innerHTML = `<div class="stk-wrap">
@@ -6848,7 +6848,7 @@ document.addEventListener("click", (e) => {
 
 /* Service worker pro Web Push (notifikace do mobilu). Registruje se 1× na pozadí. */
 if ("serviceWorker" in navigator) {
-  window.addEventListener("load", () => { navigator.serviceWorker.register("/sw.js?v=2026071229").catch(() => {}); });
+  window.addEventListener("load", () => { navigator.serviceWorker.register("/sw.js?v=2026071230").catch(() => {}); });
 }
 
 document.addEventListener("change", (e) => {
