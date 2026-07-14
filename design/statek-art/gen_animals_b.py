@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 """Statek — plny set zvirat ve stylu B (mekka cozy ilustrace).
-5 producentu x 3 stavy + pes + liska. Vystup: prehledovy SVG board."""
+5 producentu x 3 stavy + pes + liska. Vystup: board a herni SVG assety."""
+
+from pathlib import Path
 
 CARD_W, CARD_H, GAP = 360, 300, 20
 MARGIN = 80
@@ -261,7 +263,7 @@ rows = len(ANIMALS) + 1
 H = TITLE_H + rows * (ROW_LABEL + CARD_H + 46 + ROW_GAP) + 30
 
 svg = [f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {W} {H}" font-family="Segoe UI, sans-serif">']
-svg.append(f'''<defs>
+DEFS = f'''<defs>
 <radialGradient id="cream" cx="0.4" cy="0.35" r="0.95"><stop offset="0" stop-color="#fffaf0"/><stop offset="0.65" stop-color="#fff3e0"/><stop offset="1" stop-color="#efd6b0"/></radialGradient>
 <radialGradient id="tan" cx="0.4" cy="0.35" r="0.95"><stop offset="0" stop-color="#e3b877"/><stop offset="0.7" stop-color="#d3a35d"/><stop offset="1" stop-color="#b5854a"/></radialGradient>
 <radialGradient id="wool" cx="0.4" cy="0.35" r="0.95"><stop offset="0" stop-color="#fffdf6"/><stop offset="0.7" stop-color="#f7ecd8"/><stop offset="1" stop-color="#e3d2b4"/></radialGradient>
@@ -273,7 +275,8 @@ svg.append(f'''<defs>
 <radialGradient id="glow"><stop offset="0" stop-color="{GOLD}" stop-opacity="0.55"/><stop offset="1" stop-color="{GOLD}" stop-opacity="0"/></radialGradient>
 <filter id="dim"><feColorMatrix type="saturate" values="0.4"/><feComponentTransfer><feFuncR type="linear" slope="0.75"/><feFuncG type="linear" slope="0.75"/><feFuncB type="linear" slope="0.78"/></feComponentTransfer></filter>
 <radialGradient id="ground" cx="0.5" cy="0.5" r="0.5"><stop offset="0" stop-color="#000" stop-opacity="0.3"/><stop offset="1" stop-color="#000" stop-opacity="0"/></radialGradient>
-</defs>''')
+</defs>'''
+svg.append(DEFS)
 svg.append(f'<rect width="{W}" height="{H}" fill="#14100a"/>')
 svg.append(f'<text x="{MARGIN}" y="64" fill="{INK}" font-size="34" font-weight="800" letter-spacing="2">STATEK - SET ZVIRAT VE STYLU B</text>')
 svg.append(f'<text x="{MARGIN}" y="94" fill="{DIM}" font-size="15" letter-spacing="3">MEKKA ILUSTRACE - 5 PRODUCENTU x 3 STAVY + PES + LISKA</text>')
@@ -306,5 +309,53 @@ for i, (name, desc, fn) in enumerate(SPECIALS):
     svg.append(card(cx, y + ROW_LABEL + 8, fn(), name, desc.upper()[:34]))
 svg.append("</svg>")
 
-open(r"C:\Users\ADMINI~1\AppData\Local\Temp\claude\C--Users-Administrator-webos\af93469a-0953-45f1-bed5-f9de9ee7e56b\scratchpad\statek-set-b.svg", "w", encoding="utf-8").write("".join(svg))
-print("OK", W, "x", H)
+ROOT = Path(__file__).resolve().parents[2]
+OUT = ROOT / "web" / "img" / "farm" / "animals"
+ASSET_ART = {"chicken": chicken, "goat": goat, "sheep": sheep, "cow": cow, "horse": horse}
+ASSET_BOUNDS = {
+    "chicken-hungry": "65 50 237 181",
+    "chicken-producing": "65 36 237 218",
+    "chicken-ready": "34 31 270 240",
+    "goat-hungry": "76 46 234 173",
+    "goat-producing": "76 26 234 226",
+    "goat-ready": "34 21 279 250",
+    "sheep-hungry": "74 83 232 158",
+    "sheep-producing": "74 66 232 186",
+    "sheep-ready": "34 61 275 210",
+    "cow-hungry": "59 66 243 162",
+    "cow-producing": "59 48 243 204",
+    "cow-ready": "34 43 271 228",
+    "horse-hungry": "65 59 245 157",
+    "horse-producing": "65 40 245 214",
+    "horse-ready": "34 35 279 236",
+    "dog": "115 52 155 204",
+    "fox": "38 124 267 128",
+}
+
+
+def asset_svg(name, inner):
+    # Desaturaci a zzz obstara CSS; karta i stin zustavaji soucasti sceny.
+    inner = inner.replace(' filter="url(#dim)"', '').replace(zzz(), '')
+    inner = inner.replace('<ellipse cx="196" cy="252" rx="52" ry="8" fill="#000" opacity="0.25"/>', '')
+    inner = inner.replace('<ellipse cx="165" cy="250" rx="90" ry="8" fill="#000" opacity="0.25"/>', '')
+    return (f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="{ASSET_BOUNDS[name]}" '
+            f'role="img" aria-label="{name}">{DEFS}<g id="art">{inner}</g></svg>')
+
+
+def main():
+    (Path(__file__).parent / "statek-set-b.svg").write_text("".join(svg), encoding="utf-8")
+    OUT.mkdir(parents=True, exist_ok=True)
+    for art, fn in ASSET_ART.items():
+        for state, _ in STATES:
+            name = f"{art}-{state}"
+            (OUT / f"{name}.svg").write_text(asset_svg(name, fn(state)), encoding="utf-8")
+    for name, fn in (("dog", dog), ("fox", fox)):
+        (OUT / f"{name}.svg").write_text(asset_svg(name, fn()), encoding="utf-8")
+    assert {p.stem for p in OUT.glob("*.svg")} == set(ASSET_BOUNDS)
+    assets = [p.read_text(encoding="utf-8") for p in OUT.glob("*.svg")]
+    assert all('filter="url(#dim)"' not in s and 'url(#ground)' not in s and "<text" not in s for s in assets)
+    print(f"OK board {W}x{H}; {len(ASSET_BOUNDS)} assets -> {OUT}")
+
+
+if __name__ == "__main__":
+    main()

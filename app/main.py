@@ -1,10 +1,17 @@
 """WebOS – věrnostní bodový shop pro streamera. Vstupní bod FastAPI aplikace."""
 import json
+import mimetypes
 import os
 import urllib.parse
+
+# Windows (a některé Linux mime.types) neznají .webp -> StaticFiles by ho servírovala
+# jako application/octet-stream. S X-Content-Type-Options: nosniff by to prohlížeč
+# mohl odmítnout renderovat jako <img>. Registrace napevno, nezávisle na OS.
+mimetypes.add_type("image/webp", ".webp")
 from datetime import datetime, timedelta, timezone
 
 from fastapi import FastAPI, Request, Depends, HTTPException
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -551,6 +558,11 @@ async def security_headers(request: Request, call_next):
     elif request.url.path.endswith((".png", ".jpg", ".jpeg", ".webp", ".gif", ".svg", ".ico")):
         response.headers["Cache-Control"] = "public, max-age=604800"
     return response
+
+
+# Gzip origin odpovědí (app.js/styles.css jsou stovky kB nekomprimované) — přidáno naposled,
+# add_middleware vkládá na index 0 = obaluje ostatní middlewary zvenčí, komprimuje finální tělo.
+app.add_middleware(GZipMiddleware, minimum_size=1000)
 
 
 # Alert na neošetřené chyby (500) → Discord (pokud je webhook), pak vrátí čistý 500.

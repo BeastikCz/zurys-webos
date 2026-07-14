@@ -79,11 +79,46 @@ def test_award_dedup_and_force(client):
     assert _post(client, token, {"user_id": uid, "eur": 2}).status_code == 200
 
 
-def test_award_invalid_preset_and_user(client):
+def test_award_custom_amount_and_invalid(client):
     token = _login("broadcaster")
     uid = _mk_user()
-    assert _post(client, token, {"user_id": uid, "eur": 7}).status_code == 400
+    # vlastní částka mimo presety: kurz 100/€
+    r = _post(client, token, {"user_id": uid, "eur": 7})
+    assert r.status_code == 200 and r.json()["points"] == 700 and r.json()["xp"] == 700
+    assert _post(client, token, {"user_id": uid, "eur": 0}).status_code == 400
+    assert _post(client, token, {"user_id": uid, "eur": 501}).status_code == 400
     assert _post(client, token, {"user_id": 99999999, "eur": 10}).status_code == 404
+
+
+def test_undo_reverses_and_frees_deposit_id(client):
+    token = _login("broadcaster")
+    uid = _mk_user()
+    from app.db import get_conn
+    r = _post(client, token, {"user_id": uid, "eur": 10, "deposit_id": "undo_test1"})
+    assert r.status_code == 200
+    conn = get_conn()
+    try:
+        log_id = conn.execute("SELECT id FROM points_log WHERE user_id=? AND reason LIKE 'Vklad CaseHug %'",
+                              (uid,)).fetchone()["id"]
+        before = conn.execute("SELECT points, earned_total FROM users WHERE id=?", (uid,)).fetchone()
+    finally:
+        conn.close()
+    ru = client.post("/api/admin/casehug/undo", json={"log_id": log_id},
+                     headers={"Cookie": f"{SESSION_COOKIE}={token}"})
+    assert ru.status_code == 200 and ru.json()["reversed"] == 1000
+    conn = get_conn()
+    try:
+        after = conn.execute("SELECT points, earned_total FROM users WHERE id=?", (uid,)).fetchone()
+        assert after["points"] == before["points"] - 1000
+        assert after["earned_total"] == before["earned_total"] - 1000
+        assert not conn.execute("SELECT 1 FROM points_log WHERE id=?", (log_id,)).fetchone()
+    finally:
+        conn.close()
+    # deposit ID je volné → jde připsat znovu (správná částka)
+    assert _post(client, token, {"user_id": uid, "eur": 20, "deposit_id": "undo_test1"}).status_code == 200
+    # neexistující / ne-casehug log_id → 404
+    assert client.post("/api/admin/casehug/undo", json={"log_id": 99999999},
+                       headers={"Cookie": f"{SESSION_COOKIE}={token}"}).status_code == 404
 
 
 def test_award_deposit_id_required_and_unique(client):

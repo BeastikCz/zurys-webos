@@ -1,36 +1,38 @@
-**Source visual truth**
-- `C:\Users\Administrator\webos\deliverables\subgoal-source-option1.png`
+# Zahrádka redesign — design QA
 
-**Implementation evidence**
-- Screenshot: `C:\Users\Administrator\webos\deliverables\subgoal-overlay-qa-final.png`
-- Full comparison: `C:\Users\Administrator\webos\deliverables\subgoal-qa-comparison-final.png`
-- Focused comparison: `C:\Users\Administrator\webos\deliverables\subgoal-qa-focused-final.png`
-- URL/state: `http://127.0.0.1:8766/web/overlay/subgoal.html?demo=23,50,2000,2`, enabled, 23/50, Tier 3, reward 2,000.
-- Viewport: 1920 × 1080 at DPR 1.
+## Evidence
 
-**Findings**
-- No actionable P0/P1/P2 differences remain. The implementation matches the selected compact scorebug composition, safe-area position, dark angular shell, gold wheat crest, green score/progress emphasis, reward hierarchy, and purple edge accents.
-- [P3] The browser-rendered system font is slightly narrower than the generated reference lettering. The hierarchy and stream-distance readability remain intact.
+- Visual source of truth: `C:/Users/ADMINI~1/AppData/Local/Temp/codex-clipboard-3bacc1ed-1b0c-422e-9b82-1cbef6ed8f8d.png`
+- Implementation capture: `C:/Users/Administrator/webos/design/garden-art/garden-implementation-desktop.png`
+- Side-by-side comparison: `C:/Users/Administrator/webos/design/garden-art/garden-design-comparison.png`
+- Responsive capture: `C:/Users/Administrator/webos/design/garden-art/garden-implementation-mobile.png`
+- Desktop viewport: 1487 × 1058 px
+- Mobile viewport: 390 × 844 px
+- Tested state: signed-in player, four planted plots, one ready crop, fertilizer available, all base decorations owned, upgrades unowned.
 
-**Fidelity surfaces**
-- Fonts and typography: condensed system stack, heavy tabular numbers, uppercase tracking, and one-line reward copy render without wrapping or clipping.
-- Spacing and layout rhythm: final panel is 1320 × 124px at x=52/y=72, matching the reference's canvas proportion and upper-left safe margin.
-- Colors and visual tokens: near-black shell, electric green progress, harvest gold reward/crest, and restrained purple accents match the reference.
-- Image quality and asset fidelity: the reusable crest is an external SVG asset and loads successfully; no placeholder or inline-drawn logo remains.
-- Copy and content: `SUB CÍL · TIER 3`, `23 / 50 SUBŮ`, and `+2 000 sedláků gifterům` match the selected state.
+The full comparison preserves both desktop screenshots at their native viewport ratio, so a separate focused crop was not needed. The mobile capture covers the responsive layout separately.
 
-**Comparison history**
-1. Initial implementation capture was too small relative to the selected visual. The panel width, height, safe margin, grid tracks, crest, score, and reward type were increased.
-2. Final 1920 × 1080 capture confirms a 1320 × 124px panel, 46% progress fill, loaded crest, correct live values, and no browser console errors.
+## Fidelity review
 
-**Primary behavior checked**
-- Existing `/api/sub-goal` polling and four-second refresh remain unchanged.
-- Demo parameters populate progress, target, reward, and tier.
-- Progress width resolves to 46% for 23/50.
-- External crest asset loads.
-- Browser console has no errors or warnings.
+- Typography: hierarchy, weights, density, and information grouping match the approved direction while retaining the product's existing system font. The reference's display-serif title is treated as an acceptable product-system variation.
+- Layout: the painted hero remains the dominant surface; four plot columns, overlaid crop status cards, harvest CTA, seed row, rules, decorations, fertilizer, and economy are preserved.
+- Color and tokens: warm black/brown surfaces, amber outlines, golden primary actions, green selection states, and purple XP accents match the reference and existing product palette.
+- Image quality: all visible crops, decorations, upgrades, and the hero are real generated raster assets. Transparent sprites were checked for halos, clipping, and stretching.
+- Copy and content: live game labels, prices, durations, yield, XP, fertilizer, pest, and upgrade states are rendered from the existing data model rather than static mock copy.
 
-**Follow-up polish**
-- [P3] Use a supplied brand font later if an exact licensed typeface becomes available.
+## Responsive and interaction QA
+
+- Desktop: four plots fit without horizontal overflow; hero height and lower information density match the source.
+- Expanded garden: eight plots render within the scene and switch to the taller layout.
+- Mobile: two-column plots, stacked status/actions, wrapped header copy, and 700/1200 px scene variants have no horizontal overflow or overlapping controls.
+- Primary flow verified in browser: harvest all → select seed → plant an empty plot.
+- Image fallback paths verified through the existing image fallback helper.
+- Browser console: no errors.
+
+## Iteration history
+
+- Initial desktop implementation had an overly tall header and pushed the scene down. The title and notification were consolidated into one row and the hero moved to the approved vertical rhythm.
+- Initial mobile implementation clipped the subtitle and crowded crop status actions. The header was allowed to wrap, the scene was increased to 700 px, and status/action rows were stacked.
+- Post-fix comparison found no P0, P1, or P2 visual defects.
 
 final result: passed

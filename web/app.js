@@ -2701,18 +2701,19 @@ async function adminCancelAuction(id) {
 }
 
 /* ---------- Zahrádka (farm-sim) ---------- */
-let _gardenSel = null, _gardenTimer = null;
+let _gardenSel = null, _gardenTimer = null, _gardenDecor = null;
+const GARDEN_CROP_ART = { mrkev: "mrkev", brambory: "brambory", dyne: "dyne", klas: "klas" };
+const GARDEN_PLOT_DECOR = new Set(["manor", "stodola", "hrad", "palac"]);
 function grdDur(s) { s = Math.max(0, s | 0); const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), ss = s % 60; return h ? `${h}h ${m}m` : (m ? `${m}m ${ss}s` : `${ss}s`); }
 function pageGarden() {
   const view = $("#view");
   if (!state.user) { view.innerHTML = `<div class="empty"><div class="big">🌱</div>Přihlas se přes Kick a začni pěstovat sedláky!</div>`; return; }
-  view.innerHTML = `<div class="page-head with-mascot"><img class="page-mascot" src="/sedlak-cut.png" alt=""><div class="ph-text"><h1>🌱 Zahrádka</h1><p class="muted">Vyber semínko → zasaď na záhon → počkej až doroste → sklidíš sedláky! 🌾</p></div></div>
-    <div id="gardenPush">${gardenPushBtnHTML()}</div>
+  view.innerHTML = `<div class="garden-head-row"><div class="page-head with-mascot garden-page-head"><img class="page-mascot" src="/sedlak-cut.png" alt=""><div class="ph-text"><h1>🌱 Zahrádka</h1><p class="muted">Vyber semínko → zasaď na záhon → počkej až doroste → sklidíš sedláky! 🌾</p></div></div>
+    <div id="gardenPush">${gardenPushBtnHTML()}</div></div>
     <div id="gardenBox">${skeletonCards(1)}</div>
     <div id="gardenDecor" style="margin-top:8px"></div>
     <div id="gardenLb" style="margin-top:8px"></div>`;
   loadGarden();
-  loadGardenDecor();
   loadGardenLeaderboard();
 }
 /* Web Push „chrobáci na mobil": tlačítko + subscribe flow. Service worker je /sw.js. */
@@ -2731,6 +2732,56 @@ function gardenPushBtnHTML() {
     : `<button class="btn btn-ghost btn-sm gpush-btn" data-action="garden-push-on">🔔 Upozornit na chrobáky (i na mobil)</button>`;
 }
 function renderGardenPushBtn() { const el = document.getElementById("gardenPush"); if (el) el.innerHTML = gardenPushBtnHTML(); }
+function gardenImg(folder, key, emoji, cls, fallbackClass) {
+  return `<img src="/img/garden/${folder}/${key}.webp" class="${cls}" alt="" loading="lazy" data-e="${emoji}" data-ec="${fallbackClass}">`;
+}
+function gardenCropImg(key, ready, emoji, cls = "grd-crop-img") {
+  const art = GARDEN_CROP_ART[key] || "sprout";
+  const file = art === "sprout" ? art : `${art}-${ready ? "ready" : "growing"}`;
+  return gardenImg("crops", file, emoji || "🌱", cls, "grd-crop-fallback");
+}
+function gardenSceneDecorHTML(d) {
+  if (!d) return "";
+  return d.items.filter((it) => it.owned && !GARDEN_PLOT_DECOR.has(it.key)).map((it) =>
+    gardenImg("decor", it.key, it.icon, `grd-scene-decor grd-decor-${it.key}`, "grd-decor-fallback")
+  ).join("");
+}
+function gardenPlotHTML(p) {
+  if (p.empty) return `<button class="grd-plot grd-empty" data-action="grd-plant" data-plot="${p.plot}" aria-label="Zasadit na záhon ${p.plot + 1}">
+    <span class="grd-plot-art">${gardenImg("crops", "empty", "➕", "grd-crop-img", "grd-crop-fallback")}</span>
+    <span class="grd-plot-status"><b>Volný záhon</b><span>Zasadit</span></span></button>`;
+  const crop = gardenCropImg(p.crop, p.ready, p.icon);
+  const pest = (p.pest || p.eaten) ? gardenImg("crops", "pest", "🐛", "grd-pest-img", "grd-pest-fallback") : "";
+  let action;
+  if (p.eaten) {
+    const half = Math.round(p.reward * 0.5);
+    action = p.ready
+      ? `<button class="grd-harv-half" data-action="grd-harvest" data-plot="${p.plot}">Sklidit +${fmtPts(half)}</button>`
+      : `<span class="grd-time" data-left="${p.seconds_left}">${grdDur(p.seconds_left)}</span>`;
+  } else if (p.pest) {
+    action = `<button class="grd-rescue-btn" data-action="grd-rescue" data-plot="${p.plot}">Zachraň ${fmtPts(p.rescue_cost)}</button>
+      <span class="grd-time danger" data-left="${p.rescue_left}">${grdDur(p.rescue_left)}</span>`;
+  } else if (p.ready) {
+    action = `<button class="bp-claim" data-action="grd-harvest" data-plot="${p.plot}">Sklidit +${fmtPts(p.reward)}</button>`;
+  } else {
+    action = `<span class="grd-time" data-left="${p.seconds_left}">${grdDur(p.seconds_left)}</span>${p.fert
+      ? `<span class="grd-fert-ok">pohnojeno</span>`
+      : `<button class="grd-fert-btn" data-action="grd-fert" data-plot="${p.plot}" title="Hnojivo zkrátí zbývající růst na polovinu">Hnojivo ${fmtPts(p.fert_cost)}</button>`}`;
+  }
+  const state = p.eaten ? " eaten" : p.pest ? " pest" : p.ready ? " ready" : " growing";
+  const refresh = p.pest_in > 0 ? ` data-refresh-left="${p.pest_in}"` : "";
+  return `<div class="grd-plot${state}"${refresh}>
+    <div class="grd-plot-art">${crop}${pest}</div>
+    <div class="grd-plot-status"><b>${esc(p.name)}</b><div class="grd-plot-action">${action}</div></div></div>`;
+}
+function gardenSeedHTML(c) {
+  const net = c.expected_rescue ?? c.net ?? 0;
+  return `<button class="grd-seed${_gardenSel === c.key ? " sel" : ""}" data-action="grd-pick" data-crop="${c.key}">
+    <span class="grd-seed-art">${gardenCropImg(c.key, true, c.icon, "grd-seed-img")}</span>
+    <span class="grd-seed-copy"><b>${esc(c.name)}</b><span>${c.hours} h · ${fmtPts(c.cost)} sedláků</span></span>
+    <span class="grd-seed-gain"><b>${net >= 0 ? "+" : ""}${fmtPts(net)} sedláků</b><strong>+${fmtPts(c.xp || 0)} XP</strong></span>
+  </button>`;
+}
 function _urlB64ToU8(b64) {
   const pad = "=".repeat((4 - (b64.length % 4)) % 4);
   const s = (b64 + pad).replace(/-/g, "+").replace(/_/g, "/");
@@ -2770,24 +2821,32 @@ async function disableGardenPush() {
     renderGardenPushBtn();
   } catch (e) { toast(e.message || String(e), "error"); }
 }
-async function loadGardenDecor() {
+async function loadGardenDecor(data = null) {
   const box = document.getElementById("gardenDecor"); if (!box) return;
   try {
-    const d = await api("/garden/decor");
-    const shelf = d.owned_icons.length
-      ? `<div class="decor-shelf">${d.owned_icons.map((i) => `<span>${i}</span>`).join("")}</div>`
-      : `<p class="muted" style="font-size:12.5px;margin:0 0 10px">Zatím žádné dekorace — kup si je dole a oživ zahrádku! 🌻</p>`;
-    const pestInfo = `<p class="muted" style="font-size:12.5px;margin:0 0 10px">Chrobáci: <b>${d.pest_chance || 0}%</b> šance · dekorace snižují o <b>${d.pest_reduction || 0}%</b> · minimum <b>${d.pest_min_chance || 0}%</b>.</p>`;
-    const shop = d.items.map((it) => {
-      const btn = it.owned ? `<span class="decor-owned">✓ máš</span>`
-        : `<button class="bp-claim" data-action="decor-buy" data-key="${it.key}">${fmtPts(it.cost)}</button>`;
-      const perks = `${it.pest_reduction ? `<span class="faint" style="font-size:12px">-${it.pest_reduction}% chrobáci</span>` : ""}${it.plots ? `<span class="faint" style="font-size:12px;color:#7ed957">🌱 +${it.plots} záhon</span>` : ""}`;
-      return `<div class="decor-card${it.owned ? " owned" : ""}"><div class="decor-ico">${it.icon}</div><b>${esc(it.name)}</b>${perks}${btn}</div>`;
-    }).join("");
-    box.innerHTML = `<div class="section-title" style="margin:26px 0 8px">🎨 Dekorace zahrádky</div>
-      ${pestInfo}
-      ${shelf}
-      <div class="decor-shop">${shop}</div>`;
+    const d = data || await api("/garden/decor");
+    _gardenDecor = d;
+    const owned = d.items.filter((it) => it.owned && !GARDEN_PLOT_DECOR.has(it.key));
+    const available = d.items.filter((it) => !it.owned && !GARDEN_PLOT_DECOR.has(it.key));
+    const upgrades = d.items.filter((it) => GARDEN_PLOT_DECOR.has(it.key));
+    const shelf = owned.length
+      ? owned.map((it) => `<span class="decor-shelf-item" title="${esc(it.name)}">${gardenImg("decor", it.key, it.icon, "decor-shelf-img", "decor-ico")}<i>✓</i></span>`).join("")
+      : `<span class="muted">Zatím žádné dekorace.</span>`;
+    const availableShop = available.length ? `<div class="garden-upgrade-title">Další dekorace</div><div class="decor-shop">${available.map((it) =>
+      `<div class="decor-card"><div class="decor-ico">${gardenImg("decor", it.key, it.icon, "decor-card-img", "decor-ico")}</div><b>${esc(it.name)}</b>
+      <span class="faint">-${it.pest_reduction}% chrobáci</span><button class="bp-claim" data-action="decor-buy" data-key="${it.key}">${fmtPts(it.cost)}</button></div>`
+    ).join("")}</div>` : "";
+    const economy = upgrades.map((it) => `<div class="garden-economy-item${it.owned ? " owned" : ""}">
+      ${gardenImg("decor", it.key, it.icon, "garden-economy-img", "decor-ico")}<span><b>${esc(it.name)}</b><small>+${it.plots} záhon</small></span>
+      ${it.owned ? `<strong>✓ máš</strong>` : `<button class="bp-claim" data-action="decor-buy" data-key="${it.key}">${fmtPts(it.cost)}</button>`}</div>`).join("");
+    box.innerHTML = `<div class="garden-tools">
+      <div class="garden-fert-card">${gardenImg("crops", "fertilizer", "💩", "garden-fert-img", "decor-ico")}<span><b>Hnojivo</b><small>1× na výsadbu · půlí zbývající čas</small></span></div>
+      <div class="garden-decor-shelf"><b>Dekorace zahrádky</b><div class="decor-shelf">${shelf}</div></div>
+      <div class="garden-economy"><b>Ekonomika</b><div class="garden-economy-list">${economy}</div></div>
+    </div>
+    <p class="garden-pest-info">Chrobáci: <b>${d.pest_chance || 0}%</b> · dekorace snižují riziko o <b>${d.pest_reduction || 0}%</b> · minimum <b>${d.pest_min_chance || 0}%</b>.</p>
+    ${availableShop}`;
+    stkFixImgs(box);
   } catch (e) { box.innerHTML = ""; }
 }
 async function loadGardenLeaderboard() {
@@ -2809,47 +2868,34 @@ async function buyDecor(key) {
     if (state.user) state.user.points = r.balance;
     toast(`Koupeno: ${r.icon} ${r.name}! 🎨`, "success");
     try { confettiBurst(); } catch (e) {}
-    renderHeader(); loadGardenDecor();
+    renderHeader(); loadGarden();
   } catch (e) { toast(e.message, "error"); }
 }
 async function loadGarden() {
   const box = document.getElementById("gardenBox"); if (!box) return;
   try {
-    const g = await api("/garden");
-    const plots = g.plots.map((p) => {
-      if (p.empty) return `<div class="grd-plot grd-empty" data-action="grd-plant" data-plot="${p.plot}"><div class="grd-crop">➕</div><div class="grd-lbl">Zasadit</div></div>`;
-      if (p.eaten) {   // chrobáci sežrali úrodu – pozdě, jen půlka, nezachráníš
-        const half = Math.round(p.reward * 0.5);
-        const tail = p.ready
-          ? `<button class="grd-harv-half" data-action="grd-harvest" data-plot="${p.plot}" title="Načaté chrobáky – jen půlka">Sklidit +${fmtPts(half)}</button>`
-          : `<div class="grd-time" data-left="${p.seconds_left}">${grdDur(p.seconds_left)}</div>`;
-        return `<div class="grd-plot grd-pestd"><div class="grd-crop">🐛💀</div><div class="grd-lbl">${esc(p.name)}</div><div class="faint" style="font-size:11px;color:#ef6b6b">sežráno → půlka</div>${tail}</div>`;
-      }
-      if (p.pest) {    // AKTIVNÍ chrobáci – zachraň než vyprší okno!
-        const half = Math.round(p.reward * 0.5);
-        const tail = p.ready
-          ? `<button class="grd-harv-half" data-action="grd-harvest" data-plot="${p.plot}" title="Sklidit teď bez postřiku = jen půlka">Sklidit +${fmtPts(half)}</button>`
-          : `<div class="grd-time" data-left="${p.rescue_left}" style="color:#ff7aa8">⏳ ${grdDur(p.rescue_left)}</div>`;
-        return `<div class="grd-plot grd-pestd grd-pest-active"><div class="grd-crop">🐛</div><div class="grd-lbl">${esc(p.name)}</div><button class="grd-rescue-btn" data-action="grd-rescue" data-plot="${p.plot}" title="Zaplať a zachráníš plnou úrodu. Po vypršení času je sežerou (jen půlka, +${fmtPts(half)}).">🐛 Zachraň ${fmtPts(p.rescue_cost)}</button>${tail}</div>`;
-      }
-      if (p.ready) return `<div class="grd-plot grd-ready"><div class="grd-crop">${p.icon}</div><div class="grd-lbl">${esc(p.name)}</div><button class="bp-claim" data-action="grd-harvest" data-plot="${p.plot}">Sklidit +${fmtPts(p.reward)}</button></div>`;
-      const pestRefresh = p.pest_in > 0 ? ` data-refresh-left="${p.pest_in}"` : "";
-      const fert = p.fert
-        ? `<div class="faint" style="font-size:11px;color:var(--farm-green,#46d369)">💩 pohnojeno</div>`
-        : `<button class="grd-rescue-btn" data-action="grd-fert" data-plot="${p.plot}" title="Hnojivo zkrátí zbývající čas růstu na polovinu. Jde použít 1× na výsadbu. Výnos se nemění.">💩 Hnojivo ${fmtPts(p.fert_cost)}</button>`;
-      return `<div class="grd-plot grd-grow"${pestRefresh}><div class="grd-crop grd-sprout">🌱</div><div class="grd-lbl">${esc(p.name)}</div><div class="grd-time" data-left="${p.seconds_left}">${grdDur(p.seconds_left)}</div>${fert}</div>`;
-    }).join("");
-    const shop = g.crops.map((c) => `<button class="grd-seed${_gardenSel === c.key ? " sel" : ""}" data-action="grd-pick" data-crop="${c.key}"><span class="grd-si">${c.icon}</span><b>${esc(c.name)}</b><span class="faint">${c.hours} h · semínko ${fmtPts(c.cost)} · oček. <b>${c.expected_no_rescue >= 0 ? "+" : ""}${fmtPts(c.expected_no_rescue || 0)}</b> / aktivně <b>${c.expected_rescue >= 0 ? "+" : ""}${fmtPts(c.expected_rescue || 0)}</b> · 🎟️ <b style="color:var(--farm-green,#46d369)">+${fmtPts(c.xp || 0)} XP</b></span></button>`).join("");
-    const seedNote = `<p class="muted" style="font-size:12px;margin:-4px 0 10px">Semínko stojí <b>${g.seed_pct}%</b> z výnosu${g.sub ? ` — máš <b style="color:var(--accent)">sub slevu (jen ${g.seed_pct_sub}%)</b> 💜` : ` · 💜 sub jen ${g.seed_pct_sub}%`}. Chrobáci: <b>${g.pest_chance || 0}%</b>, záchrana <b>${g.rescue_pct || 0}%</b> výnosu.<br>🎟️ <b>Sklizeň dává XP do levelu</b> — <b>mimo denní strop</b>, počítá se vždy (i když máš chat vyfarmený)${g.sub ? ", sub ×1.5" : ""}. Chrobáci úrodu i XP půlí. 💩 <b>Hnojivo</b> zkrátí zbývající růst na polovinu (${g.fert_pct || 20} % výnosu, 1× na výsadbu).</p>`;
+    const [g, d] = await Promise.all([api("/garden"), api("/garden/decor")]);
+    _gardenDecor = d;
+    const plots = g.plots.map(gardenPlotHTML).join("");
+    const shop = g.crops.map(gardenSeedHTML).join("");
     const readyPlots = g.plots.filter((p) => !p.empty && p.ready);
     const emptyCount = g.plots.filter((p) => p.empty).length;
     const readySum = readyPlots.reduce((s, p) => s + ((p.pest || p.eaten) ? Math.round(p.reward * 0.5) : p.reward), 0);
-    const bulk = (readyPlots.length || emptyCount) ? `<div class="grd-bulk" style="display:flex;gap:8px;flex-wrap:wrap;margin:14px 0 0">${readyPlots.length ? `<button class="bp-claim" data-action="grd-harvest-all">⚡ Sklidit vše (${readyPlots.length}× · +${fmtPts(readySum)})</button>` : ""}${emptyCount ? `<button class="grd-seed${_gardenSel ? " sel" : ""}" data-action="grd-plant-all" style="width:auto">🌱 Zasadit vše${_gardenSel ? "" : " (vyber semínko)"}</button>` : ""}</div>` : "";
-    box.innerHTML = `<div class="grd-grid">${plots}</div>
-      ${bulk}
-      <div class="section-title" style="margin:24px 0 8px">🌰 Semínka ${_gardenSel ? `<span class="feeds-pass">vybráno → klikni prázdný záhon</span>` : ""}</div>
-      ${seedNote}
-      <div class="grd-shop">${shop}</div>`;
+    const growing = g.plots.filter((p) => !p.empty && !p.ready && p.seconds_left > 0).sort((a, b) => a.seconds_left - b.seconds_left)[0];
+    const bulk = `${readyPlots.length ? `<button class="grd-primary" data-action="grd-harvest-all">Sklidit vše (${readyPlots.length}× · +${fmtPts(readySum)})</button>` : ""}
+      ${emptyCount ? `<button class="grd-primary${_gardenSel ? "" : " secondary"}" data-action="grd-plant-all">Zasadit vše${_gardenSel ? "" : " · vyber semínko"}</button>` : ""}
+      ${growing ? `<span class="grd-next">Nejbližší sklizeň: ${esc(growing.name)} za <b class="grd-time" data-left="${growing.seconds_left}">${grdDur(growing.seconds_left)}</b></span>` : ""}`;
+    const rules = `Semínko stojí <b>${g.seed_pct}%</b> z výnosu${g.sub ? ` · sub sleva <b>${g.seed_pct_sub}%</b>` : ""} · chrobáci <b>${g.pest_chance || 0}%</b> · záchrana <b>${g.rescue_pct || 0}%</b> · sklizeň dává XP mimo denní strop.`;
+    box.innerHTML = `<section class="grd-scene${g.plots.length > 4 ? " many" : ""}" style="--grd-hero:url('/img/garden/garden-hero.webp')">
+      <div class="grd-scene-decorations">${gardenSceneDecorHTML(d)}</div>
+      <div class="grd-grid" data-count="${g.plots.length}">${plots}</div>
+      <div class="grd-scene-actions">${bulk}</div>
+    </section>
+    <div class="grd-shop-head"><h2>Zvol semínko</h2>${_gardenSel ? `<span>Vybráno · klikni na volný záhon</span>` : ""}</div>
+    <div class="grd-shop">${shop}</div>
+    <p class="grd-rules">${rules}</p>`;
+    stkFixImgs(box);
+    await loadGardenDecor(d);
     if (_gardenTimer) clearInterval(_gardenTimer);
     _gardenTimer = setInterval(() => {
       let reload = false;
@@ -2938,19 +2984,22 @@ function pageFarm() {
     }
   }, 250);
 }
-// Asset mapa klíč→soubor (/img/farm/animals/{file}.webp). unicorn=Kůň→horse, horse=Pes→dog (historické klíče v DB).
-const FARM_ART = { chicken: "chicken", goat: "goat", sheep: "sheep", cow: "cow", unicorn: "horse", horse: "dog" };
-function stkImg(key, emoji, cls) {
+// Asset mapa klíč→soubor. unicorn=Kůň→horse, horse=Pes→dog (historické klíče v DB).
+const FARM_ART = { chicken: "chicken", goat: "goat", sheep: "sheep", cow: "cow", unicorn: "horse", horse: "dog", fox: "fox" };
+function stkImg(key, emoji, cls, state = "producing") {
   const f = FARM_ART[key];
   if (!f) return `<span class="${cls}-emoji">${emoji}</span>`;   // neznámý klíč → emoji
-  // <img> bez inline onerror (CSP blokuje inline handlery) – fallback navěsí stkFixImgs po renderu
-  return `<img src="/img/farm/animals/${f}.webp" class="${cls}-img" alt="" loading="lazy" data-e="${emoji}" data-ec="${cls}-emoji">`;
+  const asset = f === "dog" || f === "fox" ? f : `${f}-${state === "growing" ? "producing" : state}`;
+  return `<img src="/img/farm/animals/${asset}.webp" class="${cls}-img" alt="" loading="lazy" data-f="/img/farm/animals/${asset}.svg" data-e="${emoji}" data-ec="${cls}-emoji">`;
 }
-function stkFixImgs(box) {   // chybějící .webp → prohodí za emoji (CSP-safe: listener v JS, ne inline onerror)
+function stkFixImgs(box) {   // malovaný .webp → stavové SVG → emoji (CSP-safe: listener v JS, ne inline onerror)
   box.querySelectorAll("img[data-e]").forEach((im) => {
-    const swap = () => { const s = document.createElement("span"); s.className = im.dataset.ec; s.textContent = im.dataset.e; im.replaceWith(s); };
+    const swap = () => {
+      if (im.dataset.f) { im.src = im.dataset.f; delete im.dataset.f; return; }
+      const s = document.createElement("span"); s.className = im.dataset.ec; s.textContent = im.dataset.e; im.replaceWith(s);
+    };
+    im.addEventListener("error", swap);
     if (im.complete && im.naturalWidth === 0) swap();   // už selhalo (cached 404)
-    else im.addEventListener("error", swap, { once: true });
   });
 }
 async function loadFarm() {
@@ -2963,7 +3012,7 @@ async function loadFarm() {
     const col = f.collection;
     const patron = f.patron;
     const turbo = f.turbo;
-    const pasture = f.slots.map((s) => farmSlotHTML(s, s.slot === foxSlot, turbo.count > 0)).join("");
+    const pasture = f.slots.map((s) => farmSlotHTML(s, s.slot === foxSlot, turbo.count > 0)).join("") + (f.fox ? farmFoxHTML() : "");
     const shop = f.animals.map((a) => farmShopHTML(a)).join("");
     const hasAnimals = f.slots.some((s) => !s.empty);
     const hungry = f.slots.filter((s) => !s.empty && !s.utility && s.state === "hungry");
@@ -3010,7 +3059,7 @@ async function loadFarm() {
         <span class="stk-s-r">${f.contract.claimed ? `<span class="faint">✅ vyzvednuto (+${fmtPts(f.contract.reward)})</span>`
           : f.contract.done ? `<button class="bp-claim" data-action="farm-contract">🎁 Vyzvednout +${fmtPts(f.contract.reward)}</button>`
           : `<span class="faint">odměna +${fmtPts(f.contract.reward)}</span>`}</span></div>` : ""}
-      <div class="stk-scene" style="--stk-hero:url('/img/farm/statek-hero.webp'),url('/img/farm/statek-hero.svg')"><div class="stk-pasture">${pasture}</div></div>
+      <div class="stk-scene" style="--stk-hero:url('/img/farm/statek-hero-c.webp'),url('/img/farm/statek-hero.webp'),url('/img/farm/statek-hero.svg')"><div class="stk-pasture">${pasture}</div></div>
       ${cta}${feedBtn}
       ${f.barn && f.barn.next_cost ? `<div style="margin:10px 0 0;text-align:center"><button class="btn btn-ghost" data-action="farm-barn" data-cost="${f.barn.next_cost}" title="Prestige stodoly: každý level = +1 slot na zvíře (navždy)">🏠 Vylepšit stodolu na lvl ${f.barn.level + 1} (+1 slot) · ${fmtPts(f.barn.next_cost)}</button></div>`
         : f.barn && f.barn.level > 1 ? `<div class="faint" style="margin:10px 0 0;text-align:center;font-size:12px">🏆 Stodola na maximu (lvl ${f.barn.level})</div>` : ""}
@@ -3129,7 +3178,7 @@ async function farmBarnUpgrade(cost) {
 }
 function farmSlotHTML(s, hasFox, hasTurbo) {
   if (s.empty) return `<div class="stk-animal stk-empty"><span class="stk-a-emoji">➕</span><div class="stk-a-name faint">volno</div></div>`;
-  const img = stkImg(s.animal, s.icon, "stk-a");
+  const img = stkImg(s.animal, s.icon, "stk-a", s.state);
   const name = `<div class="stk-a-name">${esc(s.name)} <span class="stk-a-lvl">⭐${s.level}</span></div>`;
   const sell = `<button class="stk-a-sell" data-action="farm-sell" data-slot="${s.slot}" title="Prodat (část ceny zpět)">✕</button>`;
   // celé zvíře klikací (hlad→nakrmit, hotovo→sebrat); ✕ v rohu = prodej (closest data-action to vyřeší)
@@ -3139,9 +3188,12 @@ function farmSlotHTML(s, hasFox, hasTurbo) {
   if (s.state === "hungry") return `<div class="stk-animal is-hungry" data-action="farm-feed" data-slot="${s.slot}" title="Má hlad — klikni a nakrm">${sell}${hasTurbo ? `<button class="stk-a-turbo" data-action="farm-turbo" data-slot="${s.slot}" title="Použít turbo žeton: tento cyklus 2× rychleji" aria-label="Turbo krmení ${esc(s.name)}">⚡2×</button>` : ""}<div class="stk-badge hungry">🌾 ${fmtPts(s.feed)}</div>${img}${name}</div>`;
   return `<div class="stk-animal is-growing" title="Vyrábí ${esc(s.product || "")} — ${s.pico} +${fmtPts(s.reward)} až bude hotovo">${sell}<div class="stk-badge time grd-time" data-left="${s.seconds_left}">${grdDur(s.seconds_left)}</div>${img}${name}</div>`;
 }
+function farmFoxHTML() {
+  return `<div class="stk-animal stk-fox" title="Liška! Vyřeš ji nahoře 🦊"><div class="stk-badge hungry">🦊!</div>${stkImg("fox", "🦊", "stk-a")}<div class="stk-a-name">Liška</div></div>`;
+}
 function farmShopHTML(a) {
   const locked = a.locked;
-  const img = stkImg(a.key, a.icon, "stk-card");
+  const img = stkImg(a.key, a.icon, "stk-card", "producing");
   const det = a.utility ? `+${a.prod_bonus}% produkce všech` : `krmivo ${fmtPts(a.feed)} · ${a.hours}h · ${a.pico} +${fmtPts(a.reward)}`;
   const attr = locked ? "disabled" : `data-action="farm-buy" data-animal="${a.key}" data-name="${esc(a.name)}" data-icon="${esc(a.icon)}" data-cost="${a.cost}"`;
   return `<button class="stk-card${a.owned ? " owned" : ""}" ${attr}>${locked ? `<span class="stk-card-lock">🔒 jen sub</span>` : ""}${a.starter ? `<span class="stk-card-lock" style="background:rgba(85,214,105,.16);border-color:rgba(85,214,105,.45);color:#7fe89a">🐣 startovací sleva</span>` : ""}
@@ -5226,8 +5278,12 @@ async function adminRaffles() {
         <div style="display:flex;gap:10px;align-items:center;margin-bottom:12px">${thumb}<div><div style="font-weight:700">${esc(p.name)}${pb}</div><div class="faint" style="font-size:13px">${fmtPts(p.cost_points)} / tiket</div></div></div>
         <div class="row-between" style="margin-bottom:6px"><span class="muted">Tiketů:</span><b>${p.tickets}</b></div>
         <div class="row-between" style="margin-bottom:12px"><span class="muted">Účastníků:</span><b>${p.participants}</b></div>
-        ${p.winner ? `<div class="panel gold" style="margin-bottom:12px;padding:10px 12px"><div class="row-between" style="gap:8px;flex-wrap:wrap"><span>🏆 Výherce: <a class="prof-link" href="#/u/${encodeURIComponent(p.winner)}"><b>${esc(p.winner)}</b></a></span><span style="display:flex;gap:6px">${p.winner_id ? `<a class="btn btn-primary btn-sm" href="#/zpravy/${p.winner_id}" title="Napsat výherci zprávu">✉️ Napsat</a>` : ""}<button class="btn btn-ghost btn-sm" data-action="raffle-undo" data-id="${p.id}" title="Smazat výherce – účastníci zůstanou">↩️ Vrátit</button></span></div></div>` : ""}
-        <button class="btn btn-primary btn-block" data-action="raffle-draw" data-id="${p.id}" ${p.tickets ? "" : "disabled"}>🎲 ${p.winner ? "Losovat znovu" : "Vylosovat výherce"}</button>
+        ${p.winner ? `<div class="panel gold" style="margin-bottom:12px;padding:10px 12px"><div class="row-between" style="gap:8px;flex-wrap:wrap"><span>🏆 Výherce: <a class="prof-link" href="#/u/${encodeURIComponent(p.winner)}"><b>${esc(p.winner)}</b></a></span><span style="display:flex;gap:6px"><a class="btn btn-ghost btn-sm" href="/verify.html?pid=${p.id}" target="_blank" title="Provably-fair ověření losu">🔍 Ověřit</a>${p.winner_id ? `<a class="btn btn-primary btn-sm" href="#/zpravy/${p.winner_id}" title="Napsat výherci zprávu">✉️ Napsat</a>` : ""}<button class="btn btn-ghost btn-sm" data-action="raffle-undo" data-id="${p.id}" title="Smazat výherce + commit – účastníci zůstanou">↩️ Vrátit</button></span></div></div>` : ""}
+        ${!p.winner && p.committed ? `<div class="panel" style="margin-bottom:12px;padding:10px 12px;font-size:12px"><div class="muted" style="margin-bottom:4px">🔒 Zacommitováno — zveřejni divákům (chat):</div><code style="word-break:break-all;font-size:11px">seed_hash: ${esc((p.seed_hash||"").slice(0,32))}…</code></div>` : ""}
+        ${p.winner ? "" : p.committed
+          ? `<button class="btn btn-primary btn-block" data-action="raffle-draw" data-id="${p.id}">🎲 2️⃣ Odhalit &amp; vylosovat</button>
+             <button class="btn btn-ghost btn-block btn-sm" data-action="raffle-undo" data-id="${p.id}" style="margin-top:6px" title="Zahodit commit – losuj s novým seedem">↩️ Zahodit commit</button>`
+          : `<button class="btn btn-primary btn-block" data-action="raffle-commit" data-id="${p.id}" ${p.tickets ? "" : "disabled"}>🔒 1️⃣ Commit (zamknout seed)</button>`}
       </div>`;
     }).join("")}</div>` : `<div class="empty"><div class="big">🎟️</div>Žádné tomboly. Vytvoř odměnu typu „Tombola”.</div>`;
   } catch (e) { box.innerHTML = `<div class="empty">${esc(e.message)}</div>`; }
@@ -5338,8 +5394,16 @@ function finishRaffle(reel, target, winner) {
   }
   toast(`Výherce vylosován: ${winner.username} 🎉`, "success");
 }
+async function commitRaffle(id) {
+  if (!confirm("Zamknout los? Vygeneruje se tajný seed, zveřejní se jeho hash + snímek tiketů. Po commitu už tikety neměň — pak losuj.")) return;
+  try {
+    const r = await api(`/admin/raffle/${id}/commit`, { method: "POST" });
+    toast(`Zacommitováno 🔒 seed_hash ${r.seed_hash.slice(0, 16)}… (${r.total_tickets} tiketů). Zveřejni divákům!`, "success");
+    adminRaffles();
+  } catch (e) { toast(e.message, "error"); }
+}
 async function drawRaffle(id) {
-  if (!requireTypedConfirm("Spouštíš ostré losování tomboly. Výsledek se uloží do auditu.", "LOSOVAT")) return;
+  if (!requireTypedConfirm("Odhalíš seed a vylosuješ výherce z commitu. Výsledek je deterministický a ověřitelný.", "LOSOVAT")) return;
   let parts = [];
   try {
     const d = await api(`/shop/raffle/${id}/entries`);
@@ -5654,8 +5718,8 @@ async function adminCasehug() {
           <div class="section-title" style="margin-top:0">Historie připsaných vkladů</div>
           <span class="faint" style="font-size:12.5px">Tento měsíc: <b>${m.count || 0}×</b> · ${Number(m.eur || 0)} € nahlášeno · ${Number(m.points || 0).toLocaleString("cs-CZ")} 🌾 vyplaceno — srovnej s reálnou affiliate výplatou!</span>
         </div>
-        ${(d.recent || []).length ? `<div class="table-wrap" style="margin-top:10px"><table class="tbl"><thead><tr><th>Kdo</th><th>Vklad</th><th>ID vkladu</th><th>Sedláci</th><th>Kdy</th></tr></thead><tbody>
-          ${d.recent.map((r) => `<tr><td><b>${esc(r.username || "smazaný účet")}</b></td><td><b>${esc((r.reason.match(/CaseHug (\d+) €/) || [])[1] || "?")} €</b></td><td class="faint" style="font-family:monospace">${esc((r.reason.match(/\[([A-Za-z0-9_-]+)\]/) || [])[1] || "—")}</td><td style="color:var(--ok,#7ad97a)">+${Number(r.change).toLocaleString("cs-CZ")} 🌾</td><td class="faint">${timeAgo(r.created_at)}</td></tr>`).join("")}
+        ${(d.recent || []).length ? `<div class="table-wrap" style="margin-top:10px"><table class="tbl"><thead><tr><th>Kdo</th><th>Vklad</th><th>ID vkladu</th><th>Sedláci</th><th>Kdy</th><th></th></tr></thead><tbody>
+          ${d.recent.map((r) => `<tr><td><b>${esc(r.username || "smazaný účet")}</b></td><td><b>${esc((r.reason.match(/CaseHug (\d+) €/) || [])[1] || "?")} €</b></td><td class="faint" style="font-family:monospace">${esc((r.reason.match(/\[([A-Za-z0-9_-]+)\]/) || [])[1] || "—")}</td><td style="color:var(--ok,#7ad97a)">+${Number(r.change).toLocaleString("cs-CZ")} 🌾</td><td class="faint">${timeAgo(r.created_at)}</td><td><button class="btn btn-sm" data-action="ch-undo" data-log="${r.id}" data-who="${esc(r.username || "smazaný účet")}" data-pts="${r.change}" title="Odvolat vklad (vrátí sedláky i XP, uvolní ID vkladu)">🗑️</button></td></tr>`).join("")}
         </tbody></table></div>` : `<div class="empty">Zatím žádné vklady.</div>`}
       </div>`;
     const inp = $("#chSearch");
@@ -5687,7 +5751,18 @@ function chRenderPicked(presets) {
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
       ${presets.map(([eur, arr]) => `<button class="btn" data-action="ch-award" data-eur="${eur}"
         title="+${arr[1]} sedláků, +${arr[0]} XP">${eur} € <span class="faint" style="font-size:11px">+${Number(arr[1]).toLocaleString("cs-CZ")}🌾 · +${Number(arr[0]).toLocaleString("cs-CZ")} XP</span></button>`).join("")}
+    </div>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:10px">
+      <input class="input" id="chCustomEur" type="number" min="1" max="500" step="1" placeholder="Vlastní částka €" style="max-width:160px">
+      <button class="btn" data-action="ch-award-custom">Připsat</button>
+      <span class="faint" style="font-size:12px" id="chCustomCalc">kurz 100 🌾 + 100 XP za 1 €</span>
     </div>`;
+  $("#chCustomEur").addEventListener("input", () => {
+    const eur = parseInt($("#chCustomEur").value, 10);
+    $("#chCustomCalc").textContent = eur >= 1 && eur <= 500
+      ? `= +${(eur * 100).toLocaleString("cs-CZ")} 🌾 · +${(eur * 100).toLocaleString("cs-CZ")} XP`
+      : "kurz 100 🌾 + 100 XP za 1 € (max 500 €)";
+  });
 }
 async function chAward(eur, force) {
   const p = chState.picked;
@@ -6697,6 +6772,18 @@ function handleAction(action, el) {
     case "admin-tab": renderAdminTab(el.dataset.tab); break;
     case "ch-pick": chState.picked = { id: parseInt(el.dataset.id, 10), name: el.dataset.name }; adminCasehug(); break;
     case "ch-award": chAward(el.dataset.eur, false); break;
+    case "ch-undo": {
+      if (!confirm(`Odvolat vklad ${el.dataset.who} (−${Number(el.dataset.pts).toLocaleString("cs-CZ")} sedláků i XP)? Řádek zmizí a ID vkladu půjde použít znovu.`)) break;
+      api("/admin/casehug/undo", { method: "POST", body: { log_id: parseInt(el.dataset.log, 10) } })
+        .then((r) => { toast(`🗑️ Vklad odvolán (−${Number(r.reversed).toLocaleString("cs-CZ")}).`, "info"); adminCasehug(); })
+        .catch((e) => toast(e.message, "error"));
+      break;
+    }
+    case "ch-award-custom": {
+      const eur = parseInt($("#chCustomEur")?.value || "", 10);
+      if (!(eur >= 1 && eur <= 500)) { toast("Zadej celou částku 1–500 €.", "error"); break; }
+      chAward(eur, false); break;
+    }
     case "modapp-accept": modAppDecide(el.dataset.id, true, el.dataset.name); break;
     case "modapp-reject": modAppDecide(el.dataset.id, false, el.dataset.name); break;
     case "modapp-toggle": modAppToggle(); break;
@@ -6736,6 +6823,7 @@ function handleAction(action, el) {
     case "mines-ban-add": minesBanAdd(); break;
     case "mines-unban": minesUnban(el.dataset.username); break;
     case "subs-refresh": adminSubs(); break;
+    case "raffle-commit": commitRaffle(id); break;
     case "raffle-draw": drawRaffle(id); break;
     case "raffle-undo": undoRaffleDraw(id); break;
     case "pred-amt": { const pa = $("#predAmt-" + el.dataset.pid); if (pa) { pa.value = el.dataset.amt; pa.focus(); } break; }
@@ -6848,7 +6936,7 @@ document.addEventListener("click", (e) => {
 
 /* Service worker pro Web Push (notifikace do mobilu). Registruje se 1× na pozadí. */
 if ("serviceWorker" in navigator) {
-  window.addEventListener("load", () => { navigator.serviceWorker.register("/sw.js?v=2026071230").catch(() => {}); });
+  window.addEventListener("load", () => { navigator.serviceWorker.register("/sw.js?v=2026071235").catch(() => {}); });
 }
 
 document.addEventListener("change", (e) => {

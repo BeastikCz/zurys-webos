@@ -435,7 +435,7 @@ main { padding: 0 0 80px; min-height: calc(100vh - var(--header-h)); overflow-x:
 .form { display: flex; flex-direction: column; gap: 14px; }
 .field { display: flex; flex-direction: column; gap: 6px; }
 .field label { font-size: 12px; font-weight: 700; color: var(--text-dim); }
-.input, .select, textarea.input { background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px; padding: 11px 13px; color: var(--text); font-size: 14.5px; width: 100%; transition: .14s; }
+.input, .select, textarea.input { background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px; padding: 11px 13px; color: var(--text); font-size: 16px; width: 100%; transition: .14s; }
 .input:focus, .select:focus, textarea.input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(255,157,46,.16); }
 .field-row { display: flex; gap: 12px; flex-wrap: wrap; } .field-row .field { flex: 1; min-width: 130px; }
 .check { display: flex; align-items: center; gap: 9px; cursor: pointer; font-size: 14px; } .check input { width: 17px; height: 17px; accent-color: var(--accent); }
@@ -1666,45 +1666,158 @@ body::before { display: none !important; }
 .lvl-tip .lt-m b { color: var(--accent); font-weight: 800; }
 @media (max-width:760px){ .lvl-tip { display: none; } }
 
-/* Dekorace zahrádky */
-.decor-shelf { display: flex; gap: 12px; flex-wrap: wrap; font-size: 38px; padding: 14px 16px; margin-bottom: 14px;
-  border-radius: 16px; border: 1px solid var(--border);
-  background: linear-gradient(180deg, rgba(126,217,87,.06), rgba(60,44,22,.18)); }
-.decor-shop { display: flex; gap: 12px; flex-wrap: wrap; }
-.decor-card { flex: 1 1 130px; display: flex; flex-direction: column; align-items: center; gap: 6px;
-  padding: 14px 10px; border-radius: 16px; border: 1.5px solid var(--border); background: rgba(255,255,255,.03); }
-.decor-card.owned { border-color: var(--farm-green); background: rgba(126,217,87,.07); }
-.decor-ico { font-size: 38px; }
-.decor-card b { font-size: 13px; }
-.decor-owned { font-size: 12px; font-weight: 800; color: var(--farm-green); }
-
-/* Zahrádka (farm-sim) */
-.grd-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 14px; }
-.grd-plot { aspect-ratio: 1; border-radius: 20px; border: 2px solid var(--border);
-  background: linear-gradient(180deg, rgba(110,80,40,.18), rgba(60,44,22,.22));
-  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; padding: 12px; transition: transform .15s, border-color .15s; }
-.grd-plot.grd-empty { cursor: pointer; border-style: dashed; }
-.grd-plot.grd-empty:hover { transform: translateY(-3px); border-color: var(--accent); }
-.grd-plot.grd-ready { border-color: var(--farm-green); box-shadow: 0 0 26px -8px rgba(126,217,87,.5); animation: bpPulse 2s ease-in-out infinite; }
-.grd-crop { font-size: 46px; line-height: 1; filter: drop-shadow(0 6px 12px rgba(0,0,0,.5)); }
-.grd-sprout { animation: sedlakBob 2.4s ease-in-out infinite; }
-.grd-lbl { font-size: 12.5px; font-weight: 800; color: var(--text-dim); }
-.grd-time { font-size: 12px; font-weight: 900; color: var(--accent); font-variant-numeric: tabular-nums; }
-/* 🐛 Chrobáci na záhonu – riziko (zaplať záchranu, jinak půlka sklizně) */
-.grd-plot.grd-pestd { border-color: #e0673c; box-shadow: 0 0 24px -9px rgba(224,103,60,.55); animation: bpPulse 1.8s ease-in-out infinite; }
-.grd-rescue-btn { background: linear-gradient(135deg,#ff7a3c,#e0531f); color: #fff; border: none; border-radius: 999px; padding: 7px 12px; font-weight: 800; font-size: 12px; cursor: pointer; box-shadow: 0 3px 10px -4px rgba(224,83,31,.6); }
-.grd-rescue-btn:hover { filter: brightness(1.08); }
-.grd-harv-half { background: none; border: 1px solid var(--border); color: var(--text-dim); border-radius: 999px; padding: 4px 10px; font-size: 11px; font-weight: 700; cursor: pointer; margin-top: 2px; }
-.grd-harv-half:hover { border-color: var(--text-dim); color: var(--text); }
-.grd-shop { display: flex; gap: 12px; flex-wrap: wrap; }
-.grd-seed { flex: 1 1 150px; display: flex; flex-direction: column; gap: 4px; align-items: flex-start;
-  padding: 12px 14px; border-radius: 14px; border: 1.5px solid var(--border); background: rgba(255,255,255,.03);
-  cursor: pointer; text-align: left; color: var(--text); transition: .15s; }
+/* Zahrádka — malovaná herní scéna */
+.garden-head-row { display: flex; align-items: center; justify-content: space-between; gap: 20px; }
+.garden-page-head { flex: 1; margin: 10px 0 12px !important; }
+.garden-page-head .page-mascot { width: 58px; height: 58px; }
+.garden-page-head h1 { margin: 0; font-size: clamp(29px,3vw,36px); line-height: 1.05; }
+.garden-page-head p { max-width: none; margin-top: 3px; font-size: 14px; line-height: 1.25; white-space: nowrap; }
+.garden-head-row #gardenPush { flex: none; }
+.garden-head-row .gpush-btn { margin: 0; white-space: nowrap; }
+.grd-scene { position: relative; min-height: 620px; overflow: hidden; border-radius: 22px; border: 1px solid #60471f;
+  background: var(--grd-hero) center/cover no-repeat; box-shadow: 0 28px 66px -32px #000, inset 0 -100px 120px -50px rgba(5,3,1,.8); }
+.grd-scene::after { content: ""; position: absolute; inset: 0; z-index: 3; pointer-events: none;
+  background: linear-gradient(180deg, transparent 40%, rgba(8,5,2,.16) 66%, rgba(8,5,2,.72) 100%); }
+.grd-scene-decorations { position: absolute; inset: 0; z-index: 1; pointer-events: none; }
+.grd-scene-decor { position: absolute; width: clamp(56px, 8vw, 118px); height: clamp(56px, 8vw, 118px); object-fit: contain;
+  filter: drop-shadow(0 12px 10px rgba(0,0,0,.38)); }
+.grd-decor-sunflower { left: 2%; top: 28%; } .grd-decor-tree { left: 29%; top: 13%; width: clamp(90px, 13vw, 180px); height: clamp(90px, 13vw, 180px); }
+.grd-decor-well { left: 40%; top: 28%; } .grd-decor-tractor { left: 55%; top: 32%; }
+.grd-decor-house { right: 18%; top: 16%; width: clamp(82px, 11vw, 150px); height: clamp(82px, 11vw, 150px); }
+.grd-decor-rainbow { right: 3%; top: 5%; width: clamp(80px, 11vw, 158px); }
+.grd-decor-scarecrow { right: 9%; top: 30%; } .grd-decor-fountain { right: 1%; top: 31%; }
+.grd-grid { position: absolute; z-index: 2; inset: 39% 2.4% 13%; display: grid; grid-template-columns: repeat(4,minmax(0,1fr));
+  align-items: end; gap: clamp(8px, 1.4vw, 22px); }
+.grd-scene.many { min-height: 840px; }
+.grd-scene.many .grd-grid { top: 32%; grid-template-rows: repeat(2,minmax(0,1fr)); }
+.grd-plot { position: relative; min-width: 0; min-height: 225px; padding: 0; border: 0; background: none; color: var(--text);
+  display: flex; flex-direction: column; align-items: center; justify-content: flex-end; transition: transform .18s, filter .18s; }
+button.grd-plot { font: inherit; cursor: pointer; }
+.grd-plot:hover { transform: translateY(-4px); }
+.grd-plot-art { position: relative; width: 100%; height: 174px; display: flex; align-items: flex-end; justify-content: center; }
+.grd-crop-img { display: block; width: min(100%, 270px); height: 100%; object-fit: contain; filter: drop-shadow(0 12px 10px rgba(0,0,0,.42)); }
+.grd-crop-fallback { font-size: 56px; filter: drop-shadow(0 8px 10px rgba(0,0,0,.45)); }
+.grd-pest-img { position: absolute; width: 42%; height: 58%; right: 5%; top: 9%; object-fit: contain;
+  filter: drop-shadow(0 0 12px rgba(235,75,32,.7)); animation: bpPulse 1.2s ease-in-out infinite; }
+.grd-pest-fallback { position: absolute; right: 12%; top: 18%; font-size: 34px; }
+.grd-plot.ready .grd-crop-img { filter: drop-shadow(0 0 18px rgba(126,217,87,.8)) drop-shadow(0 12px 10px rgba(0,0,0,.42)); }
+.grd-plot.eaten .grd-crop-img { filter: grayscale(.7) brightness(.68) drop-shadow(0 10px 8px rgba(0,0,0,.45)); }
+.grd-plot-status { width: min(92%, 218px); min-height: 58px; margin-top: -5px; padding: 8px 11px; border-radius: 11px;
+  display: flex; align-items: center; justify-content: space-between; gap: 8px; z-index: 2;
+  background: rgba(24,17,8,.9); border: 1px solid rgba(255,190,60,.32); box-shadow: 0 10px 24px -14px #000; backdrop-filter: blur(5px); }
+.grd-plot-status > b { font-size: 13.5px; white-space: nowrap; }
+.grd-plot-status > span { color: var(--text-dim); font-size: 12px; }
+.grd-plot-action { min-width: 0; display: flex; align-items: center; justify-content: flex-end; gap: 6px; flex-wrap: wrap; }
+.grd-time { font-size: 12px; font-weight: 900; color: var(--accent); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.grd-time.danger { color: #ff7c5d; }
+.grd-fert-ok { color: #7ed957; font-size: 11px; font-weight: 800; white-space: nowrap; }
+.grd-fert-btn, .grd-rescue-btn, .grd-harv-half { border-radius: 999px; padding: 5px 9px; font-size: 10.5px; font-weight: 800; cursor: pointer; }
+.grd-fert-btn { border: 1px solid rgba(126,217,87,.45); color: #9be879; background: rgba(35,76,25,.78); }
+.grd-rescue-btn { border: 0; color: #fff; background: #d85d32; }
+.grd-harv-half { border: 1px solid var(--border); color: var(--text-dim); background: rgba(15,10,5,.75); }
+.grd-scene-actions { position: absolute; z-index: 4; left: 50%; bottom: 12px; transform: translateX(-50%); width: 96%;
+  display: flex; align-items: center; justify-content: center; gap: 18px; flex-wrap: wrap; }
+.grd-primary { border: 0; border-radius: 13px; padding: 12px 24px; min-width: 190px; cursor: pointer; color: #241400;
+  background: linear-gradient(135deg,#ffd75e,#ffac20); box-shadow: 0 10px 26px -10px rgba(255,172,32,.75); font-size: 14px; font-weight: 900; }
+.grd-primary.secondary { color: #d9c8a7; background: rgba(20,14,8,.86); border: 1px solid #69512d; box-shadow: none; }
+.grd-next { color: #e8dcc4; font-size: 13px; text-shadow: 0 2px 5px #000; }
+.grd-shop-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin: 15px 4px 8px; }
+.grd-shop-head h2 { margin: 0; font-size: 17px; color: #f5ead3; }
+.grd-shop-head span { color: #8ddf70; font-size: 12px; font-weight: 700; }
+.grd-shop { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 11px; }
+.grd-seed { min-width: 0; min-height: 104px; display: grid; grid-template-columns: 76px minmax(0,1fr); grid-template-rows: 1fr auto;
+  column-gap: 10px; align-items: center; padding: 10px 12px; border-radius: 14px; border: 1px solid #4b361b;
+  background: rgba(25,18,11,.84); cursor: pointer; text-align: left; color: var(--text); transition: transform .15s,border-color .15s; }
 .grd-seed:hover { transform: translateY(-2px); border-color: var(--accent); }
-.grd-seed.sel { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent-glow), 0 0 24px -8px var(--accent-glow); background: rgba(255,180,35,.08); }
-.grd-seed .grd-si { font-size: 26px; }
-.grd-seed b { font-size: 14px; }
-.grd-seed .faint { font-size: 11.5px; }
+.grd-seed.sel { border-color: #79d95a; box-shadow: 0 0 0 1px rgba(121,217,90,.3),0 0 26px -10px rgba(121,217,90,.5); background: rgba(44,66,24,.28); }
+.grd-seed-art { grid-row: 1 / 3; width: 76px; height: 76px; display: grid; place-items: center; }
+.grd-seed-img { width: 100%; height: 100%; object-fit: contain; filter: drop-shadow(0 7px 8px rgba(0,0,0,.4)); }
+.grd-seed-copy { min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.grd-seed-copy b { font-size: 14px; color: #f4ead5; }
+.grd-seed-copy span { color: #ad9b7b; font-size: 11.5px; }
+.grd-seed-gain { display: flex; gap: 10px; align-items: center; justify-content: space-between; font-size: 11.5px; }
+.grd-seed-gain b { color: #f4bd42; } .grd-seed-gain strong { color: #76e05c; }
+.grd-rules, .garden-pest-info { margin: 11px 4px; color: #aa9978; font-size: 12px; line-height: 1.55; }
+.grd-rules b, .garden-pest-info b { color: #ead7ad; }
+
+/* Dekorace zahrádky */
+.garden-tools { display: grid; grid-template-columns: minmax(160px,.7fr) minmax(300px,1.5fr) minmax(390px,2fr); gap: 10px; margin-top: 12px; }
+.garden-fert-card, .garden-decor-shelf, .garden-economy { min-width: 0; border: 1px solid #4b361b; border-radius: 14px;
+  background: rgba(24,17,10,.8); padding: 11px 13px; }
+.garden-fert-card { display: flex; align-items: center; gap: 10px; }
+.garden-fert-img { width: 52px; height: 58px; object-fit: contain; }
+.garden-fert-card span { display: flex; flex-direction: column; gap: 4px; }
+.garden-fert-card b, .garden-decor-shelf > b, .garden-economy > b { font-size: 12.5px; color: #eee1c8; }
+.garden-fert-card small { color: #7ed957; font-size: 10.5px; }
+.decor-shelf { display: flex; align-items: flex-end; gap: 7px; margin-top: 8px; overflow-x: auto; }
+.decor-shelf-item { position: relative; flex: 0 0 46px; width: 46px; height: 46px; }
+.decor-shelf-img { width: 100%; height: 100%; object-fit: contain; }
+.decor-shelf-item i { position: absolute; right: -2px; bottom: -2px; display: grid; place-items: center; width: 15px; height: 15px;
+  border-radius: 50%; color: #fff; background: #64be45; font-size: 9px; font-style: normal; }
+.garden-economy-list { display: flex; gap: 8px; margin-top: 7px; overflow-x: auto; }
+.garden-economy-item { flex: 1 0 118px; min-width: 0; display: grid; grid-template-columns: 38px minmax(0,1fr); align-items: center; gap: 7px; }
+.garden-economy-img { width: 38px; height: 42px; object-fit: contain; }
+.garden-economy-item span { display: flex; flex-direction: column; gap: 2px; }
+.garden-economy-item span b { font-size: 11px; } .garden-economy-item span small { color: #7ed957; font-size: 9.5px; }
+.garden-economy-item strong { grid-column: 1 / 3; color: #7ed957; font-size: 10px; }
+.garden-economy-item .bp-claim { grid-column: 1 / 3; padding: 5px 8px; font-size: 10px; }
+.garden-upgrade-title { margin: 20px 2px 8px; color: #f0e4cc; font-size: 14px; font-weight: 800; }
+.decor-shop { display: grid; grid-template-columns: repeat(auto-fit,minmax(135px,1fr)); gap: 10px; }
+.decor-card { min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 12px 9px;
+  border-radius: 14px; border: 1px solid #4b361b; background: rgba(25,18,11,.78); text-align: center; }
+.decor-card-img { width: 78px; height: 68px; object-fit: contain; }
+.decor-card b { font-size: 12.5px; } .decor-card .faint { font-size: 11px; }
+.decor-ico { font-size: 34px; }
+
+@media (max-width: 980px) {
+  .garden-tools { grid-template-columns: 1fr 2fr; }
+  .garden-economy { grid-column: 1 / -1; }
+  .grd-shop { grid-template-columns: repeat(2,minmax(0,1fr)); }
+}
+@media (max-width: 720px) {
+  .garden-head-row { align-items: flex-start; flex-direction: column; gap: 0; }
+  .garden-page-head p { white-space: normal; }
+  .garden-head-row #gardenPush { margin-bottom: 10px; }
+  .grd-scene { min-height: 710px; background-position: 42% center; }
+  .grd-scene.many { min-height: 1250px; }
+  .grd-grid, .grd-scene.many .grd-grid { inset: 25% 3% 18%; grid-template-columns: repeat(2,minmax(0,1fr)); grid-template-rows: none; align-content: end; }
+  .grd-plot { min-height: 175px; }
+  .grd-plot-art { height: 128px; }
+  .grd-scene-decor { transform: scale(.76); }
+  .grd-decor-tree, .grd-decor-well, .grd-decor-tractor, .grd-decor-house { display: none; }
+  .grd-scene-actions { gap: 8px; }
+  .grd-primary { min-width: 150px; padding: 10px 13px; font-size: 12px; }
+  .grd-next { width: 100%; text-align: center; }
+  .garden-tools { grid-template-columns: 1fr; }
+  .garden-economy { grid-column: auto; }
+}
+@media (max-width: 460px) {
+  .garden-page-head { margin: 6px 0 8px !important; }
+  .garden-page-head .page-mascot { width: 44px; height: 44px; }
+  .garden-page-head h1 { font-size: 27px; }
+  .garden-page-head p { font-size: 12px; line-height: 1.3; }
+  .garden-head-row #gardenPush { margin-bottom: 8px; }
+  .garden-head-row .gpush-btn { padding: 8px 10px; font-size: 11px; }
+  .grd-scene { min-height: 640px; border-radius: 16px; background-position: 45% center; }
+  .grd-scene.many { min-height: 1050px; }
+  .grd-grid, .grd-scene.many .grd-grid { inset: 23% 2% 17%; }
+  .grd-plot { min-height: 150px; }
+  .grd-plot-art { height: 104px; }
+  .grd-plot-status { min-height: 58px; padding: 6px 8px; flex-direction: column; justify-content: center; gap: 4px; text-align: center; }
+  .grd-plot-status > b { font-size: 11.5px; }
+  .grd-plot-action { justify-content: center; }
+  .grd-fert-btn, .grd-rescue-btn, .grd-harv-half { min-height: 32px; }
+  .grd-shop { grid-template-columns: repeat(2,minmax(0,1fr)); gap: 8px; }
+  .grd-seed { min-height: 118px; grid-template-columns: 52px minmax(0,1fr); grid-template-rows: 1fr auto; column-gap: 6px; padding: 8px; }
+  .grd-seed-art { grid-row: 1; width: 52px; height: 52px; }
+  .grd-seed-copy { grid-column: 2; grid-row: 1; gap: 2px; }
+  .grd-seed-copy b { font-size: 12.5px; }
+  .grd-seed-copy span { font-size: 10px; }
+  .grd-seed-gain { grid-column: 1 / -1; grid-row: 2; gap: 4px; font-size: 10.5px; }
+  .garden-tools { gap: 8px; }
+  .garden-fert-card, .garden-decor-shelf, .garden-economy { padding: 9px 11px; }
+  .decor-shelf { flex-wrap: nowrap; }
+}
 
 /* 🔨 Aukce o skiny */
 .auc-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr)); gap: 14px; }

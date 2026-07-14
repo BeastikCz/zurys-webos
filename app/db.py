@@ -135,6 +135,22 @@ CREATE TABLE IF NOT EXISTS raffle_winners (
     created_at TEXT NOT NULL
 );
 
+-- Provably-fair los (commit-reveal). 1 řádek = 1 commit pro tombolu. seed se generuje
+-- a zamkne přes seed_hash PŘED losem; při losu se odhalí a winner = HMAC(seed, roster).
+CREATE TABLE IF NOT EXISTS raffle_draws (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    product_id     INTEGER NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+    seed           TEXT NOT NULL,          -- tajný do losu, pak veřejný
+    seed_hash      TEXT NOT NULL,          -- sha256(seed) – zveřejněno při commitu
+    roster         TEXT NOT NULL,          -- kanonický seznam tiketů (řádek = idx\tuser_id\tusername)
+    roster_hash    TEXT NOT NULL,          -- sha256(roster)
+    total_tickets  INTEGER NOT NULL,
+    winner_index   INTEGER,                -- NULL dokud nevylosováno
+    winner_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    committed_at   TEXT NOT NULL,
+    drawn_at       TEXT
+);
+
 -- Přihlašovací relace (session cookie)
 CREATE TABLE IF NOT EXISTS sessions (
     token      TEXT PRIMARY KEY,

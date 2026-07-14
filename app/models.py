@@ -705,9 +705,15 @@ class PointsLogPurgeIn(BaseModel):
 
 # --- Admin: CaseHug vklady (ruční odměna za ověřený screen na Discordu) ---
 class CasehugAwardIn(BaseModel):
-    """Připsání odměny za nahlášený CaseHug vklad. eur MUSÍ být jeden z presetů (server validuje).
+    """Připsání odměny za nahlášený CaseHug vklad. eur = celá eura 1–500, kurz 100 sedláků+XP/€ (server validuje).
     force=True přebije 10min dedup varování (fakt dva stejné vklady po sobě)."""
     user_id: int
     eur: int
     deposit_id: str = ""   # ID vkladu ze screenu (Payment History) – povinné, unikátní napříč vklady
     force: bool = False
+
+
+class CasehugUndoIn(BaseModel):
+    """Odvolání omylem připsaného CaseHug vkladu: vrátí sedláky i XP a smaže řádek logu
+    (tím se uvolní i deposit ID pro správné připsání)."""
+    log_id: int

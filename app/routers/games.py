@@ -3,7 +3,6 @@
 Pravidla férovosti:
 - Tahy validuje SERVER (klient nemůže podvádět – kontrola, čí je tah, volné políčko, výhra).
 - Vklady obou hráčů jsou v „escrow" (odečtou se hned), vítěz bere bank (volitelně mínus rake).
-- Anticheat: dva NE-admin účty ze stejné IP / zařízení proti sobě hrát nemohou (anti-farma).
 - Timeout: když hráč 90 s netáhne, soupeř může nárokovat výhru (anti-zdrhnutí).
 """
 import json
@@ -12,7 +11,6 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 
-from ..config import ROLE_ADMIN
 from ..db import now_iso, get_setting, local_date
 from ..deps import (db_dep, require_user, add_points, try_debit, client_ip, to_public,
                     require_can_gamble, check_wager_limit, restore_wager_limit)
@@ -61,22 +59,6 @@ def _rake_pct(conn) -> int:
         return max(0, min(50, int(get_setting(conn, "games_rake_pct", "0") or "0")))
     except (ValueError, TypeError):
         return 0
-
-
-def _same_person(conn, uid1: int, uid2: int) -> bool:
-    """Sdílí dva účty IP nebo otisk zařízení? (anti-farma: hra sám proti sobě)"""
-    def ips(uid):
-        return {r["ip"] for r in conn.execute(
-            "SELECT DISTINCT ip FROM login_events WHERE user_id=? AND ip IS NOT NULL AND ip!=''", (uid,))}
-
-    def fps(uid):
-        return {r["fp_hash"] for r in conn.execute(
-            "SELECT DISTINCT fp_hash FROM client_signals WHERE user_id=? AND fp_hash IS NOT NULL", (uid,))}
-    if ips(uid1) & ips(uid2):
-        return True
-    if fps(uid1) & fps(uid2):
-        return True
-    return False
 
 
 def _seconds_since(iso_ts: str) -> float:
@@ -395,12 +377,6 @@ def join_game(gid: int, request: Request, user: sqlite3.Row = Depends(require_us
         raise HTTPException(status_code=400, detail="Tahle hra už není volná.")
     if g["p1_id"] == user["id"]:
         raise HTTPException(status_code=400, detail="Tohle je tvoje hra – počkej prosím na soupeře.")
-    # anti-farma: dva NE-admin účty ze stejné IP/zařízení proti sobě nesmí
-    p1 = conn.execute("SELECT role FROM users WHERE id=?", (g["p1_id"],)).fetchone()
-    both_non_admin = user["role"] != ROLE_ADMIN and (not p1 or p1["role"] != ROLE_ADMIN)
-    if both_non_admin and _same_person(conn, g["p1_id"], user["id"]):
-        raise HTTPException(status_code=403,
-                            detail="Nemůžeš hrát sám proti sobě (stejná IP nebo zařízení jako zakladatel).")
     # atomický escrow vkladu
     check_wager_limit(conn, user, g["stake"])        # responsible gaming: denní limit sázek
     if not try_debit(conn, user["id"], g["stake"], "Sázka – piškvorky (vklad)"):
@@ -664,11 +640,6 @@ def duel_join(did: int, request: Request, user: sqlite3.Row = Depends(require_us
         raise HTTPException(status_code=400, detail="Tahle výzva už není volná.")
     if d["p1_id"] == user["id"]:
         raise HTTPException(status_code=400, detail="Tohle je tvoje výzva – počkej prosím na soupeře.")
-    p1 = conn.execute("SELECT role FROM users WHERE id=?", (d["p1_id"],)).fetchone()
-    both_non_admin = user["role"] != ROLE_ADMIN and (not p1 or p1["role"] != ROLE_ADMIN)
-    if both_non_admin and _same_person(conn, d["p1_id"], user["id"]):
-        raise HTTPException(status_code=403,
-                            detail="Nemůžeš hrát sám proti sobě (stejná IP nebo zařízení jako vyzyvatel).")
     check_wager_limit(conn, user, d["stake"])        # responsible gaming: denní limit sázek
     if not try_debit(conn, user["id"], d["stake"], f"{_DUEL_LABEL[d['type']]} – vklad"):
         raise HTTPException(status_code=400,

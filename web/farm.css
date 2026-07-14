@@ -54,8 +54,8 @@
 }
 .stk-pasture {
   position: absolute; inset: auto 0 8%; z-index: 2;
-  display: flex; align-items: flex-end; justify-content: center; gap: clamp(18px, 6vw, 84px);
-  padding: 0 5%;
+  display: flex; align-items: flex-end; justify-content: space-evenly; gap: 12px;
+  padding: 0 2%;
 }
 .stk-animal {
   position: relative; display: flex; flex-direction: column; align-items: center; gap: 6px;
@@ -66,7 +66,7 @@
 .stk-animal.stk-empty { cursor: default; opacity: .72; }
 .stk-animal.stk-empty:hover { transform: none; filter: none; }
 
-.stk-a-img { width: clamp(70px, 9vw, 128px); height: clamp(70px, 9vw, 128px); object-fit: contain;
+.stk-a-img { width: clamp(64px, 7vw, 112px); height: clamp(64px, 7vw, 112px); object-fit: contain;
   filter: drop-shadow(0 12px 12px rgba(0,0,0,.45)); }
 .stk-a-emoji { font-size: clamp(46px, 6vw, 78px); line-height: 1; filter: drop-shadow(0 10px 10px rgba(0,0,0,.5)); }
 .stk-empty .stk-a-emoji { font-size: clamp(34px, 4vw, 54px); opacity: .5; }
@@ -147,15 +147,22 @@
   .stk-shop { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 @media (max-width: 720px) {
-  .stk-scene { aspect-ratio: auto; min-height: 300px; }
-  .stk-pasture { gap: 44px 14px; flex-wrap: wrap; justify-content: center; inset: auto 0 6%; }
+  .stk-wrap { gap: 9px; }
+  .stk-head { padding: 12px 14px; gap: 10px; }
+  .stk-head-ic { width: 42px; height: 42px; }
+  .stk-head p { font-size: 12px; line-height: 1.35; }
+  .stk-status { gap: 7px; padding: 9px 10px; font-size: 12px; }
+  .stk-status .stk-s-l { width: 100%; gap: 6px; flex-wrap: wrap; }
+  .stk-status .stk-s-l > .faint { display: none; }
+  .stk-status .stk-s-r { width: auto; margin-left: 0; gap: 6px; flex-wrap: wrap; }
+  .stk-chip { padding: 4px 7px; }
+  .stk-scene { aspect-ratio: auto; min-height: 280px; }
+  .stk-pasture { gap: 12px 5px; flex-wrap: wrap; justify-content: center; inset: auto 0 6%; padding: 0 2%; }
+  .stk-a-sell { display: flex; width: 32px; height: 32px; top: -12px; right: -12px; }
+  .stk-a-turbo { min-height: 32px; }
   .stk-shop { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .stk-status { font-size: 12px; }
-  .stk-status .stk-s-r { width: 100%; margin-left: 0; }
 }
 @media (max-width: 440px) {
-  .stk-head { padding: 14px; gap: 11px; }
-  .stk-head-ic { width: 46px; height: 46px; }
   .stk-shop { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; }
   .stk-card { padding: 12px 8px; }
   .stk-card-name { font-size: 13px; }
