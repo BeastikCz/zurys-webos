@@ -695,16 +695,18 @@ def leaderboard(conn, uid, limit=50, sort="week"):
         "(SELECT COUNT(*) FROM crew_members m WHERE m.crew_id=c.id) AS members, "
         "(SELECT COALESCE(SUM(CASE WHEN m.week=? THEN m.week_xp ELSE 0 END),0) "
         " FROM crew_members m WHERE m.crew_id=c.id) AS week_xp, "
+        "(SELECT COALESCE(SUM(CASE WHEN m.week=? THEN m.week_xp - COALESCE(m.week_farm,0) ELSE 0 END),0) "
+        " FROM crew_members m WHERE m.crew_id=c.id) AS week_sub_xp, "
         "(SELECT COALESCE(SUM(m.sub_xp),0) FROM crew_members m WHERE m.crew_id=c.id) AS sub_total "
         "FROM crews c ORDER BY " + order + " LIMIT ?",
-        (month, week, limit)).fetchall()
+        (month, week, week, limit)).fetchall()
     m = _member(conn, uid)
     at_war = {r["crew_a_id"] for r in conn.execute("SELECT crew_a_id FROM crew_wars WHERE status='active'")} \
         | {r["crew_b_id"] for r in conn.execute("SELECT crew_b_id FROM crew_wars WHERE status='active'")}
     return {"week": week, "month": month, "sort": sort, "my_crew_id": m["crew_id"] if m else None,
             "crews": [{"rank": i + 1, "id": r["id"], "name": r["name"], "tag": r["tag"],
                        "emblem": r["emblem"], "members": r["members"], "week_xp": r["week_xp"],
-                       "sub_total": r["sub_total"], "month_xp": r["month_xp"],
+                       "week_sub_xp": r["week_sub_xp"], "sub_total": r["sub_total"], "month_xp": r["month_xp"],
                        "level": _level(r["xp"]), "goal": goal_for(r["members"]), "at_war": r["id"] in at_war}
                       for i, r in enumerate(rows)]}
 
