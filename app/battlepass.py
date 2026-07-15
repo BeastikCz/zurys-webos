@@ -87,8 +87,11 @@ def _row(conn, uid: int):
     season = _season()
     row = conn.execute("SELECT baseline, claimed, claimed_premium FROM battlepass WHERE user_id = ? AND season = ?",
                        (uid, season)).fetchone()
-    calc_base = _season_baseline(conn, uid)
     if row is None:
+        # Drahý dopočet (_season_earned = Python průchod points_log za sezónu) JEN při založení
+        # řádku sezóny. HOTFIX 15.7.: dřív běžel při KAŽDÉM volání (me/claims polling ~4/s
+        # × tisíce řádků/user v půlce měsíce = CPU meltdown → pád webu).
+        calc_base = _season_baseline(conn, uid)
         conn.execute(
             "INSERT INTO battlepass (user_id, season, baseline, claimed, claimed_premium, created_at) "
             "VALUES (?, ?, ?, '[]', '[]', ?) ON CONFLICT(user_id, season) DO NOTHING",
@@ -96,11 +99,14 @@ def _row(conn, uid: int):
         conn.commit()
         return calc_base, [], []
     baseline = row["baseline"]
-    if calc_base < baseline:
+    earned = _earned(conn, uid)
+    if earned < baseline:
+        # Pojistka (levná): retro přepočet snížil earned_total pod baseline → srovnej,
+        # ať XP/tier nejde do mínusu. Nahrazuje původní plný přepočet calc_base při každém volání.
         conn.execute("UPDATE battlepass SET baseline = ? WHERE user_id = ? AND season = ?",
-                     (calc_base, uid, season))
+                     (earned, uid, season))
         conn.commit()
-        baseline = calc_base
+        baseline = earned
     return baseline, json.loads(row["claimed"] or "[]"), json.loads(row["claimed_premium"] or "[]")
 
 
