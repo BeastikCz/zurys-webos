@@ -288,7 +288,7 @@ function render() {
     shop: pageShop, leaderboard: pageLeaderboard, exchange: pageExchange, redeem: pageRedeem,
     faq: pageFaq, pravidla: pageRules, cart: pageCart, profile: pageProfile, admin: pageAdmin,
     predikce: pagePredikce, games: pageGames, novinky: pageNews, bonusy: pageBonusy, ukoly: pageUkoly,
-    kosmetika: pageCosmetics, bj: pageBjRoom, zpravy: pageMessages, fair: pageFair, mines: pageMines, crews: pageCrews,
+    kosmetika: pageCosmetics, bj: pageBjRoom, zpravy: pageMessages, podpora: pageSupport, fair: pageFair, mines: pageMines, crews: pageCrews,
     connect: pageConnect, login: pageConnect, register: pageConnect, u: pageUserProfile,
     "mod-nabor": pageModApply, staty: pageGameStats, "sin-slavy": pageHallOfFame, zahrada: pageGarden,
     statek: pageFarm, "moje-cisla": pageWrappedLink, vs: pageVs,
@@ -380,9 +380,9 @@ function renderHeader() {
   const route = currentRoute();
   const u = state.user;
   document.body.classList.toggle("logged-in", !!u);   /* na mobilu uvolní místo v topbaru (skryje wordmark) */
-  const items = [["shop", "Shop"], ["bonusy", "Bonusy"], ["ukoly", "Úkoly"], ["zahrada", "Zahrádka"], ["statek", "Statek"], ["leaderboard", "Žebříček"], ["crews", "Crew"], ["exchange", "Směnárna"], ["games", "Hry"], ["predikce", "Predikce"]];
+  const items = [["shop", "Shop"], ["bonusy", "Bonusy"], ["ukoly", "Úkoly"], ["zahrada", "Zahrádka"], ["statek", "Statek"], ["leaderboard", "Žebříček"], ["crews", "Crew"], ["exchange", "Směnárna"], ["games", "Hry"], ["predikce", "Predikce"], ["podpora", "Podpora"]];
   // Statek + Crew vidí v liště VŠICHNI; bez early access ale klik ukáže teaser (viz render guard)
-  const navDot = (k) => ((k === "bonusy" && u && bonusReady) || (k === "ukoly" && u && questReady)) ? `<span class="nav-dot" title="Máš nevyzvednutou odměnu!"></span>` : "";
+  const navDot = (k) => ((k === "bonusy" && u && bonusReady) || (k === "ukoly" && u && questReady) || (k === "podpora" && u && u.ticket_unread)) ? `<span class="nav-dot" title="Máš něco nového!"></span>` : "";
   const navLinks = items.map(([k, l]) => `<a href="#/${k}" class="nav-link ${route === k ? "active" : ""}">${l}${navDot(k)}</a>`).join("")
     + (isStaff(u) ? `<a href="#/admin" class="nav-link ${route === "admin" ? "active" : ""}">${u.role === "admin" ? "Admin" : "Panel"}</a>` : "");
 
@@ -1201,7 +1201,17 @@ function raffleReveal(d) {
   }, 75);
 }
 
+// Guard proti double-submitu (bug 15.7.: pomalý server → „mrtvé" kliky na Koupit
+// prošly všechny; GROOF890 tak koupil 35 tiketů místo 5). Dokud běží nákup/checkout,
+// další klik se ignoruje a tlačítko je vypnuté.
+let _buyBusy = false;
+
 async function buyProduct(id) {
+  if (_buyBusy) return;
+  _buyBusy = true;
+  const btn = document.querySelector('[data-action="buy"]');
+  const label = btn ? btn.textContent : "";
+  if (btn) { btn.disabled = true; btn.textContent = "⏳ Zpracovávám…"; }
   try {
     const r = await api("/shop/purchase", { method: "POST", body: { product_id: id } });
     state.user.points = r.balance;
@@ -1209,7 +1219,10 @@ async function buyProduct(id) {
     toast(r.message, "success");
     try { confettiBurst(); } catch (e) {}      // 🎉 gamifikace: oslava při koupi
     render();
-  } catch (e) { toast(e.message, "error"); }
+  } catch (e) {
+    toast(e.message, "error");
+    if (btn) { btn.disabled = false; btn.textContent = label; }
+  } finally { _buyBusy = false; }
 }
 
 // Reveal-then-confirm: ukáže CO kupuješ + DOPAD na zůstatek PŘED potvrzením (lepší UX i pojistka).
@@ -1482,8 +1495,10 @@ async function pollDmThread() {
 async function pollDmBadge() {
   if (!state.user || document.hidden) return;
   try {
-    const r = await api("/dm/unread");
-    if (r.count !== state.user.dm_unread) { state.user.dm_unread = r.count; renderHeader(); }
+    const [dm, tickets] = await Promise.all([api("/dm/unread"), api("/tickets/unread")]);
+    if (dm.count !== state.user.dm_unread || tickets.count !== state.user.ticket_unread) {
+      state.user.dm_unread = dm.count; state.user.ticket_unread = tickets.count; renderHeader();
+    }
   } catch (e) { }
 }
 function pageMessages(param) {
@@ -1528,6 +1543,157 @@ async function dmStaffThread(uid) {
     startDmThreadPoll();
   } catch (e) { const b = $("#dmBox"); if (b) b.innerHTML = `<div class="empty">${esc(e.message)}</div>`; }
 }
+
+/* ============================================================
+   SUPPORT TICKETY – oddělené od soukromých zpráv
+============================================================ */
+const SUPPORT_CATEGORIES = {
+  account: { label: "Účet", description: "Přihlášení, profil a problémy s účtem", subs: { login: "Přihlášení", profile: "Profil", other: "Jiný problém s účtem" } },
+  orders: { label: "Platby a objednávky", description: "Shop, objednávky, tomboly a vrácení bodů", subs: { order: "Objednávka", raffle: "Tombola", refund: "Vrácení bodů" } },
+  web: { label: "Web a hry", description: "Chyby webu, výkon a herní problémy", subs: { bug: "Bug report", performance: "Výkon webu", game: "Herní problém" } },
+  other: { label: "Ostatní", description: "Obecný dotaz, nápad nebo zpětná vazba", subs: { question: "Dotaz", idea: "Nápad", other: "Ostatní" } },
+};
+const SUPPORT_STATUSES = {
+  open: { label: "Otevřený", short: "Otevřené" },
+  in_progress: { label: "Řeší se", short: "Řeší se" },
+  resolved: { label: "Vyřešený", short: "Vyřešené" },
+  closed: { label: "Uzavřený", short: "Uzavřené" },
+};
+let _supportTickets = [], _supportStatus = "all", _supportSelected = null, _supportDraftCategory = null;
+function canManageSupport(user) { return !!user && user.role === "admin"; }
+
+function supportCategory(ticket) {
+  const category = SUPPORT_CATEGORIES[ticket.category] || SUPPORT_CATEGORIES.other;
+  return `${category.label} / ${category.subs[ticket.subcategory] || ticket.subcategory}`;
+}
+function supportStatusBadge(status) {
+  const item = SUPPORT_STATUSES[status] || SUPPORT_STATUSES.open;
+  return `<span class="support-status is-${esc(status)}">${item.label}</span>`;
+}
+function supportCounts() {
+  const counts = { all: _supportTickets.length, open: 0, in_progress: 0, resolved: 0, closed: 0 };
+  _supportTickets.forEach((ticket) => { if (counts[ticket.status] != null) counts[ticket.status]++; });
+  return counts;
+}
+function renderSupportTicketList() {
+  const box = document.getElementById("supportTicketList"); if (!box) return;
+  const query = (document.getElementById("supportSearch")?.value || "").trim().toLowerCase();
+  const category = document.getElementById("supportCategoryFilter")?.value || "all";
+  const rows = _supportTickets.filter((ticket) => {
+    if (_supportStatus !== "all" && ticket.status !== _supportStatus) return false;
+    if (category !== "all" && ticket.category !== category) return false;
+    return !query || `${ticket.subject} ${ticket.last_body || ""} ${ticket.username || ""}`.toLowerCase().includes(query);
+  });
+  document.querySelectorAll("[data-action='support-filter']").forEach((button) => button.classList.toggle("active", button.dataset.status === _supportStatus));
+  box.innerHTML = rows.length ? rows.map((ticket) => `
+    <a class="support-ticket-row${ticket.id === _supportSelected ? " active" : ""}" href="#/podpora/${ticket.id}">
+      <div class="support-ticket-top">${supportStatusBadge(ticket.status)}<span class="support-ticket-id">#${ticket.id}</span><span class="support-ticket-age">${timeAgo(ticket.updated_at)}</span></div>
+      <b class="support-ticket-subject">${esc(ticket.subject)}</b>
+      ${canManageSupport(state.user) ? `<span class="support-ticket-user">${esc(ticket.username)}</span>` : ""}
+      <span class="support-ticket-preview">${esc((ticket.last_body || "").slice(0, 110))}</span>
+      <span class="support-ticket-category">${esc(supportCategory(ticket))}</span>
+      ${ticket.unread ? `<span class="dm-badge">${ticket.unread} nové</span>` : ""}
+    </a>`).join("") : `<div class="support-list-empty">Žádné tickety pro tento filtr.</div>`;
+}
+function renderSupportShell() {
+  const counts = supportCounts();
+  const staff = canManageSupport(state.user);
+  $("#view").innerHTML = `<div class="support-page">
+    <div class="support-page-head">
+      <div><span class="support-kicker">ZURYS HELP DESK</span><h1>Podpora</h1><p>${staff ? "Požadavky uživatelů na jednom místě." : "Tady vyřešíme problémy s účtem, objednávkami i webem."}</p></div>
+      ${staff ? `<button class="btn btn-ghost" data-action="support-refresh">Obnovit</button>` : `<button class="btn btn-primary" data-action="support-new">+ Nový ticket</button>`}
+    </div>
+    <div class="support-stats">
+      ${["open", "in_progress", "resolved", "all"].map((status) => `<div class="support-stat"><b>${counts[status]}</b><span>${status === "all" ? "Celkem" : SUPPORT_STATUSES[status].short}</span></div>`).join("")}
+    </div>
+    <div class="support-layout${_supportSelected ? " has-detail" : ""}">
+      <aside class="support-sidebar">
+        <input class="input" id="supportSearch" maxlength="100" placeholder="Hledat tickety…" aria-label="Hledat tickety">
+        <div class="support-filters">${["all", "open", "in_progress", "resolved", "closed"].map((status) => `<button class="support-filter${_supportStatus === status ? " active" : ""}" data-action="support-filter" data-status="${status}">${status === "all" ? "Vše" : SUPPORT_STATUSES[status].short}</button>`).join("")}</div>
+        <select class="select" id="supportCategoryFilter" aria-label="Filtrovat podle kategorie"><option value="all">Všechny kategorie</option>${Object.entries(SUPPORT_CATEGORIES).map(([key, value]) => `<option value="${key}">${value.label}</option>`).join("")}</select>
+        <div id="supportTicketList" class="support-ticket-list"></div>
+      </aside>
+      <section class="support-detail" id="supportDetail"><div class="support-empty"><b>Vyber ticket</b><span>Vlevo otevři existující ticket${staff ? "." : " nebo vytvoř nový."}</span></div></section>
+    </div>
+  </div>`;
+  renderSupportTicketList();
+}
+async function pageSupport(param) {
+  if (!state.user) { navigate("connect"); return; }
+  _supportSelected = Number(param) || null;
+  $("#view").innerHTML = skeletonCards(2);
+  try {
+    _supportTickets = await api(canManageSupport(state.user) ? "/tickets/admin/all" : "/tickets/mine");
+    renderSupportShell();
+    if (_supportSelected) await loadSupportDetail(_supportSelected);
+    refreshMe();
+  } catch (e) { $("#view").innerHTML = `<div class="empty">${esc(e.message)}</div>`; }
+}
+function supportProgress(status) {
+  const order = ["open", "in_progress", "resolved", "closed"], current = order.indexOf(status);
+  return `<div class="support-progress">${order.map((key, index) => `<div class="support-progress-step${index < current ? " done" : index === current ? " current" : ""}"><b>${index + 1}</b><span>${SUPPORT_STATUSES[key].label}</span></div>`).join("")}</div>`;
+}
+async function loadSupportDetail(ticketId) {
+  const box = document.getElementById("supportDetail"); if (!box) return;
+  box.innerHTML = skeletonCards(1);
+  try {
+    const staff = canManageSupport(state.user);
+    const data = await api(staff ? `/tickets/admin/${ticketId}` : `/tickets/${ticketId}`);
+    const ticket = data.ticket, closed = ticket.status === "closed";
+    box.innerHTML = `<a class="support-mobile-back" href="#/podpora">← Všechny tickety</a><div class="support-detail-head">
+        <div><div class="support-detail-title"><h2>${esc(ticket.subject)}</h2>${supportStatusBadge(ticket.status)}</div><span>Ticket #${ticket.id}${staff ? ` · ${esc(ticket.username)}` : ""}</span></div>
+        ${staff ? `<div class="support-status-actions">${Object.entries(SUPPORT_STATUSES).map(([key, value]) => `<button class="btn btn-sm ${ticket.status === key ? "btn-accent" : "btn-ghost"}" data-action="support-status" data-id="${ticket.id}" data-status="${key}"${ticket.status === key ? " disabled" : ""}>${value.label}</button>`).join("")}</div>` : ""}
+      </div>
+      ${supportProgress(ticket.status)}
+      <div class="support-detail-meta"><b>${esc(supportCategory(ticket))}</b><span>Vytvořeno ${timeAgo(ticket.created_at)}</span><span>Aktualizováno ${timeAgo(ticket.updated_at)}</span></div>
+      <div class="support-conversation">${dmBubbles(data.messages, staff)}</div>
+      ${closed ? `<div class="support-closed-note">Ticket je uzavřený. Pokud řešíš něco dalšího, založ nový.</div>` : `<div class="dm-composer support-composer"><textarea class="input" id="supportReplyInput" rows="3" maxlength="2000" placeholder="Napište odpověď…"></textarea><button class="btn btn-primary" data-action="support-reply" data-id="${ticket.id}">Odeslat odpověď</button></div>`}`;
+    const thread = box.querySelector(".dm-thread"); if (thread) thread.scrollTop = thread.scrollHeight;
+    refreshMe();
+  } catch (e) { box.innerHTML = `<div class="empty">${esc(e.message)}</div>`; }
+}
+function openSupportCreate() {
+  _supportDraftCategory = null;
+  openModal(`<div class="support-modal-head"><span class="support-kicker">NOVÝ POŽADAVEK</span><h2>Vytvořit nový ticket</h2><p>Nejdřív vyber oblast, které se požadavek týká.</p></div>
+    <div class="support-category-grid">${Object.entries(SUPPORT_CATEGORIES).map(([key, value]) => `<button class="support-category-card" data-action="support-category" data-category="${key}"><b>${value.label}</b><span>${value.description}</span></button>`).join("")}</div>
+    <div class="support-modal-actions"><button class="btn btn-ghost" data-action="close-modal">Zrušit</button></div>`, "modal-ticket");
+}
+function openSupportCreateForm(category) {
+  _supportDraftCategory = category;
+  const item = SUPPORT_CATEGORIES[category]; if (!item) return;
+  openModal(`<div class="support-modal-head"><span class="support-kicker">${esc(item.label)}</span><h2>Vytvořit nový ticket</h2><p>Čím konkrétnější popis, tím rychleji se požadavek vyřeší.</p></div>
+    <div class="support-ticket-form">
+      <div class="field"><label for="supportSubcategory">Podkategorie</label><select class="select" id="supportSubcategory">${Object.entries(item.subs).map(([key, label]) => `<option value="${key}">${label}</option>`).join("")}</select></div>
+      <div class="field"><label for="supportSubject">Předmět</label><input class="input" id="supportSubject" maxlength="100" placeholder="Krátký popis problému"></div>
+      <div class="field"><label for="supportBody">Popis</label><textarea class="input" id="supportBody" rows="7" maxlength="2000" placeholder="Uveď prosím podrobnosti, co se stalo a co jsi očekával…"></textarea></div>
+    </div>
+    <div class="support-modal-actions"><button class="btn btn-ghost" data-action="support-new">← Zpět</button><button class="btn btn-primary" data-action="support-create">Vytvořit ticket</button></div>`, "modal-ticket");
+}
+async function createSupportTicket() {
+  const subject = document.getElementById("supportSubject")?.value.trim() || "";
+  const body = document.getElementById("supportBody")?.value.trim() || "";
+  const subcategory = document.getElementById("supportSubcategory")?.value || "";
+  if (!subject || !body) { toast("Vyplň předmět i popis.", "error"); return; }
+  try {
+    const result = await api("/tickets", { method: "POST", body: { category: _supportDraftCategory, subcategory, subject, body } });
+    closeModal(); toast("Ticket byl vytvořen.", "success"); navigate(`podpora/${result.id}`);
+  } catch (e) { toast(e.message, "error"); }
+}
+async function replySupportTicket(ticketId) {
+  const input = document.getElementById("supportReplyInput");
+  const body = input?.value.trim() || ""; if (!body) { toast("Prázdná odpověď.", "error"); return; }
+  try {
+    const path = canManageSupport(state.user) ? `/tickets/admin/${ticketId}/reply` : `/tickets/${ticketId}/reply`;
+    await api(path, { method: "POST", body: { body } });
+    await pageSupport(ticketId);
+  } catch (e) { toast(e.message, "error"); }
+}
+async function setSupportStatus(ticketId, status) {
+  try { await api(`/tickets/admin/${ticketId}/status/${status}`, { method: "POST" }); await pageSupport(ticketId); }
+  catch (e) { toast(e.message, "error"); }
+}
+document.addEventListener("input", (event) => { if (event.target.id === "supportSearch") renderSupportTicketList(); });
+document.addEventListener("change", (event) => { if (event.target.id === "supportCategoryFilter") renderSupportTicketList(); });
 
 async function pageUserProfile(nick) {
   const view = $("#view");
@@ -2044,6 +2210,11 @@ function pageCart() {
     </div>`;
 }
 async function doCheckout() {
+  if (_buyBusy) return;                  // double-submit guard – viz buyProduct (bug 15.7.)
+  _buyBusy = true;
+  const btn = document.querySelector('[data-action="checkout"]');
+  const label = btn ? btn.textContent : "";
+  if (btn) { btn.disabled = true; btn.textContent = "⏳ Zpracovávám…"; }
   try {
     const items = state.cart.map((i) => ({ product_id: i.id, qty: i.qty }));
     const r = await api("/cart/checkout", { method: "POST", body: { items, t0: window._pageT0 || 0 } });
@@ -2051,7 +2222,10 @@ async function doCheckout() {
     clearCart();
     toast(r.message, "success");
     navigate("profile");
-  } catch (e) { toast(e.message, "error"); }
+  } catch (e) {
+    toast(e.message, "error");
+    if (btn) { btn.disabled = false; btn.textContent = label; }
+  } finally { _buyBusy = false; }
 }
 
 /* ---------- PROFILE ---------- */
@@ -5278,12 +5452,8 @@ async function adminRaffles() {
         <div style="display:flex;gap:10px;align-items:center;margin-bottom:12px">${thumb}<div><div style="font-weight:700">${esc(p.name)}${pb}</div><div class="faint" style="font-size:13px">${fmtPts(p.cost_points)} / tiket</div></div></div>
         <div class="row-between" style="margin-bottom:6px"><span class="muted">Tiketů:</span><b>${p.tickets}</b></div>
         <div class="row-between" style="margin-bottom:12px"><span class="muted">Účastníků:</span><b>${p.participants}</b></div>
-        ${p.winner ? `<div class="panel gold" style="margin-bottom:12px;padding:10px 12px"><div class="row-between" style="gap:8px;flex-wrap:wrap"><span>🏆 Výherce: <a class="prof-link" href="#/u/${encodeURIComponent(p.winner)}"><b>${esc(p.winner)}</b></a></span><span style="display:flex;gap:6px"><a class="btn btn-ghost btn-sm" href="/verify.html?pid=${p.id}" target="_blank" title="Provably-fair ověření losu">🔍 Ověřit</a>${p.winner_id ? `<a class="btn btn-primary btn-sm" href="#/zpravy/${p.winner_id}" title="Napsat výherci zprávu">✉️ Napsat</a>` : ""}<button class="btn btn-ghost btn-sm" data-action="raffle-undo" data-id="${p.id}" title="Smazat výherce + commit – účastníci zůstanou">↩️ Vrátit</button></span></div></div>` : ""}
-        ${!p.winner && p.committed ? `<div class="panel" style="margin-bottom:12px;padding:10px 12px;font-size:12px"><div class="muted" style="margin-bottom:4px">🔒 Zacommitováno — zveřejni divákům (chat):</div><code style="word-break:break-all;font-size:11px">seed_hash: ${esc((p.seed_hash||"").slice(0,32))}…</code></div>` : ""}
-        ${p.winner ? "" : p.committed
-          ? `<button class="btn btn-primary btn-block" data-action="raffle-draw" data-id="${p.id}">🎲 2️⃣ Odhalit &amp; vylosovat</button>
-             <button class="btn btn-ghost btn-block btn-sm" data-action="raffle-undo" data-id="${p.id}" style="margin-top:6px" title="Zahodit commit – losuj s novým seedem">↩️ Zahodit commit</button>`
-          : `<button class="btn btn-primary btn-block" data-action="raffle-commit" data-id="${p.id}" ${p.tickets ? "" : "disabled"}>🔒 1️⃣ Commit (zamknout seed)</button>`}
+        ${p.winner ? `<div class="panel gold" style="margin-bottom:12px;padding:10px 12px"><div class="row-between" style="gap:8px;flex-wrap:wrap"><span>🏆 Výherce: <a class="prof-link" href="#/u/${encodeURIComponent(p.winner)}"><b>${esc(p.winner)}</b></a></span><span style="display:flex;gap:6px">${p.winner_id ? `<a class="btn btn-primary btn-sm" href="#/zpravy/${p.winner_id}" title="Napsat výherci zprávu">✉️ Napsat</a>` : ""}<button class="btn btn-ghost btn-sm" data-action="raffle-undo" data-id="${p.id}" title="Smazat výherce – účastníci zůstanou">↩️ Vrátit</button></span></div></div>` : ""}
+        <button class="btn btn-primary btn-block" data-action="raffle-draw" data-id="${p.id}" ${p.tickets ? "" : "disabled"}>🎲 ${p.winner ? "Losovat znovu" : "Vylosovat výherce"}</button>
       </div>`;
     }).join("")}</div>` : `<div class="empty"><div class="big">🎟️</div>Žádné tomboly. Vytvoř odměnu typu „Tombola”.</div>`;
   } catch (e) { box.innerHTML = `<div class="empty">${esc(e.message)}</div>`; }
@@ -5394,16 +5564,8 @@ function finishRaffle(reel, target, winner) {
   }
   toast(`Výherce vylosován: ${winner.username} 🎉`, "success");
 }
-async function commitRaffle(id) {
-  if (!confirm("Zamknout los? Vygeneruje se tajný seed, zveřejní se jeho hash + snímek tiketů. Po commitu už tikety neměň — pak losuj.")) return;
-  try {
-    const r = await api(`/admin/raffle/${id}/commit`, { method: "POST" });
-    toast(`Zacommitováno 🔒 seed_hash ${r.seed_hash.slice(0, 16)}… (${r.total_tickets} tiketů). Zveřejni divákům!`, "success");
-    adminRaffles();
-  } catch (e) { toast(e.message, "error"); }
-}
 async function drawRaffle(id) {
-  if (!requireTypedConfirm("Odhalíš seed a vylosuješ výherce z commitu. Výsledek je deterministický a ověřitelný.", "LOSOVAT")) return;
+  if (!requireTypedConfirm("Spouštíš ostré losování tomboly. Výsledek se uloží do auditu.", "LOSOVAT")) return;
   let parts = [];
   try {
     const d = await api(`/shop/raffle/${id}/entries`);
@@ -6676,6 +6838,13 @@ function handleAction(action, el) {
     case "cos-buy": buyCosmetic(el.dataset.key); break;
     case "cos-equip": equipCosmetic(el.dataset.key); break;
     case "dm-send": dmSend(el.dataset.mode, el.dataset.id); break;
+    case "support-new": openSupportCreate(); break;
+    case "support-category": openSupportCreateForm(el.dataset.category); break;
+    case "support-create": createSupportTicket(); break;
+    case "support-reply": replySupportTicket(id); break;
+    case "support-status": setSupportStatus(id, el.dataset.status); break;
+    case "support-refresh": pageSupport(_supportSelected); break;
+    case "support-filter": _supportStatus = el.dataset.status; renderSupportTicketList(); break;
     case "shop-disc-save": saveShopDiscount(); break;
     case "ban-cluster": banCluster(el.dataset.ids, el.dataset.label); break;
     case "gift-approve": giftDecide(el.dataset.id, true, el.dataset.label); break;
@@ -6823,7 +6992,6 @@ function handleAction(action, el) {
     case "mines-ban-add": minesBanAdd(); break;
     case "mines-unban": minesUnban(el.dataset.username); break;
     case "subs-refresh": adminSubs(); break;
-    case "raffle-commit": commitRaffle(id); break;
     case "raffle-draw": drawRaffle(id); break;
     case "raffle-undo": undoRaffleDraw(id); break;
     case "pred-amt": { const pa = $("#predAmt-" + el.dataset.pid); if (pa) { pa.value = el.dataset.amt; pa.focus(); } break; }
@@ -6936,7 +7104,7 @@ document.addEventListener("click", (e) => {
 
 /* Service worker pro Web Push (notifikace do mobilu). Registruje se 1× na pozadí. */
 if ("serviceWorker" in navigator) {
-  window.addEventListener("load", () => { navigator.serviceWorker.register("/sw.js?v=2026071238").catch(() => {}); });
+  window.addEventListener("load", () => { navigator.serviceWorker.register("/sw.js?v=2026071245").catch(() => {}); });
 }
 
 document.addEventListener("change", (e) => {
@@ -7317,27 +7485,33 @@ async function pageCrews(param) {
 function renderCrewLobby(lb) {
   const box = $("#crewWrap"); if (!box) return;
   const sort = lb.sort || "week";
-  const rows = (lb.crews || []).map((c) => {
+  const rows = (lb.crews || []).map((c, i) => {
     const crown = (sort === "month" && c.rank === 1 && c.month_xp > 0) ? '<span class="crew-crown" title="Parta měsíce">👑</span> ' : "";
+    const isMine = c.id === lb.my_crew_id;
+    const ahead = i ? lb.crews[i - 1] : null;
+    const gap = sort === "week" && isMine && ahead ? Math.max(0, Number(ahead.week_xp) - Number(c.week_xp)) : 0;
     let primary, secondary;
     if (sort === "month") {
-      primary = `<b class="crew-sub">🎁 ${Number(c.month_xp || 0).toLocaleString("cs-CZ")}</b>`;
+      primary = `<b class="crew-sub">🎁 ${Number(c.month_xp || 0).toLocaleString("cs-CZ")} XP</b>`;
       secondary = `<span class="faint">tento měsíc</span>`;
     } else if (sort === "subs") {
-      primary = `<b class="crew-sub">🎁 ${Number(c.sub_total || 0).toLocaleString("cs-CZ")}</b>`;
-      secondary = `<span class="faint">all-time</span>`;
+      primary = `<b class="crew-sub">🎁 ${Number(c.sub_total || 0).toLocaleString("cs-CZ")} XP</b>`;
+      secondary = `<span class="faint">celkem</span>`;
     } else {
       primary = `<b>${Number(c.week_xp).toLocaleString("cs-CZ")}</b> XP`;
-      secondary = c.sub_total ? `<span class="crew-sub faint">🎁 ${Number(c.sub_total).toLocaleString("cs-CZ")}</span>` : "";
+      secondary = `<span class="crew-sub faint">🎁 ${Number(c.week_sub_xp || 0).toLocaleString("cs-CZ")} sub XP tento týden</span>`;
     }
     return `
-    <a class="crew-row${crown ? " crew-champ" : ""}" href="#/crews/${c.id}">
+    <a class="crew-row crew-lobby-row${crown ? " crew-champ" : ""}${isMine ? " crew-you" : ""}" href="#/crews/${c.id}">
       <span class="crew-rank">#${c.rank}</span><span class="crew-emblem">${c.emblem}</span>
-      <span class="crew-name">${crown}<b>${esc(c.name)}</b> <span class="crew-tag">[${esc(c.tag)}]</span>${c.at_war ? ' <span class="crew-war-badge" title="Právě ve válce">⚔️</span>' : ""}</span>
-      <span class="crew-meta">⭐${c.level} · ${c.members} 👤 · ${primary}${secondary ? " · " + secondary : ""}</span>
+      <span class="crew-name">${crown}<b>${esc(c.name)}</b> <span class="crew-tag">[${esc(c.tag)}]</span>${c.at_war ? ' <span class="crew-war-badge" title="Právě ve válce">⚔️</span>' : ""}${isMine ? ' <span class="crew-you-badge">VAŠE PARTA</span>' : ""}${gap ? `<span class="crew-gap">Do #${c.rank - 1} chybí ${gap.toLocaleString("cs-CZ")} XP</span>` : ""}</span>
+      <span class="crew-meta"><span>⭐${c.level} · ${c.members} 👤 · ${primary}</span>${secondary ? `<span>${secondary}</span>` : ""}</span>
     </a>`;
   }).join("") || '<div class="faint">Zatím žádná parta — založ první! 🤝</div>';
   const tog = (key, label) => `<button class="btn btn-sm ${sort === key ? "btn-accent" : "btn-ghost"}" data-action="crew-sort" data-sort="${key}">${label}</button>`;
+  const sortNote = sort === "month" ? "Řazeno podle supporter XP získaných tento měsíc."
+    : sort === "subs" ? "Řazeno podle supporter XP za celou historii."
+    : "Řazeno podle XP získaných tento týden.";
   box.innerHTML = `
     <div class="panel crew-why" style="margin-bottom:14px">
       <div class="crew-why-head">🤝 Proč být v partě?</div>
@@ -7362,9 +7536,10 @@ function renderCrewLobby(lb) {
     </div>
     <div class="panel">
       <div class="section-title" style="margin-top:0;display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">
-        <span>🏆 Žebříček part <span class="faint" style="font-size:12px;font-weight:400">· ${sort === "month" ? "🏆 Parta měsíce (měsíční suby)" : sort === "subs" ? "🎁 supporteři (all-time)" : "týden " + esc(lb.week || "")}</span></span>
+        <span>🏆 Žebříček part <span class="faint" style="font-size:12px;font-weight:400">· ${sort === "month" ? "🏆 Parta měsíce (měsíční suby)" : sort === "subs" ? "🎁 supporter XP celkem" : "týden " + esc(lb.week || "")}</span></span>
         <span class="toolbar" style="gap:6px">${tog("week", "🌾 Týden")}${tog("subs", "🎁 Supporteři")}${tog("month", "🏆 Měsíc")}</span>
       </div>
+      <div class="crew-sort-note">${sortNote}</div>
       ${rows}
     </div>`;
 }
