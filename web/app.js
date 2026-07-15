@@ -1206,14 +1206,17 @@ function raffleReveal(d) {
 // další klik se ignoruje a tlačítko je vypnuté.
 let _buyBusy = false;
 
-async function buyProduct(id) {
+async function buyProduct(id, qty = 1) {
   if (_buyBusy) return;
   _buyBusy = true;
   const btn = document.querySelector('[data-action="buy"]');
   const label = btn ? btn.textContent : "";
   if (btn) { btn.disabled = true; btn.textContent = "⏳ Zpracovávám…"; }
   try {
-    const r = await api("/shop/purchase", { method: "POST", body: { product_id: id } });
+    // Víc kusů (tikety) = 1 request přes košíkový checkout; jednotlivý kus beze změny.
+    const r = qty > 1
+      ? await api("/cart/checkout", { method: "POST", body: { items: [{ product_id: id, qty }], t0: window._pageT0 || 0 } })
+      : await api("/shop/purchase", { method: "POST", body: { product_id: id } });
     state.user.points = r.balance;
     closeModal();
     toast(r.message, "success");
@@ -1226,7 +1229,27 @@ async function buyProduct(id) {
 }
 
 // Reveal-then-confirm: ukáže CO kupuješ + DOPAD na zůstatek PŘED potvrzením (lepší UX i pojistka).
-// Potvrzovací tlačítko nese data-action="buy" → volá původní buyProduct (nezměněný).
+// Potvrzovací tlačítko nese data-action="buy" (+ data-qty u tomboly) → volá buyProduct.
+// U tomboly je stepper na počet tiketů (žádost 15.7.: nekupovat po jednom); víc kusů jde
+// přes /cart/checkout (backend hlídá sklad i limit na osobu, tikety padnou do 1 requestu).
+let _cfBuy = null;   // {unit, max} aktivního potvrzovacího modalu
+
+function cfTiketu(n) { return n === 1 ? "tiket" : n <= 4 ? "tikety" : "tiketů"; }
+
+function cfQtySet(n) {
+  if (!_cfBuy) return;
+  n = Math.max(1, Math.min(_cfBuy.max, Math.trunc(+n) || 1));
+  const inp = document.getElementById("cf-qty");
+  if (inp && +inp.value !== n) inp.value = n;
+  const total = _cfBuy.unit * n;
+  const cost = document.getElementById("cf-cost");
+  if (cost) cost.textContent = `−${total.toLocaleString("cs-CZ")} 🌾`;
+  const after = document.getElementById("cf-after-n");
+  if (after) after.textContent = `${(state.user.points - total).toLocaleString("cs-CZ")} 🌾`;
+  const btn = document.querySelector('.cf-buy [data-action="buy"]');
+  if (btn) { btn.dataset.qty = n; btn.textContent = `✓ Koupit ${n > 1 ? n + " " : ""}${cfTiketu(n)}`; }
+}
+
 async function confirmBuyModal(id) {
   let p;
   try { p = await api("/shop/products/" + id); } catch (e) { toast(e.message, "error"); return; }
@@ -1238,6 +1261,23 @@ async function confirmBuyModal(id) {
   const thumb = p.image_url
     ? `<div class="cf-img" style="background-image:url('${esc(p.image_url)}')"></div>`
     : `<div class="cf-img" style="background:${gradFor(p)}"><span>${emojiFor(p)}</span></div>`;
+  // Max tiketů: co si může dovolit + sklad + limit na osobu (server má finální slovo,
+  // vlastní už koupené tikety klient nezná → případný přešvih vrátí srozumitelnou 400).
+  const afford = Math.max(1, Math.floor(state.user.points / (p.cost_points || 1)));
+  let maxQ = afford;
+  if (!p.unlimited && p.stock > 0) maxQ = Math.min(maxQ, p.stock);
+  if (p.max_per_person_pct > 0) maxQ = Math.min(maxQ, p.max_per_person_pct);
+  _cfBuy = isRaffle ? { unit: p.cost_points, max: maxQ } : null;
+  const qtyRow = isRaffle && maxQ > 1 ? `
+      <div class="cf-after">
+        <span>Počet tiketů</span>
+        <span style="display:flex;align-items:center;gap:8px">
+          <button type="button" class="btn btn-ghost btn-sm" data-action="cf-qty" data-d="-1" style="min-width:38px" aria-label="Míň tiketů">−</button>
+          <input id="cf-qty" type="number" min="1" max="${maxQ}" value="1" inputmode="numeric"
+                 style="width:64px;text-align:center;background:transparent;border:1px solid rgba(255,255,255,.22);border-radius:8px;padding:6px 4px;color:inherit;font-weight:700;font-size:15px">
+          <button type="button" class="btn btn-ghost btn-sm" data-action="cf-qty" data-d="1" style="min-width:38px" aria-label="Víc tiketů">+</button>
+        </span>
+      </div>` : "";
   openModal(`
     <div class="modal-body cf-buy" style="--rar:${rhex}">
       <div class="cf-row">
@@ -1245,18 +1285,21 @@ async function confirmBuyModal(id) {
         <div class="cf-meta">
           ${rlabel ? `<span class="cf-rar" style="color:${rhex}">${esc(rlabel)}</span>` : ""}
           <div class="cf-name">${esc(p.name)}</div>
-          <div class="cf-cost">−${Number(p.cost_points).toLocaleString("cs-CZ")} 🌾</div>
+          <div class="cf-cost" id="cf-cost">−${Number(p.cost_points).toLocaleString("cs-CZ")} 🌾</div>
         </div>
       </div>
+      ${qtyRow}
       <div class="cf-after">
         <span>Zůstatek po koupi</span>
-        <b>${Number(after).toLocaleString("cs-CZ")} 🌾</b>
+        <b id="cf-after-n">${Number(after).toLocaleString("cs-CZ")} 🌾</b>
       </div>
       <div class="modal-actions">
-        <button class="btn btn-primary btn-block" data-action="buy" data-id="${p.id}">${isRaffle ? "✓ Koupit tiket" : "✓ Potvrdit vyzvednutí"}</button>
+        <button class="btn btn-primary btn-block" data-action="buy" data-id="${p.id}" data-qty="1">${isRaffle ? "✓ Koupit tiket" : "✓ Potvrdit vyzvednutí"}</button>
         <button class="btn btn-ghost" data-action="close-modal">Zpět</button>
       </div>
     </div>`);
+  const inp = document.getElementById("cf-qty");
+  if (inp) inp.addEventListener("input", () => cfQtySet(inp.value));
 }
 
 /* ---------- LEADERBOARD ---------- */
@@ -6867,8 +6910,9 @@ function handleAction(action, el) {
     case "load-more": shopState.page++; loadProducts(false); break;
     case "row-scroll": { const t = document.getElementById(el.dataset.target); if (t) t.scrollBy({ left: parseInt(el.dataset.dir, 10) * 460, behavior: "smooth" }); break; }
     case "open-product": openProduct(id); break;
-    case "buy": buyProduct(id); break;
+    case "buy": buyProduct(id, parseInt(el.dataset.qty || "1", 10) || 1); break;
     case "buy-confirm": confirmBuyModal(id); break;
+    case "cf-qty": { const inp = document.getElementById("cf-qty"); cfQtySet((inp ? +inp.value : 1) + parseInt(el.dataset.d, 10)); break; }
     case "add-cart": {
       const p = shopState.items.find((x) => x.id === id) || adminState.products.find((x) => x.id === id);
       if (p) { addToCart(p); toast("Přidáno do košíku 🛒", "success"); } else { api("/shop/products/" + id).then((pp) => { addToCart(pp); toast("Přidáno do košíku 🛒", "success"); }); }
@@ -7104,7 +7148,7 @@ document.addEventListener("click", (e) => {
 
 /* Service worker pro Web Push (notifikace do mobilu). Registruje se 1× na pozadí. */
 if ("serviceWorker" in navigator) {
-  window.addEventListener("load", () => { navigator.serviceWorker.register("/sw.js?v=2026071245").catch(() => {}); });
+  window.addEventListener("load", () => { navigator.serviceWorker.register("/sw.js?v=2026071246").catch(() => {}); });
 }
 
 document.addEventListener("change", (e) => {
