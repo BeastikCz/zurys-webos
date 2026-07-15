@@ -135,22 +135,6 @@ CREATE TABLE IF NOT EXISTS raffle_winners (
     created_at TEXT NOT NULL
 );
 
--- Provably-fair los (commit-reveal). 1 řádek = 1 commit pro tombolu. seed se generuje
--- a zamkne přes seed_hash PŘED losem; při losu se odhalí a winner = HMAC(seed, roster).
-CREATE TABLE IF NOT EXISTS raffle_draws (
-    id             INTEGER PRIMARY KEY AUTOINCREMENT,
-    product_id     INTEGER NOT NULL REFERENCES products(id) ON DELETE CASCADE,
-    seed           TEXT NOT NULL,          -- tajný do losu, pak veřejný
-    seed_hash      TEXT NOT NULL,          -- sha256(seed) – zveřejněno při commitu
-    roster         TEXT NOT NULL,          -- kanonický seznam tiketů (řádek = idx\tuser_id\tusername)
-    roster_hash    TEXT NOT NULL,          -- sha256(roster)
-    total_tickets  INTEGER NOT NULL,
-    winner_index   INTEGER,                -- NULL dokud nevylosováno
-    winner_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
-    committed_at   TEXT NOT NULL,
-    drawn_at       TEXT
-);
-
 -- Přihlašovací relace (session cookie)
 CREATE TABLE IF NOT EXISTS sessions (
     token      TEXT PRIMARY KEY,
@@ -512,6 +496,27 @@ CREATE TABLE IF NOT EXISTS dm_messages (
     seen       INTEGER NOT NULL DEFAULT 0        -- příjemce zprávu viděl
 );
 CREATE INDEX IF NOT EXISTS idx_dm_user ON dm_messages(user_id, id);
+CREATE TABLE IF NOT EXISTS support_tickets (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    category    TEXT NOT NULL,
+    subcategory TEXT NOT NULL,
+    subject     TEXT NOT NULL,
+    status      TEXT NOT NULL DEFAULT 'open' CHECK(status IN ('open','in_progress','resolved','closed')),
+    created_at  TEXT NOT NULL,
+    updated_at  TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_support_tickets_user ON support_tickets(user_id, updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_support_tickets_status ON support_tickets(status, updated_at DESC);
+CREATE TABLE IF NOT EXISTS support_ticket_messages (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    ticket_id  INTEGER NOT NULL REFERENCES support_tickets(id) ON DELETE CASCADE,
+    from_id    INTEGER NOT NULL,
+    body       TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    seen       INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_support_messages_ticket ON support_ticket_messages(ticket_id, id);
 CREATE TABLE IF NOT EXISTS fair_log (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id     INTEGER NOT NULL,
@@ -614,6 +619,14 @@ CREATE INDEX IF NOT EXISTS idx_games_status ON games(status);
 CREATE INDEX IF NOT EXISTS idx_games_players ON games(p1_id, p2_id);
 CREATE INDEX IF NOT EXISTS idx_duels_status ON duels(status);
 CREATE INDEX IF NOT EXISTS idx_duels_players ON duels(p1_id, p2_id);
+
+-- Perf 15.7.: questové statistiky (me/claims polling) dělaly scan/filtr při každém dotazu.
+-- Covering index → SUM/COUNT jedou jen po indexu (points_log ~550k řádků a roste).
+CREATE INDEX IF NOT EXISTS idx_points_log_user_reason ON points_log(user_id, reason, change);
+CREATE INDEX IF NOT EXISTS idx_dropclaims_user ON drop_claims(user_id);
+CREATE INDEX IF NOT EXISTS idx_pred_bets_user ON prediction_bets(user_id);
+-- OR větev "(winner=2 AND p2_id=?)" nemohla použít composite (p1_id, p2_id)
+CREATE INDEX IF NOT EXISTS idx_duels_p2 ON duels(p2_id);
 
 CREATE TABLE IF NOT EXISTS partner_links (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

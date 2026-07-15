@@ -8,10 +8,13 @@ from ..models import AuctionBidIn
 from ..ratelimit import rate_limit
 from .. import auctions
 
+from ..microcache import ttl_cache
+
 router = APIRouter(prefix="/auctions", tags=["auctions"])
 
 
 @router.get("")
+@ttl_cache(2)
 def list_auctions(conn: sqlite3.Connection = Depends(db_dep)):
     """Aktivní + nedávno skončené aukce (lazy finalizace skončených). Veřejné (i bez přihlášení)."""
     return auctions.list_public(conn)

@@ -24,6 +24,8 @@ from ..ratelimit import rate_limit
 from ..security import secure_weighted_choice
 from .. import economy, live, partners, cosmetics, fairness
 
+from ..microcache import ttl_cache
+
 router = APIRouter(tags=["misc"])
 
 # Easter egg „Tajný sedlák" – tajné slovo nastavuje ADMIN per stream (app_settings 'egg_word') a
@@ -54,6 +56,7 @@ def egg_window_active(conn) -> bool:
 
 
 @router.get("/nx/state")
+@ttl_cache(3)
 def nx_state(conn: sqlite3.Connection = Depends(db_dep)):
     """Server řídí, kdy je drobná vrstva aktivní (admin vyhlásil okno). Frontend jen poll → ukáže/skryje.
     Neutrální cesta (ne /egg/*), ať to v Network/konzoli nekřičí „easter egg"."""
@@ -124,6 +127,7 @@ def list_news(conn: sqlite3.Connection = Depends(db_dep)):
 
 
 @router.get("/stream/status")
+@ttl_cache(3)
 def stream_status(conn: sqlite3.Connection = Depends(db_dep)):
     """Veřejný stav streamu pro „živou tečku" v hlavičce (zelená = online, červená = offline).
     Respektuje admin override (on/off/auto) a 45s cache v live modulu."""
@@ -131,6 +135,7 @@ def stream_status(conn: sqlite3.Connection = Depends(db_dep)):
 
 
 @router.get("/leaderboard")
+@ttl_cache(10)
 def leaderboard(limit: int = Query(50, ge=1, le=200),
                 conn: sqlite3.Connection = Depends(db_dep)):
     rows = conn.execute(
@@ -418,6 +423,7 @@ def community_goal_status(conn: sqlite3.Connection = Depends(db_dep)):
 
 
 @router.get("/sub-goal")
+@ttl_cache(5)
 def sub_goal_status(conn: sqlite3.Connection = Depends(db_dep)):
     """Stav komunitního SUB cíle (veřejné – pro lištu na webu)."""
     from ..subgoal import status
@@ -450,6 +456,7 @@ def recent_events_status(since: int = None, don_since: int = None,
 
 
 @router.get("/happy-hour")
+@ttl_cache(5)
 def happy_hour_status(conn: sqlite3.Connection = Depends(db_dep)):
     """Stav Happy Hour (veřejné – pro overlay/lištu). Jedno okno `happy_until`, víc perků:
     ×mult za sledování/chat, sleva na shop %, 2× za subs – overlay vypíše co je zrovna aktivní."""

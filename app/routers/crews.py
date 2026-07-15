@@ -10,6 +10,8 @@ from .. import crews
 
 # Crew je VEŘEJNÝ (5.7.2026 sundán early-access gate) – přístupný všem přihlášeným (require_user
 # na endpointech). Zpět za gate = dependencies=[Depends(require_early_access)] + import.
+from ..microcache import ttl_cache
+
 router = APIRouter(prefix="/crews", tags=["crews"])
 
 
@@ -33,6 +35,7 @@ def crews_mine(user: sqlite3.Row = Depends(require_user),
 
 
 @router.get("/tags")
+@ttl_cache(30)
 def crews_tags(user: sqlite3.Row = Depends(require_user),
                conn: sqlite3.Connection = Depends(db_dep)):
     """Mapa username→TAG všech členů crew (pro [TAG] u nicku globálně)."""

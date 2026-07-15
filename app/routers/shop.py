@@ -9,6 +9,8 @@ from ..db import now_iso
 from ..models import PurchaseIn
 from ..services import product_public, validate_items, apply_purchase, shop_discount_pct, disc_unit
 
+from ..microcache import ttl_cache
+
 router = APIRouter(prefix="/shop", tags=["shop"])
 
 EXCHANGE_CATEGORY = "Směnárna"
@@ -120,6 +122,7 @@ def purchase(data: PurchaseIn, user: sqlite3.Row = Depends(require_user),
 
 
 @router.get("/recent")
+@ttl_cache(5)
 def recent_purchases(limit: int = Query(12, ge=1, le=50),
                      conn: sqlite3.Connection = Depends(db_dep)):
     """Feed posledních nákupů napříč všemi uživateli."""
@@ -165,6 +168,7 @@ def my_milestone(user: sqlite3.Row = Depends(require_user), conn: sqlite3.Connec
 
 
 @router.get("/activity")
+@ttl_cache(5)
 def activity(limit: int = Query(20, ge=1, le=60),
              conn: sqlite3.Connection = Depends(db_dep)):
     """Živý feed aktivity pro ticker (nákupy, tikety, výhry, velké zisky)."""
@@ -221,37 +225,6 @@ def raffle_entries(product_id: int, conn: sqlite3.Connection = Depends(db_dep)):
              "created_at": winner["created_at"]} if winner else None
         ),
     }
-
-
-@router.get("/raffle/{product_id}/proof")
-def raffle_proof(product_id: int, conn: sqlite3.Connection = Depends(db_dep)):
-    """Provably-fair důkaz. Před losem: jen seed_hash + roster_hash (commitment).
-    Po losu: + seed, roster, winner_index → kdokoli si ověří výsledek sám."""
-    d = conn.execute(
-        "SELECT * FROM raffle_draws WHERE product_id = ? ORDER BY id DESC LIMIT 1", (product_id,)
-    ).fetchone()
-    if not d:
-        raise HTTPException(status_code=404, detail="Pro tuto tombolu zatím není commit.")
-    drawn = d["drawn_at"] is not None
-    out = {
-        "product_id": product_id,
-        "committed_at": d["committed_at"],
-        "seed_hash": d["seed_hash"],
-        "roster_hash": d["roster_hash"],
-        "total_tickets": d["total_tickets"],
-        "drawn": drawn,
-        "algorithm": "winner_index = int(HMAC_SHA256(seed, roster)[:8], big-endian) % total_tickets",
-    }
-    if drawn:
-        winner = conn.execute("SELECT username FROM users WHERE id = ?", (d["winner_user_id"],)).fetchone()
-        out.update({
-            "seed": d["seed"],
-            "roster": d["roster"],
-            "winner_index": d["winner_index"],
-            "winner": winner["username"] if winner else None,
-            "drawn_at": d["drawn_at"],
-        })
-    return out
 
 
 @router.get("/exchange")
