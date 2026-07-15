@@ -249,6 +249,9 @@ def _selftest():
         assert False, "melo hodit ValueError"
     except ValueError:
         pass
+    sw = (INDEX.parent / "sw.js").read_text(encoding="utf-8")
+    assert sw.index("caches.keys()") < sw.index("self.clients.claim()") < sw.index("self.clients.matchAll")
+    assert "client.navigate(client.url)" in sw
     print("selftest OK")
 
 

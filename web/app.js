@@ -2899,11 +2899,11 @@ async function loadGarden() {
     if (_gardenTimer) clearInterval(_gardenTimer);
     _gardenTimer = setInterval(() => {
       let reload = false;
-      document.querySelectorAll(".grd-time").forEach((el) => {
+      box.querySelectorAll(".grd-time").forEach((el) => {
         const s = parseInt(el.dataset.left, 10) - 1;
         if (s <= 0) reload = true; else { el.dataset.left = s; el.textContent = grdDur(s); }
       });
-      document.querySelectorAll("[data-refresh-left]").forEach((el) => {
+      box.querySelectorAll("[data-refresh-left]").forEach((el) => {
         const s = parseInt(el.dataset.refreshLeft, 10) - 1;
         if (s <= 0) reload = true; else el.dataset.refreshLeft = s;
       });
@@ -6936,7 +6936,7 @@ document.addEventListener("click", (e) => {
 
 /* Service worker pro Web Push (notifikace do mobilu). Registruje se 1× na pozadí. */
 if ("serviceWorker" in navigator) {
-  window.addEventListener("load", () => { navigator.serviceWorker.register("/sw.js?v=2026071235").catch(() => {}); });
+  window.addEventListener("load", () => { navigator.serviceWorker.register("/sw.js?v=2026071238").catch(() => {}); });
 }
 
 document.addEventListener("change", (e) => {

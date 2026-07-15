@@ -210,7 +210,7 @@ def test_garden_incoming_exposes_refresh_deadline(client):
         from app.config import WEB_DIR
         js = (WEB_DIR / "app.js").read_text(encoding="utf-8")
         assert 'data-refresh-left="${p.pest_in}"' in js
-        assert 'document.querySelectorAll("[data-refresh-left]")' in js
+        assert 'box.querySelectorAll("[data-refresh-left]")' in js
     finally:
         conn.close()
 
