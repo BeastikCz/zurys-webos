@@ -384,6 +384,14 @@ class DmIn(BaseModel):
     body: str = Field(min_length=1, max_length=2000)
 
 
+class TicketCreateIn(BaseModel):
+    """Nový support ticket."""
+    category: str = Field(min_length=1, max_length=24)
+    subcategory: str = Field(min_length=1, max_length=40)
+    subject: str = Field(min_length=1, max_length=100)
+    body: str = Field(min_length=1, max_length=2000)
+
+
 class WheelSpinIn(BaseModel):
     """Kolo štěstí – paid=True je placený re-spin po vyčerpání free spinů."""
     paid: bool = False

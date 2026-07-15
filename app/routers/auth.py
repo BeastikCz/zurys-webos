@@ -332,6 +332,17 @@ def me(user: Optional[sqlite3.Row] = Depends(get_current_user),
                 (user["id"],)).fetchone()["c"]
     except Exception:
         data["dm_unread"] = 0
+    try:
+        if user["role"] in ("admin", "broadcaster"):
+            data["ticket_unread"] = conn.execute(
+                "SELECT COUNT(*) c FROM support_ticket_messages m JOIN support_tickets t ON t.id=m.ticket_id "
+                "WHERE m.from_id=t.user_id AND m.seen=0").fetchone()["c"]
+        else:
+            data["ticket_unread"] = conn.execute(
+                "SELECT COUNT(*) c FROM support_ticket_messages m JOIN support_tickets t ON t.id=m.ticket_id "
+                "WHERE t.user_id=? AND m.from_id!=t.user_id AND m.seen=0", (user["id"],)).fetchone()["c"]
+    except Exception:
+        data["ticket_unread"] = 0
     try:                                                       # počet nepřečtených notifikací (zvoneček)
         data["notif_unread"] = conn.execute(
             "SELECT COUNT(*) AS c FROM notifications WHERE user_id = ? AND read = 0",

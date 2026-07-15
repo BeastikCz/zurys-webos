@@ -553,11 +553,14 @@ def test_contribute_weekly_reset(client):
 def test_leaderboard_ranks(client):
     a = _mk_user(100000); sa = _run(crews.create, a, "a", "Top Parta", "TOP")
     b = _mk_user(100000); sb = _run(crews.create, b, "b", "Slabsi Parta", "SLB")
-    _commit(crews.contribute, a, 5000)
+    _commit(crews.contribute, a, 4000)
+    _commit(crews.contribute, a, 1000, True)
     _commit(crews.contribute, b, 1000)
     lb = _run(crews.leaderboard, a)
     ids = [c["id"] for c in lb["crews"]]
     assert ids.index(sa["id"]) < ids.index(sb["id"])     # víc týdenního XP = výš
+    top = next(c for c in lb["crews"] if c["id"] == sa["id"])
+    assert top["week_xp"] == 5000 and top["week_sub_xp"] == 1000
 
 
 def test_chat_member_only(client):

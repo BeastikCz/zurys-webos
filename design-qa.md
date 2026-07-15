@@ -1,38 +1,35 @@
-# Zahrádka redesign — design QA
+# Support tickets — design QA
 
 ## Evidence
 
-- Visual source of truth: `C:/Users/ADMINI~1/AppData/Local/Temp/codex-clipboard-3bacc1ed-1b0c-422e-9b82-1cbef6ed8f8d.png`
-- Implementation capture: `C:/Users/Administrator/webos/design/garden-art/garden-implementation-desktop.png`
-- Side-by-side comparison: `C:/Users/Administrator/webos/design/garden-art/garden-design-comparison.png`
-- Responsive capture: `C:/Users/Administrator/webos/design/garden-art/garden-implementation-mobile.png`
-- Desktop viewport: 1487 × 1058 px
-- Mobile viewport: 390 × 844 px
-- Tested state: signed-in player, four planted plots, one ready crop, fertilizer available, all base decorations owned, upgrades unowned.
+- Source references:
+  - `C:/Users/ADMINI~1/AppData/Local/Temp/codex-clipboard-233aad09-f9c5-4d35-8913-8c20a990f8b0.png`
+  - `C:/Users/ADMINI~1/AppData/Local/Temp/codex-clipboard-40e15960-747c-472a-98d9-683ced150da8.png`
+  - `C:/Users/ADMINI~1/AppData/Local/Temp/codex-clipboard-bb4780a5-add0-441a-b54e-88066cd74306.png`
+  - `C:/Users/ADMINI~1/AppData/Local/Temp/codex-clipboard-ddd083ce-5bcc-4ca5-82dc-e7c3dc3c6c82.png`
+- Implementation: `http://127.0.0.1:8011/#/podpora`
+- Desktop captures: `C:/Users/Administrator/AppData/Local/Temp/webos-support-qa/category.png`, `form.png`, `user-detail.png`, `admin-dashboard.png`, `admin-resolved.png`
+- Mobile captures: `C:/Users/Administrator/AppData/Local/Temp/webos-support-qa/mobile-list.png`, `mobile-category.png`
+- Side-by-side comparison captures: `compare-category.png`, `compare-form.png`, `compare-dashboard.png` in the same temporary directory.
 
-The full comparison preserves both desktop screenshots at their native viewport ratio, so a separate focused crop was not needed. The mobile capture covers the responsive layout separately.
+## Visual comparison
 
-## Fidelity review
+- The source structure is retained: separate Support navigation, two-step category/form creation, ticket list, detail conversation, progress states, filters, and staff status controls.
+- The implementation intentionally applies the existing ZURYS design system instead of copying the source palette: orange accent, existing type scale, surfaces, borders, radii, buttons, and header.
+- Desktop layout is readable at 1440 × 900 and 1900 × 900. The ticket list and detail remain visible together and the reply composer stays anchored at the bottom.
+- Mobile layout is readable at 390 × 844. Stats collapse to two columns, the primary CTA spans the page, the picker becomes a single-column scrollable modal, and no horizontal overflow is visible.
+- Modal animation was allowed to settle before the final captures; labels, fields, cards, and actions are fully opaque and legible.
 
-- Typography: hierarchy, weights, density, and information grouping match the approved direction while retaining the product's existing system font. The reference's display-serif title is treated as an acceptable product-system variation.
-- Layout: the painted hero remains the dominant surface; four plot columns, overlaid crop status cards, harvest CTA, seed row, rules, decorations, fertilizer, and economy are preserved.
-- Color and tokens: warm black/brown surfaces, amber outlines, golden primary actions, green selection states, and purple XP accents match the reference and existing product palette.
-- Image quality: all visible crops, decorations, upgrades, and the hero are real generated raster assets. Transparent sprites were checked for halos, clipping, and stretching.
-- Copy and content: live game labels, prices, durations, yield, XP, fertilizer, pest, and upgrade states are rendered from the existing data model rather than static mock copy.
+## Interaction evidence
 
-## Responsive and interaction QA
+- Playwright completed the full primary flow: user login → open category picker → select category → fill and create ticket → user reply → admin login → open ticket → admin reply → status change to resolved → mobile picker.
+- Final run completed with no page errors and no unexpected HTTP failures.
+- The known local-only missing `/uploads/coin.png` asset was excluded from the browser-error gate; it is unrelated to Support and is supplied by production uploads.
+- Backend tests cover ticket privacy, staff transitions, closed-ticket reply blocking, and separation from private messages.
 
-- Desktop: four plots fit without horizontal overflow; hero height and lower information density match the source.
-- Expanded garden: eight plots render within the scene and switch to the taller layout.
-- Mobile: two-column plots, stacked status/actions, wrapped header copy, and 700/1200 px scene variants have no horizontal overflow or overlapping controls.
-- Primary flow verified in browser: harvest all → select seed → plant an empty plot.
-- Image fallback paths verified through the existing image fallback helper.
-- Browser console: no errors.
+## Scope notes
 
-## Iteration history
-
-- Initial desktop implementation had an overly tall header and pushed the scene down. The title and notification were consolidated into one row and the hero moved to the approved vertical rhythm.
-- Initial mobile implementation clipped the subtitle and crowded crop status actions. The header was allowed to wrap, the scene was increased to 700 px, and status/action rows were stacked.
-- Post-fix comparison found no P0, P1, or P2 visual defects.
+- File attachments from the source reference are intentionally not included in this release; safe upload storage and moderation are a separate feature.
+- No new image or icon assets were needed for the requested ZURYS-styled implementation.
 
 final result: passed

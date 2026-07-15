@@ -1,8 +1,7 @@
 """Soukromé zprávy (PM).
 
-Pravidlo: konverzaci ZAKLÁDÁ jen staff (admin/broadcaster/mod) – např. „vyhrál si skin".
-User pak smí v založeném vlákně ODEPISOVAT, ale sám nikomu psát nezačne. → nula scamu
-(cizí ti nepošlou fake výhru). Vlákno = 1 per ne-staff uživatel (`dm_messages.user_id`).
+Konverzaci zakládá tým; uživatel může odpovědět až po první zprávě od týmu.
+Vlákno = 1 per ne-staff uživatel (`dm_messages.user_id`).
 `from_id == user_id` → zpráva od usera (odpověď); jinak od staffa. `seen` = příjemce viděl.
 """
 import sqlite3

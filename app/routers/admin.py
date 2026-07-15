@@ -5,8 +5,6 @@ import re
 import io
 import json
 import ipaddress
-import hashlib
-import hmac
 import secrets
 import sqlite3
 from datetime import datetime, timedelta, timezone
@@ -30,7 +28,7 @@ from ..models import (ProductIn, SkinLookupIn, SkinSearchIn, ImageUploadIn, User
                       SelfExcludeIn, TimeoutIn, ShopDiscountIn, BanClusterIn, MinesBanIn, BroadcastIn, EggArmIn,
                       AuctionCreateIn, AuctionUpdateIn, CasehugAwardIn, CasehugUndoIn)
 from ..services import product_public, shop_discount_pct
-from ..security import new_code
+from ..security import new_code, secure_choice
 
 router = APIRouter(prefix="/admin", tags=["admin"], dependencies=[Depends(admin_guard)])
 
@@ -1203,104 +1201,42 @@ def raffle_products(conn: sqlite3.Connection = Depends(db_dep)):
         ).fetchone()
         d["winner"] = winner["username"] if winner else None
         d["winner_id"] = winner["id"] if winner else None
-        draw = conn.execute(
-            "SELECT seed_hash, drawn_at FROM raffle_draws WHERE product_id = ? ORDER BY id DESC LIMIT 1",
-            (r["id"],),
-        ).fetchone()
-        d["committed"] = draw is not None and draw["drawn_at"] is None
-        d["seed_hash"] = draw["seed_hash"] if draw else None
         out.append(d)
     return out
-
-
-def _raffle_roster(conn: sqlite3.Connection, product_id: int):
-    """Kanonický seznam tiketů v pořadí nákupu (deterministický). 1 řádek = 1 tiket."""
-    rows = conn.execute(
-        "SELECT e.user_id, u.username FROM raffle_entries e "
-        "JOIN users u ON u.id = e.user_id WHERE e.product_id = ? ORDER BY e.id ASC",
-        (product_id,),
-    ).fetchall()
-    lines = [f"{i}\t{r['user_id']}\t{r['username']}" for i, r in enumerate(rows)]
-    return rows, "\n".join(lines)
-
-
-def _raffle_winner_index(seed: str, roster: str, total: int) -> int:
-    """winner = HMAC-SHA256(seed, roster) → prvních 8 B jako big-endian int % total."""
-    digest = hmac.new(seed.encode(), roster.encode(), hashlib.sha256).digest()
-    # ponytail: modulo bias 2^64 % total je ~10^-16 při stovkách tiketů → ignorovatelné.
-    return int.from_bytes(digest[:8], "big") % total
-
-
-@router.post("/raffle/{product_id}/commit")
-def commit_draw(product_id: int, request: Request,
-                conn: sqlite3.Connection = Depends(db_dep),
-                admin: sqlite3.Row = Depends(require_user)):
-    """1. fáze provably-fair: zamkne seed (přes seed_hash) a snímek tiketů PŘED losem.
-    seed_hash + roster_hash zveřejni divákům (chat) – tím se admin zamkne, nemůže výsledek ohnout."""
-    if conn.execute("SELECT 1 FROM raffle_draws WHERE product_id = ? AND drawn_at IS NULL", (product_id,)).fetchone():
-        raise HTTPException(status_code=400, detail="Commit už existuje – losuj, nebo ho zahoď přes „Vrátit”.")
-    rows, roster = _raffle_roster(conn, product_id)
-    if not rows:
-        raise HTTPException(status_code=400, detail="Tato tombola nemá žádné tikety.")
-    seed = secrets.token_hex(32)
-    seed_hash = hashlib.sha256(seed.encode()).hexdigest()
-    roster_hash = hashlib.sha256(roster.encode()).hexdigest()
-    conn.execute(
-        "INSERT INTO raffle_draws (product_id, seed, seed_hash, roster, roster_hash, total_tickets, committed_at) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?)",
-        (product_id, seed, seed_hash, roster, roster_hash, len(rows), now_iso()),
-    )
-    record_audit(conn, admin, request, "raffle.commit", f"produkt #{product_id}",
-                 f"seed_hash: {seed_hash[:16]}… tiketů: {len(rows)}")
-    conn.commit()
-    return {"ok": True, "seed_hash": seed_hash, "roster_hash": roster_hash, "total_tickets": len(rows)}
 
 
 @router.post("/raffle/{product_id}/draw")
 def draw_winner(product_id: int, request: Request,
                 conn: sqlite3.Connection = Depends(db_dep),
                 admin: sqlite3.Row = Depends(require_user)):
-    """2. fáze: odhalí seed, spočítá výherce deterministicky z commitu. Nutný předchozí commit."""
-    d = conn.execute(
-        "SELECT * FROM raffle_draws WHERE product_id = ? AND drawn_at IS NULL ORDER BY id DESC LIMIT 1",
-        (product_id,),
-    ).fetchone()
-    if not d:
-        raise HTTPException(status_code=400, detail="Nejdřív commitni los (zveřejni seed_hash divákům).")
-    _, roster = _raffle_roster(conn, product_id)
-    if hashlib.sha256(roster.encode()).hexdigest() != d["roster_hash"]:
-        raise HTTPException(status_code=409, detail="Tikety se od commitu změnily – zahoď commit a commitni znovu.")
-    idx = _raffle_winner_index(d["seed"], roster, d["total_tickets"])
-    win = conn.execute(
+    entries = conn.execute(
         "SELECT e.user_id, u.username, u.avatar_url FROM raffle_entries e "
-        "JOIN users u ON u.id = e.user_id WHERE e.product_id = ? ORDER BY e.id ASC LIMIT 1 OFFSET ?",
-        (product_id, idx),
-    ).fetchone()
-    conn.execute("UPDATE raffle_draws SET winner_index = ?, winner_user_id = ?, drawn_at = ? WHERE id = ?",
-                 (idx, win["user_id"], now_iso(), d["id"]))
+        "JOIN users u ON u.id = e.user_id WHERE e.product_id = ?",
+        (product_id,),
+    ).fetchall()
+    if not entries:
+        raise HTTPException(status_code=400, detail="Tato tombola nemá žádné tikety.")
+    entry = secure_choice(entries)
     conn.execute(
         "INSERT INTO raffle_winners (product_id, user_id, created_at) VALUES (?, ?, ?)",
-        (product_id, win["user_id"], now_iso()),
+        (product_id, entry["user_id"], now_iso()),
     )
     record_audit(conn, admin, request, "raffle.draw", f"produkt #{product_id}",
-                 f"výherce: {win['username']} (idx {idx}/{d['total_tickets']}, seed {d['seed'][:12]}…)")
+                 f"výherce: {entry['username']}")
     conn.commit()
     # oznámení účastníkům (in-app notif + web push) – mimo request v background threadu
     prow = conn.execute("SELECT name FROM products WHERE id = ?", (product_id,)).fetchone()
     pname = prow["name"] if prow and prow["name"] else "tombola"
-    entrant_ids = [r[0] for r in conn.execute(
-        "SELECT DISTINCT user_id FROM raffle_entries WHERE product_id = ?", (product_id,)).fetchall()]
+    entrant_ids = list({e["user_id"] for e in entries})
     try:
         from .. import webpush
-        webpush.notify_raffle_draw(pname, win["user_id"], win["username"], entrant_ids)
+        webpush.notify_raffle_draw(pname, entry["user_id"], entry["username"], entrant_ids)
     except Exception:
         pass
     return {
         "ok": True,
-        "winner": {"username": win["username"], "avatar_url": win["avatar_url"]},
-        "proof": {"seed": d["seed"], "seed_hash": d["seed_hash"], "roster_hash": d["roster_hash"],
-                  "winner_index": idx, "total_tickets": d["total_tickets"]},
-        "message": f"Výherce vylosován: {win['username']} 🎉",
+        "winner": {"username": entry["username"], "avatar_url": entry["avatar_url"]},
+        "message": f"Výherce vylosován: {entry['username']} 🎉",
     }
 
 
@@ -1308,9 +1244,8 @@ def draw_winner(product_id: int, request: Request,
 def undo_draw(product_id: int, request: Request,
               conn: sqlite3.Connection = Depends(db_dep),
               admin: sqlite3.Row = Depends(require_user)):
-    """Vrátí losování: smaže výherce + commit dané tomboly. Tikety zůstávají → nový los = nový commit."""
+    """Vrátí losování: smaže výherce dané tomboly. Tikety/účastníci zůstávají → jako před losem."""
     cur = conn.execute("DELETE FROM raffle_winners WHERE product_id = ?", (product_id,))
-    conn.execute("DELETE FROM raffle_draws WHERE product_id = ?", (product_id,))
     record_audit(conn, admin, request, "raffle.undo_draw", f"produkt #{product_id}",
                  f"smazáno výherců: {cur.rowcount}")
     conn.commit()

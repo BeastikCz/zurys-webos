@@ -1,0 +1,191 @@
+"""Samostatné support tickety – oddělené od soukromých zpráv."""
+import sqlite3
+
+from fastapi import APIRouter, Depends, HTTPException
+
+from ..db import now_iso
+from ..deps import db_dep, require_admin, require_user
+from ..models import DmIn, TicketCreateIn
+from ..ratelimit import rate_limit
+
+router = APIRouter(prefix="/tickets", tags=["tickets"])
+
+CATEGORIES = {
+    "account": {"login", "profile", "other"},
+    "orders": {"order", "raffle", "refund"},
+    "web": {"bug", "performance", "game"},
+    "other": {"question", "idea", "other"},
+}
+STATUSES = {"open", "in_progress", "resolved", "closed"}
+
+
+def _ticket(conn, ticket_id):
+    return conn.execute(
+        "SELECT t.*, u.username, u.avatar_url, u.role FROM support_tickets t "
+        "JOIN users u ON u.id = t.user_id WHERE t.id = ?", (ticket_id,)
+    ).fetchone()
+
+
+def _messages(conn, ticket_id, owner_id):
+    rows = conn.execute(
+        "SELECT m.*, u.username AS from_name, u.role AS from_role "
+        "FROM support_ticket_messages m LEFT JOIN users u ON u.id = m.from_id "
+        "WHERE m.ticket_id = ? ORDER BY m.id", (ticket_id,)
+    ).fetchall()
+    return [{"id": r["id"], "body": r["body"], "created_at": r["created_at"],
+             "from_staff": r["from_id"] != owner_id, "from_name": r["from_name"] or "?",
+             "from_role": r["from_role"] or "user"} for r in rows]
+
+
+def _summary(r):
+    return {k: r[k] for k in ("id", "user_id", "username", "avatar_url", "role", "category",
+                               "subcategory", "subject", "status", "created_at", "updated_at",
+                               "last_body", "unread") if k in r.keys()}
+
+
+def _add_message(conn, ticket, from_id, body):
+    if ticket["status"] == "closed":
+        raise HTTPException(status_code=409, detail="Ticket je uzavřený.")
+    text = (body or "").strip()
+    if not text:
+        raise HTTPException(status_code=400, detail="Prázdná zpráva.")
+    now = now_iso()
+    conn.execute(
+        "INSERT INTO support_ticket_messages (ticket_id, from_id, body, created_at, seen) VALUES (?,?,?,?,0)",
+        (ticket["id"], from_id, text[:2000], now),
+    )
+    status = "in_progress" if from_id != ticket["user_id"] and ticket["status"] == "open" else ticket["status"]
+    conn.execute("UPDATE support_tickets SET status = ?, updated_at = ? WHERE id = ?", (status, now, ticket["id"]))
+    conn.commit()
+
+
+@router.get("/unread")
+def unread(user: sqlite3.Row = Depends(require_user), conn: sqlite3.Connection = Depends(db_dep)):
+    if user["role"] == "admin":
+        count = conn.execute(
+            "SELECT COUNT(*) c FROM support_ticket_messages m JOIN support_tickets t ON t.id = m.ticket_id "
+            "WHERE m.from_id = t.user_id AND m.seen = 0"
+        ).fetchone()["c"]
+    else:
+        count = conn.execute(
+            "SELECT COUNT(*) c FROM support_ticket_messages m JOIN support_tickets t ON t.id = m.ticket_id "
+            "WHERE t.user_id = ? AND m.from_id != t.user_id AND m.seen = 0", (user["id"],)
+        ).fetchone()["c"]
+    return {"count": count}
+
+
+@router.get("/mine")
+def mine(user: sqlite3.Row = Depends(require_user), conn: sqlite3.Connection = Depends(db_dep)):
+    rows = conn.execute(
+        "SELECT t.*, u.username, u.avatar_url, u.role, "
+        "COALESCE((SELECT body FROM support_ticket_messages WHERE ticket_id=t.id ORDER BY id DESC LIMIT 1),'') last_body, "
+        "(SELECT COUNT(*) FROM support_ticket_messages m WHERE m.ticket_id=t.id AND m.from_id!=t.user_id AND m.seen=0) unread "
+        "FROM support_tickets t JOIN users u ON u.id=t.user_id WHERE t.user_id=? ORDER BY t.updated_at DESC",
+        (user["id"],),
+    ).fetchall()
+    return [_summary(r) for r in rows]
+
+
+@router.post("")
+def create(data: TicketCreateIn, user: sqlite3.Row = Depends(require_user),
+           conn: sqlite3.Connection = Depends(db_dep)):
+    rate_limit(f"ticket:new:{user['id']}", 3, 3600)
+    subject, body = (data.subject or "").strip(), (data.body or "").strip()
+    allowed = CATEGORIES.get(data.category)
+    if not allowed or data.subcategory not in allowed:
+        raise HTTPException(status_code=400, detail="Neplatná kategorie ticketu.")
+    if not subject or not body:
+        raise HTTPException(status_code=400, detail="Vyplň předmět i popis.")
+    open_count = conn.execute(
+        "SELECT COUNT(*) c FROM support_tickets WHERE user_id=? AND status!='closed'", (user["id"],)
+    ).fetchone()["c"]
+    if open_count >= 5:
+        raise HTTPException(status_code=409, detail="Nejdřív dořeš některý z otevřených ticketů.")
+    now = now_iso()
+    cur = conn.execute(
+        "INSERT INTO support_tickets (user_id,category,subcategory,subject,status,created_at,updated_at) "
+        "VALUES (?,?,?,?, 'open', ?,?)",
+        (user["id"], data.category, data.subcategory, subject[:100], now, now),
+    )
+    conn.execute(
+        "INSERT INTO support_ticket_messages (ticket_id,from_id,body,created_at,seen) VALUES (?,?,?,?,0)",
+        (cur.lastrowid, user["id"], body[:2000], now),
+    )
+    conn.commit()
+    return {"ok": True, "id": cur.lastrowid}
+
+
+@router.get("/admin/all")
+def admin_all(staff: sqlite3.Row = Depends(require_admin), conn: sqlite3.Connection = Depends(db_dep)):
+    rows = conn.execute(
+        "SELECT t.*, u.username, u.avatar_url, u.role, "
+        "COALESCE((SELECT body FROM support_ticket_messages WHERE ticket_id=t.id ORDER BY id DESC LIMIT 1),'') last_body, "
+        "(SELECT COUNT(*) FROM support_ticket_messages m WHERE m.ticket_id=t.id AND m.from_id=t.user_id AND m.seen=0) unread "
+        "FROM support_tickets t JOIN users u ON u.id=t.user_id "
+        "ORDER BY CASE t.status WHEN 'open' THEN 0 WHEN 'in_progress' THEN 1 WHEN 'resolved' THEN 2 ELSE 3 END, "
+        "t.updated_at DESC LIMIT 200"
+    ).fetchall()
+    return [_summary(r) for r in rows]
+
+
+@router.get("/admin/{ticket_id}")
+def admin_thread(ticket_id: int, staff: sqlite3.Row = Depends(require_admin),
+                 conn: sqlite3.Connection = Depends(db_dep)):
+    ticket = _ticket(conn, ticket_id)
+    if not ticket:
+        raise HTTPException(status_code=404, detail="Ticket nenalezen.")
+    messages = _messages(conn, ticket_id, ticket["user_id"])
+    conn.execute(
+        "UPDATE support_ticket_messages SET seen=1 WHERE ticket_id=? AND from_id=? AND seen=0",
+        (ticket_id, ticket["user_id"]),
+    )
+    conn.commit()
+    return {"ticket": dict(ticket), "messages": messages}
+
+
+@router.post("/admin/{ticket_id}/reply")
+def admin_reply(ticket_id: int, data: DmIn, staff: sqlite3.Row = Depends(require_admin),
+                conn: sqlite3.Connection = Depends(db_dep)):
+    ticket = _ticket(conn, ticket_id)
+    if not ticket:
+        raise HTTPException(status_code=404, detail="Ticket nenalezen.")
+    _add_message(conn, ticket, staff["id"], data.body)
+    return {"ok": True}
+
+
+@router.post("/admin/{ticket_id}/status/{status}")
+def admin_status(ticket_id: int, status: str, staff: sqlite3.Row = Depends(require_admin),
+                 conn: sqlite3.Connection = Depends(db_dep)):
+    if status not in STATUSES:
+        raise HTTPException(status_code=400, detail="Neplatný stav.")
+    if not _ticket(conn, ticket_id):
+        raise HTTPException(status_code=404, detail="Ticket nenalezen.")
+    conn.execute("UPDATE support_tickets SET status=?, updated_at=? WHERE id=?", (status, now_iso(), ticket_id))
+    conn.commit()
+    return {"ok": True, "status": status}
+
+
+@router.get("/{ticket_id}")
+def thread(ticket_id: int, user: sqlite3.Row = Depends(require_user),
+           conn: sqlite3.Connection = Depends(db_dep)):
+    ticket = _ticket(conn, ticket_id)
+    if not ticket or ticket["user_id"] != user["id"]:
+        raise HTTPException(status_code=404, detail="Ticket nenalezen.")
+    messages = _messages(conn, ticket_id, ticket["user_id"])
+    conn.execute(
+        "UPDATE support_ticket_messages SET seen=1 WHERE ticket_id=? AND from_id!=? AND seen=0",
+        (ticket_id, user["id"]),
+    )
+    conn.commit()
+    return {"ticket": dict(ticket), "messages": messages}
+
+
+@router.post("/{ticket_id}/reply")
+def reply(ticket_id: int, data: DmIn, user: sqlite3.Row = Depends(require_user),
+          conn: sqlite3.Connection = Depends(db_dep)):
+    rate_limit(f"ticket:reply:{user['id']}", 5, 60)
+    ticket = _ticket(conn, ticket_id)
+    if not ticket or ticket["user_id"] != user["id"]:
+        raise HTTPException(status_code=404, detail="Ticket nenalezen.")
+    _add_message(conn, ticket, user["id"], data.body)
+    return {"ok": True}

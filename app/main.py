@@ -32,7 +32,7 @@ from .config import WEB_DIR, UPLOAD_DIR, SESSION_COOKIE, STAFF_ROLES, TRUSTED_IP
 from .db import init_db, get_conn, now_iso, get_setting, set_setting
 from .deps import client_ip
 from .seed import seed_if_empty, sync_changelog
-from .routers import auth, shop, cart, misc, admin, drops, botconsole, games, predictions, kickhook, blackjack, dm, mines, push, auctions, crews
+from .routers import auth, shop, cart, misc, admin, drops, botconsole, games, predictions, kickhook, blackjack, dm, mines, push, auctions, crews, tickets
 
 # Vypínač HER (piškvorky/duely/blackjack). Mimo provoz, když WEBOS_GAMES_OFF=1 (nastaveno ve fly.toml).
 # Lokálně/testy (bez env) = hry zapnuté, ať projdou herní testy. Zpět do provozu: WEBOS_GAMES_OFF=0 + deploy.
@@ -340,10 +340,18 @@ _sentry = None
 if os.environ.get("SENTRY_DSN"):
     try:
         import sentry_sdk as _sentry
+        from sentry_sdk.integrations.starlette import StarletteIntegration
+        from sentry_sdk.integrations.fastapi import FastApiIntegration
+        from sentry_sdk.integrations.logging import LoggingIntegration
         _sentry.init(
             dsn=os.environ["SENTRY_DSN"],
             environment="prod" if _PROD else "dev",
             traces_sample_rate=0.0,        # jen chyby, ne perf tracing (šetří kvótu free tieru)
+            # HOTFIX 15.7.: auto-integrace obalovaly KAŽDOU middleware vrstvu span objektem
+            # (uuid4 na event loopu = ~60 % CPU při live náporu) a LoggingIntegration dělala
+            # z error-storm logů Sentry eventy (serializace na event loopu = smyčka smrti).
+            # Chyby hlásíme ručně přes capture_exception v exception handleru — integrace nepotřebujeme.
+            disabled_integrations=[StarletteIntegration(), FastApiIntegration(), LoggingIntegration()],
             send_default_pii=False,        # neposílej IP/cookies → GDPR klid
             max_request_body_size="small",
         )
@@ -600,6 +608,7 @@ app.include_router(mines.router, prefix="/api", dependencies=[Depends(_games_off
 app.include_router(predictions.router, prefix="/api")
 app.include_router(auctions.router, prefix="/api")
 app.include_router(dm.router, prefix="/api")
+app.include_router(tickets.router, prefix="/api")
 app.include_router(kickhook.router, prefix="/api")
 app.include_router(push.router, prefix="/api")
 app.include_router(crews.router, prefix="/api")
