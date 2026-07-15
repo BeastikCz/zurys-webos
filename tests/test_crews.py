@@ -175,13 +175,14 @@ def test_leave_transfers_leader(client):
     assert _member(p)["role"] == "leader"                 # předáno nejstaršímu zbylému
 
 
-def test_contribute_capped(client):
+def test_contribute_uncapped(client):
     u = _mk_user(100000); _run(crews.create, u, "u", "Farmari", "FRM")
     _commit(crews.contribute, u, 3000)
     assert _member(u)["week_xp"] == 3000
-    _commit(crews.contribute, u, crews.WEEK_XP_CAP)       # přes cap
-    assert _member(u)["week_xp"] == crews.WEEK_XP_CAP      # week_xp ořezáno na cap (fér žebříček)
-    assert _member(u)["contributed"] == 3000 + crews.WEEK_XP_CAP   # contributed UNcapped = kolik fakt přispěl
+    _commit(crews.contribute, u, 50000)                    # farm bez capu (zrušen 15.7.)
+    assert _member(u)["week_xp"] == 53000
+    assert _member(u)["week_farm"] == 53000
+    assert _member(u)["contributed"] == 53000
 
 
 def test_sub_feeds_crew_via_add_points(client):
@@ -211,14 +212,14 @@ def test_gift_subs_uncapped_weekly(client):
     assert m["week_xp"] == 3 * XP_PER_SUB                  # suby UNcapped i týdně (velký gifter září, ne flat na capu)
 
 
-def test_sub_bypasses_weekly_farm_cap(client):
+def test_sub_xp_tracked_apart_from_farm(client):
     u = _mk_user(100000); _run(crews.create, u, "u", "MixParta", "MIX")
-    _commit(crews.contribute, u, crews.WEEK_XP_CAP + 5000)         # farm přes cap
-    assert _member(u)["week_xp"] == crews.WEEK_XP_CAP               # farm týdně capnutý
+    _commit(crews.contribute, u, 15000)                            # farm
     _commit(crews.contribute, u, 5000, True)                       # sub (is_sub=True)
     m = _member(u)
-    assert m["week_xp"] == crews.WEEK_XP_CAP + 5000                 # sub se přičte NAD farm cap
-    assert m["sub_xp"] == 5000                                      # sub_xp sledováno zvlášť
+    assert m["week_xp"] == 20000                                   # farm + sub
+    assert m["week_farm"] == 15000                                 # sub week_farm neplní (→ week_subs)
+    assert m["sub_xp"] == 5000                                     # sub_xp sledováno zvlášť
 
 
 def _set_crew_xp(uid, xp):

@@ -2,7 +2,7 @@
 
 Skupina hráčů co spolu farmí pro společný crew žebříček. 1 hráč = 1 parta.
 Crew XP = AGREGACE existující farm aktivity členů (žádný nový faucet) – hook v
-economy.award_earned. Per-člen týdenní cap, ať jeden wháál nepotáhne celou partu.
+economy.award_earned. Bez per-člen týdenního capu (zrušen 15.7.).
 Týdenní reset je lazy (porovnává member.week s aktuálním ISO týdnem).
 
 Sociál: crew chat (vzor jako bj_chat). Vstup: založení = sink sedláků (anti-spam).
@@ -16,7 +16,6 @@ from .security import new_code
 
 FOUND_COST = 5000         # založení party = sink sedláků (brzdí spam-party)
 MEMBER_CAP = 6            # max členů party (2.7. sníženo z 25 — malé těsné party > mega-zergy)
-WEEK_XP_CAP = 10000       # max příspěvek 1 člena do crew XP za týden
 CHAT_TAIL = 40
 EMBLEM_COST = 5000        # změna emblému party = sink sedláků (kosmetika, vůdce only)
 LEAVE_COOLDOWN_H = 6      # po odchodu z party musíš počkat X h než vstoupíš jinam (anti-churn/hop)
@@ -37,8 +36,7 @@ GOAL_REWARD = 1500        # odměna za tier 1 (základní cíl), per člen
 # max 1500+750+400+250 = 2900/člen/týden.
 GOAL_TIERS = [(1, GOAL_REWARD), (2, 750), (4, 400), (8, 250)]   # (násobek základního cíle, odměna/člen)
 # Level bonus za splněný tier → XP do crews.xp (level party). 5 % z PRAHU tieru (goal×mult), ne fixní
-# faucet: bonus nikdy nepředběhne reálný výkon party. Vyšší tiery jdou jen s reálnými suby (farm je
-# capnutý WEEK_XP_CAP), takže velký level boost = jen parta co reálně přivedla $. 1×/tier/parta/týden.
+# faucet: bonus nikdy nepředběhne reálný výkon party. 1×/tier/parta/týden.
 GOAL_XP_BONUS_FRAC = 0.05
 
 
@@ -185,11 +183,10 @@ def _notify_crew_sub(conn, crew_id, subber_uid, n):
 
 # ---------------- XP hook (volá deps.add_points pro KAŽDÝ kladný XP event) ----------------
 def contribute(conn, uid, amount, is_sub=False):
-    """Člen vydělal XP → přičti do crew. SUB/resub/gift (is_sub=True) jde UNcapped i týdně
-    (supporter MUSÍ zářit – dal reálný prachy), FARM je týdně capnutý (WEEK_XP_CAP, anti-grind).
+    """Člen vydělal XP → přičti do crew. Farm i suby jdou UNcapped (týdenní cap zrušen 15.7.).
     Sleduje:
-      • week_xp   – týdenní crew XP do žebříčku = farm(cap) + suby(uncapped),
-      • week_farm – týdenní FARM akumulátor (jen pro cap, suby ho neplní),
+      • week_xp   – týdenní crew XP do žebříčku = farm + suby,
+      • week_farm – týdenní FARM akumulátor (suby ho neplní → week_subs = week_xp − week_farm),
       • contributed – all-time CELKEM přispěno (farm + sub), uncapped,
       • sub_xp    – all-time jen suby (supporter contribution – ten cenný),
       • crews.xp  – all-time crew (level).
@@ -205,10 +202,9 @@ def contribute(conn, uid, amount, is_sub=False):
     cur_xp = 0 if new_week else (m["week_xp"] or 0)         # nový týden → reset obojího
     cur_farm = 0 if new_week else (m["week_farm"] or 0)
     if is_sub:
-        wk_add, farm_add = amount, 0                        # suby týdně UNcapped (velký gifter zazáří)
+        wk_add, farm_add = amount, 0                        # suby se do week_farm nepočítají (week_subs = week_xp − week_farm)
     else:
-        farm_add = max(0, min(WEEK_XP_CAP - cur_farm, amount))   # farm týdně capnutý (anti-grind)
-        wk_add = farm_add
+        wk_add = farm_add = amount
     conn.execute(
         "UPDATE crew_members SET week_xp=?, week_farm=?, week=?, "
         "contributed=COALESCE(contributed,0)+?, sub_xp=COALESCE(sub_xp,0)+? WHERE user_id=?",
