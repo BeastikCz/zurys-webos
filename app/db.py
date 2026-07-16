@@ -918,6 +918,7 @@ _MIGRATIONS = [
     ("products", "period", "TEXT"),
     ("products", "max_per_person_pct", "INTEGER NOT NULL DEFAULT 0"),
     ("orders", "product_name", "TEXT"),
+    ("support_ticket_messages", "image", "TEXT"),   # příloha (screenshot) – /uploads/ticket_*.ext
     ("client_signals", "fp_hash", "TEXT"),
     ("drop_claims", "ip", "TEXT"),
     ("drop_claims", "fp_hash", "TEXT"),

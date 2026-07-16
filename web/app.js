@@ -1495,7 +1495,8 @@ function dmBubbles(messages, viewerIsStaff) {
   return `<div class="dm-thread">${messages.map((m) => {
     const mine = (m.from_staff === viewerIsStaff);
     const who = m.from_staff ? `${esc(m.from_name)} ${roleBadge(m.from_role)}` : esc(m.from_name);
-    return `<div class="dm-msg ${mine ? "mine" : "other"}"><div class="dm-who">${who}</div><div class="dm-bubble">${esc(m.body)}</div><div class="dm-time">${timeAgo(m.created_at)}</div></div>`;
+    const img = m.image ? `<a href="${esc(m.image)}" target="_blank" rel="noopener"><img class="dm-img" src="${esc(m.image)}" alt="příloha" loading="lazy"></a>` : "";
+    return `<div class="dm-msg ${mine ? "mine" : "other"}"><div class="dm-who">${who}</div><div class="dm-bubble">${esc(m.body)}${img}</div><div class="dm-time">${timeAgo(m.created_at)}</div></div>`;
   }).join("")}</div>`;
 }
 function dmComposer(mode, uid) {
@@ -1591,10 +1592,17 @@ async function dmStaffThread(uid) {
    SUPPORT TICKETY – oddělené od soukromých zpráv
 ============================================================ */
 const SUPPORT_CATEGORIES = {
-  account: { label: "Účet", description: "Přihlášení, profil a problémy s účtem", subs: { login: "Přihlášení", profile: "Profil", other: "Jiný problém s účtem" } },
-  orders: { label: "Platby a objednávky", description: "Shop, objednávky, tomboly a vrácení bodů", subs: { order: "Objednávka", raffle: "Tombola", refund: "Vrácení bodů" } },
-  web: { label: "Web a hry", description: "Chyby webu, výkon a herní problémy", subs: { bug: "Bug report", performance: "Výkon webu", game: "Herní problém" } },
-  other: { label: "Ostatní", description: "Obecný dotaz, nápad nebo zpětná vazba", subs: { question: "Dotaz", idea: "Nápad", other: "Ostatní" } },
+  account: { label: "Účet", description: "Přihlášení, profil a problémy s účtem", subs: { login: "Přihlášení", profile: "Profil", other: "Jiný problém s účtem" },
+    faq: ["Chybí ti SUB status? Importované suby měly kratší datum — srovná se samo při příštím obnovení subu na Kicku.",
+          "Problém s přihlášením přes Kick obvykle vyřeší odhlásit se a přihlásit znovu."] },
+  orders: { label: "Platby a objednávky", description: "Shop, objednávky, tomboly a vrácení bodů", subs: { order: "Objednávka", raffle: "Tombola", refund: "Vrácení bodů" },
+    faq: ["U vrácení bodů napiš, o kterou objednávku jde (název + kdy) — vyřídíme rychleji.",
+          "Fyzické ceny a gift karty se předávají přes Discord po streamu."] },
+  web: { label: "Web a hry", description: "Chyby webu, výkon a herní problémy", subs: { bug: "Bug report", performance: "Výkon webu", game: "Herní problém" },
+    faq: ["Zkus nejdřív tvrdý refresh (Ctrl+F5) — po aktualizacích webu vyřeší většinu potíží.",
+          "U bug reportu přilož screenshot (📎 přímo v ticketu) a napiš, v jakém prohlížeči se to stalo."] },
+  other: { label: "Ostatní", description: "Obecný dotaz, nápad nebo zpětná vazba", subs: { question: "Dotaz", idea: "Nápad", other: "Ostatní" },
+    faq: ["Nápady na vylepšení vítáme — čím konkrétnější, tím líp."] },
 };
 const SUPPORT_STATUSES = {
   open: { label: "Otevřený", short: "Otevřené" },
@@ -1676,6 +1684,29 @@ function supportProgress(status) {
   const order = ["open", "in_progress", "resolved", "closed"], current = order.indexOf(status);
   return `<div class="support-progress">${order.map((key, index) => `<div class="support-progress-step${index < current ? " done" : index === current ? " current" : ""}"><b>${index + 1}</b><span>${SUPPORT_STATUSES[key].label}</span></div>`).join("")}</div>`;
 }
+// Šablony odpovědí pro admina (jen frontend – klik předvyplní composer)
+const SUPPORT_TEMPLATES = [
+  ["Sub import", "Suby importované ze starého systému měly nastavenou kratší expiraci – na Kicku ti sub běží dál a status na webu se srovná sám při příštím obnovení subu. Není potřeba nic dělat. 👍"],
+  ["Refund hotovo", "Body jsem ti právě připsal zpátky na účet. Omlouvám se za komplikaci a díky za nahlášení! ✅"],
+  ["Chci víc info", "Abych to mohl prošetřit, pošli prosím víc detailů – kdy přesně se to stalo (datum a čas) a ideálně screenshot. Díky! 🙏"],
+];
+function supportUserCtx(u, ticketId) {
+  const orders = (u.orders || []).map((o) => `<span>#${o.id} · ${esc(o.product_name || "?")} · ${fmtPts(o.points_spent)} · ${esc(o.status)} · ${timeAgo(o.created_at)}</span>`).join("") || "<span>Žádné objednávky.</span>";
+  return `<div class="support-user-ctx">
+    <div class="support-user-ctx-row">
+      <a href="#/u/${encodeURIComponent(u.username)}"><b>${esc(u.username)}</b></a>
+      <span title="ID účtu">🆔 ${u.id}</span><span>Lvl ${u.level}</span><span>${fmtPts(u.points)}</span>
+      <span>člen od ${new Date(u.created_at).toLocaleDateString("cs-CZ")}</span>
+      <span>${u.ticket_count}× ticket</span>${u.banned ? `<span class="support-ctx-ban">BAN</span>` : ""}
+    </div>
+    <div class="support-user-ctx-orders">${orders}</div>
+    <div class="support-refund">
+      <input class="input" id="supportRefundAmount" type="number" min="1" max="1000000" placeholder="sedláků">
+      <button class="btn btn-sm btn-ghost" data-action="support-refund" data-uid="${u.id}" data-id="${ticketId}">💰 Připsat body (refund)</button>
+      <button class="btn btn-sm btn-ghost" data-action="support-pointsfeed" data-uid="${u.id}">📜 Pohyby bodů</button>
+    </div>
+  </div>`;
+}
 async function loadSupportDetail(ticketId) {
   const box = document.getElementById("supportDetail"); if (!box) return;
   box.innerHTML = skeletonCards(1);
@@ -1689,8 +1720,9 @@ async function loadSupportDetail(ticketId) {
       </div>
       ${supportProgress(ticket.status)}
       <div class="support-detail-meta"><b>${esc(supportCategory(ticket))}</b><span>Vytvořeno ${timeAgo(ticket.created_at)}</span><span>Aktualizováno ${timeAgo(ticket.updated_at)}</span></div>
+      ${staff && data.user_ctx ? supportUserCtx(data.user_ctx, ticket.id) : ""}
       <div class="support-conversation">${dmBubbles(data.messages, staff)}</div>
-      ${closed ? `<div class="support-closed-note">Ticket je uzavřený. Pokud řešíš něco dalšího, založ nový.</div>` : `<div class="dm-composer support-composer"><textarea class="input" id="supportReplyInput" rows="3" maxlength="2000" placeholder="Napište odpověď…"></textarea><button class="btn btn-primary" data-action="support-reply" data-id="${ticket.id}">Odeslat odpověď</button></div>`}`;
+      ${closed ? `<div class="support-closed-note">Ticket je uzavřený. Pokud řešíš něco dalšího, založ nový.</div>` : `${staff ? `<div class="support-templates">${SUPPORT_TEMPLATES.map((t, i) => `<button class="btn btn-sm btn-ghost" data-action="support-template" data-i="${i}">📋 ${t[0]}</button>`).join("")}</div>` : ""}${!staff && ticket.status !== "resolved" ? `<div class="support-templates"><button class="btn btn-sm btn-ghost" data-action="support-resolve" data-id="${ticket.id}">✅ Problém je vyřešený, díky</button></div>` : ""}<div class="dm-composer support-composer"><textarea class="input" id="supportReplyInput" rows="3" maxlength="2000" placeholder="Napište odpověď…"></textarea><input type="file" id="supportAttachFile" accept="image/png,image/jpeg,image/webp,image/gif" hidden data-id="${ticket.id}"><button class="btn btn-ghost" data-action="support-attach" title="Přiložit screenshot (max 6 MB)">📎</button><button class="btn btn-primary" data-action="support-reply" data-id="${ticket.id}">Odeslat odpověď</button></div>`}`;
     const thread = box.querySelector(".dm-thread"); if (thread) thread.scrollTop = thread.scrollHeight;
     refreshMe();
   } catch (e) { box.innerHTML = `<div class="empty">${esc(e.message)}</div>`; }
@@ -1705,6 +1737,7 @@ function openSupportCreateForm(category) {
   _supportDraftCategory = category;
   const item = SUPPORT_CATEGORIES[category]; if (!item) return;
   openModal(`<div class="support-modal-head"><span class="support-kicker">${esc(item.label)}</span><h2>Vytvořit nový ticket</h2><p>Čím konkrétnější popis, tím rychleji se požadavek vyřeší.</p></div>
+    ${item.faq && item.faq.length ? `<div class="support-faq"><b>💡 Nejčastější odpovědi</b>${item.faq.map((f) => `<span>${esc(f)}</span>`).join("")}</div>` : ""}
     <div class="support-ticket-form">
       <div class="field"><label for="supportSubcategory">Podkategorie</label><select class="select" id="supportSubcategory">${Object.entries(item.subs).map(([key, label]) => `<option value="${key}">${label}</option>`).join("")}</select></div>
       <div class="field"><label for="supportSubject">Předmět</label><input class="input" id="supportSubject" maxlength="100" placeholder="Krátký popis problému"></div>
@@ -1731,12 +1764,40 @@ async function replySupportTicket(ticketId) {
     await pageSupport(ticketId);
   } catch (e) { toast(e.message, "error"); }
 }
+async function resolveSupportTicket(ticketId) {
+  if (!confirm("Označit ticket jako vyřešený?")) return;
+  try { await api(`/tickets/${ticketId}/resolve`, { method: "POST" }); toast("Díky za potvrzení! ✅", "success"); await pageSupport(ticketId); }
+  catch (e) { toast(e.message, "error"); }
+}
+async function refundFromTicket(userId, ticketId) {
+  const amount = parseInt(document.getElementById("supportRefundAmount")?.value || "0", 10);
+  if (!amount || amount < 1) { toast("Zadej kolik sedláků připsat.", "error"); return; }
+  if (!confirm(`Připsat ${fmtPts(amount)} jako refund k ticketu #${ticketId}?`)) return;
+  try {
+    await api(`/admin/users/${userId}/points`, { method: "POST", body: { change: amount, reason: `Refund: ticket #${ticketId}` } });
+    toast(`Připsáno ${fmtPts(amount)}.`, "success");
+    await loadSupportDetail(ticketId);
+  } catch (e) { toast(e.message, "error"); }
+}
 async function setSupportStatus(ticketId, status) {
   try { await api(`/tickets/admin/${ticketId}/status/${status}`, { method: "POST" }); await pageSupport(ticketId); }
   catch (e) { toast(e.message, "error"); }
 }
 document.addEventListener("input", (event) => { if (event.target.id === "supportSearch") renderSupportTicketList(); });
 document.addEventListener("change", (event) => { if (event.target.id === "supportCategoryFilter") renderSupportTicketList(); });
+document.addEventListener("change", async (event) => {
+  if (event.target.id !== "supportAttachFile") return;
+  const input = event.target, file = input.files && input.files[0], ticketId = input.dataset.id;
+  input.value = "";
+  if (!file || !ticketId) return;
+  if (file.size > 6 * 1024 * 1024) { toast("Obrázek je příliš velký (max 6 MB).", "error"); return; }
+  const reader = new FileReader();
+  reader.onload = async () => {
+    try { await api(`/tickets/${ticketId}/attach`, { method: "POST", body: { data: reader.result } }); toast("Příloha nahrána. 📎", "success"); await loadSupportDetail(Number(ticketId)); }
+    catch (e) { toast(e.message, "error"); }
+  };
+  reader.readAsDataURL(file);
+});
 
 async function pageUserProfile(nick) {
   const view = $("#view");
@@ -6887,6 +6948,11 @@ function handleAction(action, el) {
     case "support-reply": replySupportTicket(id); break;
     case "support-status": setSupportStatus(id, el.dataset.status); break;
     case "support-refresh": pageSupport(_supportSelected); break;
+    case "support-template": { const t = SUPPORT_TEMPLATES[Number(el.dataset.i)]; const inp = document.getElementById("supportReplyInput"); if (t && inp) { inp.value = t[1]; inp.focus(); } break; }
+    case "support-resolve": resolveSupportTicket(id); break;
+    case "support-refund": refundFromTicket(Number(el.dataset.uid), id); break;
+    case "support-attach": document.getElementById("supportAttachFile")?.click(); break;
+    case "support-pointsfeed": adminState.tab = "security"; adminState.secTab = "points"; adminState.pfQuery = String(el.dataset.uid); adminState.pfOffset = 0; navigate("admin"); break;
     case "support-filter": _supportStatus = el.dataset.status; renderSupportTicketList(); break;
     case "shop-disc-save": saveShopDiscount(); break;
     case "ban-cluster": banCluster(el.dataset.ids, el.dataset.label); break;
@@ -7148,7 +7214,7 @@ document.addEventListener("click", (e) => {
 
 /* Service worker pro Web Push (notifikace do mobilu). Registruje se 1× na pozadí. */
 if ("serviceWorker" in navigator) {
-  window.addEventListener("load", () => { navigator.serviceWorker.register("/sw.js?v=2026071247").catch(() => {}); });
+  window.addEventListener("load", () => { navigator.serviceWorker.register("/sw.js?v=2026071248").catch(() => {}); });
 }
 
 document.addEventListener("change", (e) => {

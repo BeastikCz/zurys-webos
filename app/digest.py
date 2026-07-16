@@ -87,6 +87,15 @@ def compose(conn) -> str:
     bans = _scalar(conn, "SELECT COUNT(*) FROM admin_audit WHERE action IN ('ip.ban','ddos.autoban') AND created_at >= ?", (cut,))
     admin_acts = _scalar(conn, "SELECT COUNT(*) FROM admin_audit WHERE admin_id IS NOT NULL AND created_at >= ?", (cut,))
     active_drops = _scalar(conn, "SELECT COUNT(*) FROM drops WHERE active = 1", ())
+    open_tickets = _scalar(conn, "SELECT COUNT(*) FROM support_tickets WHERE status IN ('open','in_progress')", ())
+    oldest_ticket = _scalar(conn, "SELECT MIN(updated_at) FROM support_tickets WHERE status IN ('open','in_progress')", (), default=None)
+    tickets_str = str(open_tickets)
+    if oldest_ticket:
+        try:
+            age_h = int((datetime.now(timezone.utc) - datetime.fromisoformat(oldest_ticket)).total_seconds() // 3600)
+            tickets_str += f"  (nejstarší bez reakce {age_h} h)"
+        except Exception:
+            pass
 
     # největší transakce (24 h)
     top_tx = []
@@ -117,6 +126,7 @@ def compose(conn) -> str:
         f"🚫 Bany (IP/auto):   {bans}",
         f"🛠️ Admin akcí:       {admin_acts}",
         f"🎁 Aktivní dropy:    {active_drops}",
+        f"🎫 Otevřené tickety: {tickets_str}",
         f"💾 Záloha dnes:      {backup_str}",
     ]
     econ_lines, _ = _econ_week(conn)

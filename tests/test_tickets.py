@@ -61,3 +61,73 @@ def test_ticket_flow_is_separate_and_private(client):
         assert conn.execute("SELECT COUNT(*) FROM dm_messages WHERE user_id=?", (uid,)).fetchone()[0] == 0
     finally:
         conn.close()
+
+
+def test_resolve_own_user_ctx_and_autoclose(client):
+    uid, user = _session()
+    _, stranger = _session()
+    _, admin = _session("admin")
+    payload = {"category": "orders", "subcategory": "refund", "subject": "Chybí body",
+               "body": "Nedorazily body za objednávku."}
+    ticket_id = client.post("/api/tickets", json=payload, headers=user).json()["id"]
+
+    # user_ctx jen v admin pohledu
+    detail = client.get(f"/api/tickets/admin/{ticket_id}", headers=admin).json()
+    assert detail["user_ctx"]["id"] == uid
+    assert "level" in detail["user_ctx"] and "orders" in detail["user_ctx"]
+    assert "user_ctx" not in client.get(f"/api/tickets/{ticket_id}", headers=user).json()
+
+    # resolve: cizí ticket 404, vlastní OK, druhý pokus 409
+    assert client.post(f"/api/tickets/{ticket_id}/resolve", headers=stranger).status_code == 404
+    assert client.post(f"/api/tickets/{ticket_id}/resolve", headers=user).status_code == 200
+    assert client.get(f"/api/tickets/{ticket_id}", headers=user).json()["ticket"]["status"] == "resolved"
+    assert client.post(f"/api/tickets/{ticket_id}/resolve", headers=user).status_code == 409
+
+    # autoclose: resolved starší 7 dnů se při načtení seznamu zavře
+    old = (datetime.now(timezone.utc) - timedelta(days=8)).isoformat()
+    conn = get_conn()
+    try:
+        conn.execute("UPDATE support_tickets SET updated_at=? WHERE id=?", (old, ticket_id))
+        conn.commit()
+    finally:
+        conn.close()
+    mine = client.get("/api/tickets/mine", headers=user).json()
+    assert next(r for r in mine if r["id"] == ticket_id)["status"] == "closed"
+
+
+def test_attach_and_notify(client):
+    uid, user = _session()
+    _, stranger = _session()
+    _, admin = _session("admin")
+    ticket_id = client.post("/api/tickets", json={"category": "web", "subcategory": "bug",
+                            "subject": "Bug se screenshotem", "body": "Viz obrázek."}, headers=user).json()["id"]
+
+    png = ("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJ"
+           "AAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==")
+    assert client.post(f"/api/tickets/{ticket_id}/attach", json={"data": png}, headers=stranger).status_code == 404
+    r = client.post(f"/api/tickets/{ticket_id}/attach", json={"data": png}, headers=user)
+    assert r.status_code == 200 and r.json()["url"].startswith("/uploads/ticket_")
+    assert client.post(f"/api/tickets/{ticket_id}/attach", json={"data": "data:image/png;base64,xx"},
+                       headers=user).status_code == 400
+
+    thread = client.get(f"/api/tickets/{ticket_id}", headers=user).json()
+    assert thread["messages"][-1]["image"] == r.json()["url"]
+
+    # odpověď admina → in-app notifikace uživateli s odkazem na ticket
+    client.post(f"/api/tickets/admin/{ticket_id}/reply", json={"body": "Díky, mrknu."}, headers=admin)
+    conn = get_conn()
+    try:
+        n = conn.execute("SELECT title, link FROM notifications WHERE user_id=? ORDER BY id DESC LIMIT 1",
+                         (uid,)).fetchone()
+    finally:
+        conn.close()
+    assert n and f"#{ticket_id}" in n[0] and n[1] == f"#/podpora/{ticket_id}"
+
+    # ruční resolved od admina → další notifikace
+    client.post(f"/api/tickets/admin/{ticket_id}/status/resolved", headers=admin)
+    conn = get_conn()
+    try:
+        n2 = conn.execute("SELECT title FROM notifications WHERE user_id=? ORDER BY id DESC LIMIT 1", (uid,)).fetchone()
+    finally:
+        conn.close()
+    assert "vyřešený" in n2[0]
