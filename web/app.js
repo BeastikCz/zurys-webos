@@ -2784,6 +2784,7 @@ function auctionCardHTML(a) {
             <button class="btn btn-accent" data-action="auction-bid" data-id="${a.id}">🔨 Přihodit</button>
           </div>
           <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">${chips.map((v) => `<button class="btn btn-ghost btn-sm" data-action="auction-amt" data-id="${a.id}" data-amt="${v}">${fmtPts(v)}</button>`).join("")}${buyNow ? `<button class="btn btn-sm" data-action="auction-buynow" data-id="${a.id}" style="margin-left:auto;background:linear-gradient(135deg,#b07ad9,#8a4fc0);color:#fff;border:none">💎 Kup teď ${fmtPts(a.buy_now)}</button>` : ""}</div>
+          <div class="faint" style="font-size:11.5px;margin-top:6px">🎟 První příhoz do aukce: +10 % vstupní poplatek (max 5 000). Při přehození se ti vrací <b>100 %</b> příhozu, další příhozy už bez poplatku.</div>
 `}
       ${recent}
     </div>
@@ -2811,14 +2812,14 @@ async function bidAuction(id) {
   const amount = parseInt(inp && inp.value, 10);
   if (!amount || amount < 1) { toast("Zadej částku příhozu.", "error"); return; }
   if (state.user && amount > state.user.points) { toast("Tolik sedláků nemáš.", "error"); return; }
-  const minNext = parseInt(inp && inp.min, 10) || 0;           // pojistka proti překliku (escrow + 50 % ztráta)
+  const minNext = parseInt(inp && inp.min, 10) || 0;           // pojistka proti překliku (escrow blokuje sedláky)
   if (amount >= 50000 || (minNext && amount >= minNext * 10)) {
     if (!confirm(`Fakt přihodit ${fmtPts(amount)} sedláků?`)) return;
   }
   try {
     const r = await api(`/auctions/${id}/bid`, { method: "POST", body: { amount } });
     if (state.user) state.user.points = r.balance;
-    toast(`🔨 Přihozeno ${fmtPts(amount)} — vedeš aukci!${r.extended ? " ⏳ +30 s (anti-snipe)" : ""}`, "success");
+    toast(`🔨 Přihozeno ${fmtPts(amount)} — vedeš aukci!${r.fee ? ` 🎟 vstupní poplatek ${fmtPts(r.fee)}` : ""}${r.extended ? " ⏳ +30 s (anti-snipe)" : ""}`, "success");
     renderHeader(); if (_aucReload) _aucReload();
   } catch (e) { toast(e.message, "error"); }
 }
@@ -7265,7 +7266,7 @@ document.addEventListener("click", (e) => {
 
 /* Service worker pro Web Push (notifikace do mobilu). Registruje se 1× na pozadí. */
 if ("serviceWorker" in navigator) {
-  window.addEventListener("load", () => { navigator.serviceWorker.register("/sw.js?v=2026071250").catch(() => {}); });
+  window.addEventListener("load", () => { navigator.serviceWorker.register("/sw.js?v=2026071251").catch(() => {}); });
 }
 
 document.addEventListener("change", (e) => {

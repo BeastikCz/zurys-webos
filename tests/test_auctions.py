@@ -29,15 +29,38 @@ def test_escrow_outbid_min_and_self():
         aid = auctions.create(conn, "Test skin", "", 100, 50, 10)["id"]
         u1, u2 = _user(conn), _user(conn); conn.commit()
         r = auctions.bid(conn, _row(conn, u1), aid, 100)
-        assert r["ok"] and r["current_bid"] == 100
-        assert _pts(conn, u1) == 100000 - 100, "escrow odečetl příhoz"
+        assert r["ok"] and r["current_bid"] == 100 and r["fee"] == 10
+        assert _pts(conn, u1) == 100000 - 110, "escrow odečetl příhoz + vstupní poplatek 10 %"
         r2 = auctions.bid(conn, _row(conn, u2), aid, 150)            # přehoz
         assert r2["ok"]
-        assert _pts(conn, u1) == 100000 - 10, "přehozenému vráceno 90 % (ztratil 10 ze 100)"
-        assert _pts(conn, u2) == 100000 - 150
+        assert _pts(conn, u1) == 100000 - 10, "přehozenému vráceno 100 % příhozu (zůstává jen poplatek 10)"
+        assert _pts(conn, u2) == 100000 - 165
         assert not auctions.bid(conn, _row(conn, u1), aid, 150).get("ok"), "pod min (200) zamítnuto"
         assert _pts(conn, u1) == 100000 - 10, "zamítnutý příhoz (pod min) nic neodečte"
         assert not auctions.bid(conn, _row(conn, u2), aid, 400).get("ok"), "vedoucí nesmí přehodit sám sebe"
+    finally:
+        conn.close()
+
+
+def test_entry_fee_once_capped_and_refunded_on_cancel():
+    """Vstupní poplatek: 10 % z prvního příhozu se stropem 5k, další příhozy zdarma, zrušení vrací."""
+    from app.db import get_conn
+    from app import auctions
+    conn = get_conn()
+    try:
+        aid = auctions.create(conn, "FeeSkin", "", 100, 50, 10)["id"]
+        u1, u2 = _user(conn, points=300000), _user(conn, points=300000); conn.commit()
+        r = auctions.bid(conn, _row(conn, u1), aid, 80000)          # 10 % = 8000 → strop 5000
+        assert r["ok"] and r["fee"] == auctions.ENTRY_FEE_CAP
+        assert _pts(conn, u1) == 300000 - 85000
+        r2 = auctions.bid(conn, _row(conn, u2), aid, 90000)          # u1 zpět 100 % (80000)
+        assert r2["ok"] and r2["fee"] == 5000
+        assert _pts(conn, u1) == 300000 - 5000, "po přehození zůstává jen poplatek"
+        r3 = auctions.bid(conn, _row(conn, u1), aid, 100000)         # druhý příhoz TÉHOŽ uživatele = bez poplatku
+        assert r3["ok"] and r3["fee"] == 0
+        assert _pts(conn, u1) == 300000 - 5000 - 100000
+        auctions.cancel(conn, aid)
+        assert _pts(conn, u1) == 300000 and _pts(conn, u2) == 300000, "zrušení vrací escrow i poplatky oběma"
     finally:
         conn.close()
 
@@ -50,13 +73,13 @@ def test_finalize_winner_is_sink():
         aid = auctions.create(conn, "Skin2", "", 100, 50, 10)["id"]
         u1 = _user(conn); conn.commit()
         auctions.bid(conn, _row(conn, u1), aid, 500)
-        assert _pts(conn, u1) == 100000 - 500
+        assert _pts(conn, u1) == 100000 - 550
         # přetoč konec do minulosti → list_public finalizuje
         conn.execute("UPDATE auctions SET ends_at='2000-01-01T00:00:00+00:00' WHERE id=?", (aid,)); conn.commit()
         auctions.list_public(conn)
         a = conn.execute("SELECT status, winner_id FROM auctions WHERE id=?", (aid,)).fetchone()
         assert a["status"] == "ended" and a["winner_id"] == u1, "vítěz = poslední vedoucí"
-        assert _pts(conn, u1) == 100000 - 500, "vítězovy sedláci zůstaly odečtené (sink)"
+        assert _pts(conn, u1) == 100000 - 550, "vítězovy sedláci (i poplatek) zůstaly odečtené (sink)"
         # po skončení už nejde přihodit
         assert not auctions.bid(conn, _row(conn, _user(conn)), aid, 1000).get("ok")
     finally:
@@ -71,10 +94,10 @@ def test_cancel_refunds_leader():
         aid = auctions.create(conn, "Skin3", "", 100, 50, 10)["id"]
         u1 = _user(conn); conn.commit()
         auctions.bid(conn, _row(conn, u1), aid, 300)
-        assert _pts(conn, u1) == 100000 - 300
+        assert _pts(conn, u1) == 100000 - 330
         r = auctions.cancel(conn, aid)
         assert r["ok"] and r["refunded"] == 300
-        assert _pts(conn, u1) == 100000, "zrušení vrátilo vůdci sedláky"
+        assert _pts(conn, u1) == 100000, "zrušení vrátilo vůdci escrow i vstupní poplatek"
         assert conn.execute("SELECT status FROM auctions WHERE id=?", (aid,)).fetchone()["status"] == "cancelled"
     finally:
         conn.close()
@@ -87,12 +110,12 @@ def test_buy_now_instant_win():
     try:
         aid = auctions.create(conn, "BuyNowSkin", "", 100, 50, 10, buy_now=5000)["id"]
         u1, u2 = _user(conn), _user(conn); conn.commit()
-        auctions.bid(conn, _row(conn, u1), aid, 200)            # u1 vede na 200
-        assert _pts(conn, u1) == 100000 - 200
+        auctions.bid(conn, _row(conn, u1), aid, 200)            # u1 vede na 200 (+20 poplatek)
+        assert _pts(conn, u1) == 100000 - 220
         r = auctions.buy_now(conn, _row(conn, u2), aid)         # u2 vykoupí
         assert r["ok"] and r["price"] == 5000
         assert _pts(conn, u2) == 100000 - 5000
-        assert _pts(conn, u1) == 100000, "vykoupený vůdce dostal 100 % zpět"
+        assert _pts(conn, u1) == 100000 - 20, "vykoupený vůdce dostal escrow 100 % zpět (poplatek zůstává)"
         a = conn.execute("SELECT status, winner_id FROM auctions WHERE id=?", (aid,)).fetchone()
         assert a["status"] == "ended" and a["winner_id"] == u2
         assert not auctions.buy_now(conn, _row(conn, _user(conn)), aid).get("ok"), "po skončení už ne"
@@ -152,13 +175,13 @@ def test_buy_now_refunds_current_leader_not_old():
     try:
         aid = auctions.create(conn, "BN", "", 100, 50, 10, buy_now=50000)["id"]
         u1, u2, u3 = _user(conn), _user(conn), _user(conn); conn.commit()
-        auctions.bid(conn, _row(conn, u1), aid, 200)        # u1 vede 200
-        auctions.bid(conn, _row(conn, u2), aid, 400)        # u2 přehodí → u1 dostane 90 % (180)
+        auctions.bid(conn, _row(conn, u1), aid, 200)        # u1 vede 200 (+20 poplatek)
+        auctions.bid(conn, _row(conn, u2), aid, 400)        # u2 přehodí (+40 poplatek) → u1 dostane 100 % (200)
         assert _pts(conn, u1) == 100000 - 20
-        assert _pts(conn, u2) == 100000 - 400
+        assert _pts(conn, u2) == 100000 - 440
         r = auctions.buy_now(conn, _row(conn, u3), aid)     # u3 vykoupí
         assert r["ok"] and _pts(conn, u3) == 100000 - 50000
-        assert _pts(conn, u2) == 100000, "aktuální vůdce u2 dostal 100 % zpět"
+        assert _pts(conn, u2) == 100000 - 40, "aktuální vůdce u2 dostal escrow 100 % zpět (poplatek zůstává)"
         assert _pts(conn, u1) == 100000 - 20, "starý (přehozený) vůdce NEDOSTANE nic navíc"
     finally:
         conn.close()
@@ -188,7 +211,7 @@ def test_buynow_rejected_when_bid_reached_price():
     try:
         aid = auctions.create(conn, "BN3", "", 100, 50, 10, buy_now=1000)["id"]
         u1, u2 = _user(conn), _user(conn); conn.commit()
-        auctions.bid(conn, _row(conn, u1), aid, 900)
+        auctions.bid(conn, _row(conn, u1), aid, 900)        # (+90 poplatek, u2 se netýká)
         conn.execute("UPDATE auctions SET current_bid = 1000 WHERE id = ?", (aid,)); conn.commit()  # simuluj dosažení ceny
         r = auctions.buy_now(conn, _row(conn, u2), aid)
         assert not r.get("ok"), "kup-teď zamítnut když příhoz >= cena"
@@ -205,12 +228,12 @@ def test_cancel_refunds_current_leader_after_outbid():
     try:
         aid = auctions.create(conn, "C", "", 100, 50, 10)["id"]
         u1, u2 = _user(conn), _user(conn); conn.commit()
-        auctions.bid(conn, _row(conn, u1), aid, 300)
-        auctions.bid(conn, _row(conn, u2), aid, 600)        # u2 vede, u1 dostal 90 % (270)
+        auctions.bid(conn, _row(conn, u1), aid, 300)        # +30 poplatek
+        auctions.bid(conn, _row(conn, u2), aid, 600)        # u2 vede (+60 poplatek), u1 dostal 100 % (300)
         r = auctions.cancel(conn, aid)
         assert r["ok"] and r["refunded"] == 600
-        assert _pts(conn, u2) == 100000, "aktuální vůdce u2 dostal 100 % zpět"
-        assert _pts(conn, u1) == 100000 - 30, "u1 zůstává na 90 % z přehození (cancel mu nic navíc nedává)"
+        assert _pts(conn, u2) == 100000, "aktuální vůdce u2 dostal escrow i poplatek zpět"
+        assert _pts(conn, u1) == 100000, "u1 dostal při zrušení zpět i vstupní poplatek"
     finally:
         conn.close()
 

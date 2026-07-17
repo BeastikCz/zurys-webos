@@ -1,6 +1,8 @@
 """Aukce o skiny: admin vystaví předmět, diváci přihazují sedláky, nejvyšší na konci vyhrává.
 
-Escrow: příhoz ZABLOKUJE (odečte) sedláky. Přehození → předchozímu vůdci se sedláci VRÁTÍ.
+Escrow: příhoz ZABLOKUJE (odečte) sedláky. Přehození → předchozímu vůdci se vrátí 100 %.
+Sink = jednorázový vstupní poplatek při PRVNÍM příhozu do aukce (ENTRY_FEE_PCT z něj, strop
+ENTRY_FEE_CAP) — další příhozy do téže aukce jsou bez poplatku, bid war nekrvácí.
 Vítěz (current_bidder při ends_at) má sedláky odečtené napořád = sink (skin doručí admin ručně).
 Anti-snipe: příhoz v posledních ANTISNIPE_SEC s prodlouží konec o ANTISNIPE_SEC (ať nikdo nesnipuje).
 Finalizace LAZY (na čtení/příhozu) – žádný daemon; frontend countdown polluje, takže uzavře včas.
@@ -20,8 +22,9 @@ def _safe_image_url(url: str) -> str:
 
 ANTISNIPE_SEC = 30          # příhoz v posledních N s prodlouží konec o N s
 MAX_MINUTES = 7 * 24 * 60   # max délka aukce (7 dní)
-OUTBID_REFUND_PCT = 0.9     # přehozenému se vrátí 90 % příhozu (zbytek propadne = sink + napětí).
-                            #   Zrušení aukce vrací 100 % (není to chyba bidera). Souběh-reject vrací 100 %.
+ENTRY_FEE_PCT = 0.10        # jednorázový vstupní poplatek = % z PRVNÍHO příhozu do aukce (sink)…
+ENTRY_FEE_CAP = 5000        # …se stropem: velké aukce platí flat 5k, malé úměrně míň. Přehození vrací 100 %.
+                            #   Zrušení aukce vrací escrow i poplatky (není to chyba bidera). Souběh-reject vrací vše.
 
 
 def _finalize_expired(conn) -> None:
@@ -146,9 +149,14 @@ def bid(conn, user, auction_id: int, amount: int) -> dict:
         return {"ok": False, "error": f"Minimální příhoz je {min_next} sedláků."}
     if a["buy_now"] and amount >= a["buy_now"]:        # příhoz nesmí dorůst/přerůst kup-teď cenu → drž current_bid < buy_now
         return {"ok": False, "error": f"Tolik už ne — radši klikni 💎 Kup teď za {a['buy_now']} sedláků."}
-    # escrow: zablokuj (odečti) sedláky příhozce
-    if not try_debit(conn, user["id"], amount, f"Aukce #{auction_id} – příhoz (blokace)"):
-        return {"ok": False, "error": f"Nemáš dost sedláků ({amount})."}
+    # vstupní poplatek jen při PRVNÍM příhozu do téhle aukce (další příhozy zdarma → bid war nekrvácí)
+    first_bid = conn.execute("SELECT 1 FROM auction_bids WHERE auction_id = ? AND user_id = ? LIMIT 1",
+                             (auction_id, user["id"])).fetchone() is None
+    fee = min(ENTRY_FEE_CAP, int(round(amount * ENTRY_FEE_PCT))) if first_bid else 0
+    # escrow: zablokuj (odečti) sedláky příhozce (+ případný poplatek v jedné transakci)
+    if not try_debit(conn, user["id"], amount + fee,
+                     f"Aukce #{auction_id} – příhoz (blokace)" + (f" + vstupní poplatek {fee}" if fee else "")):
+        return {"ok": False, "error": f"Nemáš dost sedláků ({amount + fee}" + (f" vč. vstupního poplatku {fee}" if fee else "") + ")."}
     prev_bidder, prev_amount = a["current_bidder_id"], a["current_bid"]
     # anti-snipe: zbývá < N s → prodluž konec (a povol nové „going once" – reset flag)
     new_ends, extended_flag = a["ends_at"], 0
@@ -156,30 +164,28 @@ def bid(conn, user, auction_id: int, amount: int) -> dict:
         new_ends = (datetime.now(timezone.utc) + timedelta(seconds=ANTISNIPE_SEC)).isoformat()
         extended_flag = 1
     # ATOMICKY se staň nejvyšším – jen pokud je můj příhoz pořád > current A nejsem už vůdce já
-    # (poslední podmínka brání souběžnému self-outbidu dvou mých příhozů → ztráta 50 % vlastního escrow)
+    # (poslední podmínka brání souběžnému self-outbidu dvou mých příhozů → ztráta vlastního escrow)
     won = conn.execute(
         "UPDATE auctions SET current_bid = ?, current_bidder_id = ?, bids_count = bids_count + 1, ends_at = ?, "
         "going_once_sent = CASE WHEN ? = 1 THEN 0 ELSE going_once_sent END "
         "WHERE id = ? AND status = 'active' AND current_bid < ? AND (current_bidder_id IS NULL OR current_bidder_id <> ?)",
         (amount, user["id"], new_ends, extended_flag, auction_id, amount, user["id"])).rowcount == 1
     if not won:
-        add_points(conn, user["id"], amount, f"Aukce #{auction_id} – vrácení (předběhnut)", xp=False)
+        add_points(conn, user["id"], amount + fee, f"Aukce #{auction_id} – vrácení (předběhnut)", xp=False)
         conn.commit()
         return {"ok": False, "error": "Někdo přihodil dřív – zkus víc. 🔨"}
-    if prev_bidder:                                   # přehozenému se vrátí jen OUTBID_REFUND_PCT (zbytek propadne = sink)
-        refund = int(round(prev_amount * OUTBID_REFUND_PCT))
-        lost = prev_amount - refund
-        add_points(conn, prev_bidder, refund, f"Aukce #{auction_id} – vrácení {int(OUTBID_REFUND_PCT * 100)} % (přehozen)", xp=False)
+    if prev_bidder:                                   # přehozenému se vrátí 100 % (sink je vstupní poplatek, ne srážka)
+        add_points(conn, prev_bidder, prev_amount, f"Aukce #{auction_id} – vrácení 100 % (přehozen)", xp=False)
         notify(conn, prev_bidder, "🔨", "Přehodili tě v aukci!",
-               f"Někdo přihodil víc na „{a['title']}\". Vráceno {refund} sedláků (50 %), {lost} propadlo. Přihoď znova? 💰", "#/shop")
-    conn.execute("INSERT INTO auction_bids (auction_id, user_id, amount, created_at) VALUES (?,?,?,?)",
-                 (auction_id, user["id"], amount, now_iso()))
+               f"Někdo přihodil víc na „{a['title']}\". Vráceno {prev_amount} sedláků (100 %). Přihoď znova? 💰", "#/shop")
+    conn.execute("INSERT INTO auction_bids (auction_id, user_id, amount, fee, created_at) VALUES (?,?,?,?,?)",
+                 (auction_id, user["id"], amount, fee, now_iso()))
     conn.commit()
     if a["chat_announce"]:                            # hype do Kick chatu (background thread)
         _announce_async(f"🔨 {user['username']} přihodil {amount} na „{a['title']}\"! Kdo dá víc? 💰")
     bal = conn.execute("SELECT points FROM users WHERE id = ?", (user["id"],)).fetchone()["points"]
     return {"ok": True, "balance": bal, "current_bid": amount, "ends_at": new_ends,
-            "extended": new_ends != a["ends_at"]}
+            "extended": new_ends != a["ends_at"], "fee": fee}
 
 
 def buy_now(conn, user, auction_id: int) -> dict:
@@ -322,6 +328,10 @@ def cancel(conn, auction_id: int) -> dict:
         add_points(conn, bidder, bid_amt, f"Aukce #{auction_id} – zrušeno (vráceno)", xp=False)
         notify(conn, bidder, "🔨", "Aukce zrušena",
                f"Aukce „{cur['title']}\" byla zrušena. Sedláci ({bid_amt}) vráceny. 💰", "#/shop")
+    # vrať i vstupní poplatky všem dražitelům (zrušení není jejich chyba; staré aukce mají fee=0 → no-op)
+    for r in conn.execute("SELECT user_id, SUM(fee) f FROM auction_bids WHERE auction_id = ? "
+                          "GROUP BY user_id HAVING f > 0", (auction_id,)):
+        add_points(conn, r["user_id"], r["f"], f"Aukce #{auction_id} – zrušeno (vrácen vstupní poplatek)", xp=False)
     conn.commit()
     return {"ok": True, "refunded": bid_amt if bidder else 0}
 

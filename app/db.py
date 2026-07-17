@@ -223,6 +223,7 @@ CREATE TABLE IF NOT EXISTS auction_bids (
     auction_id INTEGER NOT NULL REFERENCES auctions(id) ON DELETE CASCADE,
     user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     amount     INTEGER NOT NULL,
+    fee        INTEGER NOT NULL DEFAULT 0,  -- vstupní poplatek zaplacený s tímto příhozem (vrací se při zrušení aukce)
     created_at TEXT NOT NULL
 );
 
@@ -897,6 +898,7 @@ _MIGRATIONS = [
     ("auctions", "sub_only", "INTEGER NOT NULL DEFAULT 0"),      # aukce: jen sub smí přihazovat
     ("auctions", "chat_announce", "INTEGER NOT NULL DEFAULT 1"), # aukce: hlásit do Kick chatu
     ("auctions", "going_once_sent", "INTEGER NOT NULL DEFAULT 0"),  # aukce: „poslední vteřiny" hlášeno
+    ("auction_bids", "fee", "INTEGER NOT NULL DEFAULT 0"),       # aukce: vstupní poplatek zaplacený s TÍMTO příhozem (kvůli vracení při zrušení)
     ("users", "feed_stock", "INTEGER NOT NULL DEFAULT 0"),    # Statek: zásoba krmiva (padá ze sklizně zahrádky) – krmí zvířata zdarma místo sedláků
     ("users", "farm_fox_day", "TEXT"),                        # Statek: den, kdy se naposledy losovala liška (1×/den)
     ("users", "farm_fox", "TEXT"),                            # Statek: pending liška – JSON {slot, ready_at} / '' vyřešeno
