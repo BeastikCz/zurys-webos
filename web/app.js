@@ -460,6 +460,8 @@ function pageShop() {
       <p>Utrať nasbírané sedláky za prémiové skiny a odměny — instantní odměny, limitky i tomboly. 🌾</p>
       <button class="shop-how" data-action="open-welcome">🌾 Jak získat sedláky?</button></div></div>
     <div id="onbCard"></div>
+    <div id="quickCard"></div>
+    <div id="weeklyCard"></div>
     <div id="happyBanner"></div>
     <div id="soldFeed"></div>
     <div id="shopHero"></div>
@@ -468,6 +470,8 @@ function pageShop() {
     <div class="da-grid" id="prodGrid">${skeletonCards(8)}</div>
     <div style="text-align:center;margin-top:26px" id="loadMoreWrap"></div>`;
   renderOnbCard();      // z cache (claimsData); čerstvá data dorenderuje refreshBonusDot
+  renderQuickCard();
+  if (state.user) loadWeeklySummary();
   renderFilters();
   loadActivity();
   loadDropBanner();
@@ -1707,6 +1711,11 @@ function supportUserCtx(u, ticketId) {
     </div>
   </div>`;
 }
+function supportEventHistory(events) {
+  if (!events || !events.length) return "";
+  const icons = { created: "🎫", status: "🔄", refund: "💰" };
+  return `<details class="support-events"><summary>Historie ticketu (${events.length})</summary><div>${events.slice().reverse().map((e) => `<span><b>${icons[e.event] || "•"} ${esc(e.actor_name || "Systém")}</b><em>${esc(e.detail || "")}</em><small>${timeAgo(e.created_at)}</small></span>`).join("")}</div></details>`;
+}
 async function loadSupportDetail(ticketId) {
   const box = document.getElementById("supportDetail"); if (!box) return;
   box.innerHTML = skeletonCards(1);
@@ -1721,6 +1730,7 @@ async function loadSupportDetail(ticketId) {
       ${supportProgress(ticket.status)}
       <div class="support-detail-meta"><b>${esc(supportCategory(ticket))}</b><span>Vytvořeno ${timeAgo(ticket.created_at)}</span><span>Aktualizováno ${timeAgo(ticket.updated_at)}</span></div>
       ${staff && data.user_ctx ? supportUserCtx(data.user_ctx, ticket.id) : ""}
+      ${supportEventHistory(data.events)}
       <div class="support-conversation">${dmBubbles(data.messages, staff)}</div>
       ${closed ? `<div class="support-closed-note">Ticket je uzavřený. Pokud řešíš něco dalšího, založ nový.</div>` : `${staff ? `<div class="support-templates">${SUPPORT_TEMPLATES.map((t, i) => `<button class="btn btn-sm btn-ghost" data-action="support-template" data-i="${i}">📋 ${t[0]}</button>`).join("")}</div>` : ""}${!staff && ticket.status !== "resolved" ? `<div class="support-templates"><button class="btn btn-sm btn-ghost" data-action="support-resolve" data-id="${ticket.id}">✅ Problém je vyřešený, díky</button></div>` : ""}<div class="dm-composer support-composer"><textarea class="input" id="supportReplyInput" rows="3" maxlength="2000" placeholder="Napište odpověď…"></textarea><input type="file" id="supportAttachFile" accept="image/png,image/jpeg,image/webp,image/gif" hidden data-id="${ticket.id}"><button class="btn btn-ghost" data-action="support-attach" title="Přiložit screenshot (max 6 MB)">📎</button><button class="btn btn-primary" data-action="support-reply" data-id="${ticket.id}">Odeslat odpověď</button></div>`}`;
     const thread = box.querySelector(".dm-thread"); if (thread) thread.scrollTop = thread.scrollHeight;
@@ -1774,7 +1784,7 @@ async function refundFromTicket(userId, ticketId) {
   if (!amount || amount < 1) { toast("Zadej kolik sedláků připsat.", "error"); return; }
   if (!confirm(`Připsat ${fmtPts(amount)} jako refund k ticketu #${ticketId}?`)) return;
   try {
-    await api(`/admin/users/${userId}/points`, { method: "POST", body: { change: amount, reason: `Refund: ticket #${ticketId}` } });
+    await api(`/tickets/admin/${ticketId}/refund`, { method: "POST", body: { amount } });
     toast(`Připsáno ${fmtPts(amount)}.`, "success");
     await loadSupportDetail(ticketId);
   } catch (e) { toast(e.message, "error"); }
@@ -1945,7 +1955,9 @@ async function pageExchange() {
   view.innerHTML = `
     <div class="page-head with-mascot"><img class="page-mascot" src="/sedlak-cut.png" alt=""><div class="ph-text"><h1>💱 Směnárna</h1><p class="muted">Pošli sedláky kamarádům nebo uplatni promo kód od streamera.</p></div></div>
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(310px,1fr));gap:18px;margin-bottom:24px">${giftCardHTML()}${redeemCardHTML()}</div>
+    <div id="giftHistory"></div>
     <div id="exWrap">${skeletonCards(2)}</div>`;
+  if (state.user) loadGiftHistory();
   try {
     const items = await api("/shop/exchange");
     if (!items.length) { $("#exWrap").innerHTML = ""; return; }
@@ -1962,6 +1974,20 @@ async function pageExchange() {
         ${btn}</div>`;
     }).join("")}</div>`;
   } catch (e) { $("#exWrap").innerHTML = `<div class="empty">${esc(e.message)}</div>`; }
+}
+async function loadGiftHistory() {
+  const box = document.getElementById("giftHistory"); if (!box) return;
+  try {
+    const rows = await api("/exchange/gifts");
+    if (!rows.length) { box.innerHTML = ""; return; }
+    const labels = { pending: "Čeká na schválení", approved: "Schváleno", rejected: "Zamítnuto" };
+    box.innerHTML = `<div class="panel gift-history"><div class="section-title">🎁 Stav tvých darů</div>${rows.map((g) => `<div class="gift-history-row">
+      <span class="gift-direction">${g.direction === "sent" ? "Odesláno pro" : "Přijato od"} <b>${esc(g.peer)}</b></span>
+      <b class="gift-amount">${g.direction === "sent" ? "−" : "+"}${fmtPts(g.amount)}</b>
+      <span class="gift-state is-${g.status}">${labels[g.status] || esc(g.status)}</span>
+      <span class="faint">${timeAgo(g.decided_at || g.created_at)}</span>${g.note ? `<small>${esc(g.note)}</small>` : ""}
+    </div>`).join("")}</div>`;
+  } catch (e) { box.innerHTML = ""; }
 }
 function giftCardHTML() {
   if (!state.user) return `<div class="panel"><div class="section-title" style="margin-top:0">🎁 Poslat sedláky kamarádovi</div><p class="muted" style="font-size:13.5px;margin:6px 0 0">Pro darování se <a href="#" data-action="connect" style="color:var(--accent)">připoj přes Kick</a>.</p></div>`;
@@ -3146,7 +3172,7 @@ async function buyDecor(key) {
     if (state.user) state.user.points = r.balance;
     toast(`Koupeno: ${r.icon} ${r.name}! 🎨`, "success");
     try { confettiBurst(); } catch (e) {}
-    renderHeader(); loadGarden();
+    renderHeader(); refreshBonusDot(); loadWeeklySummary(); loadGarden();
   } catch (e) { toast(e.message, "error"); }
 }
 async function loadGarden() {
@@ -3236,7 +3262,7 @@ async function grdHarvestAll() {
     const g = r.golden ? ` · 🌟 ${r.golden}× ZLATÁ!` : "";
     toast(`Sklizeno ${r.count}× · +${fmtPts(r.total)} 🌾${g}`, "success");
     try { confettiBurst(); } catch (e) {}
-    renderHeader(); loadGarden();
+    renderHeader(); refreshBonusDot(); loadWeeklySummary(); loadGarden();
   } catch (e) { toast(e.message, "error"); }
 }
 async function grdPlantAll() {
@@ -3316,7 +3342,7 @@ async function loadFarm() {
       <div class="stk-status">
         <span class="stk-s-l">🏆 <b>Sbírka</b> <span class="stk-chip${col.complete ? " ok" : ""}">${col.have}/${col.total} druhů</span>
           <span class="faint">${col.complete ? "✓ kompletní" : `kompletní = +${fmtPts(col.reward)}`}</span></span>
-        <span class="stk-s-r"><span class="stk-chip">🌾 Krmivo ${f.krmivo}</span><span class="faint" style="font-size:11px">ze sklizně</span>${f.prod_bonus ? `<span class="stk-chip" style="background:rgba(146,110,255,.14);border-color:rgba(146,110,255,.35);color:#c3b0ff">🐕 +${f.prod_bonus}%</span>` : ""}<span class="stk-chip${f.farm_today >= f.farm_daily_full ? "" : " ok"}" title="Denní produkce v plné výši do ${fmtPts(f.farm_daily_full)} sedláků; nad strop jde jen čtvrtina (XP taky). O půlnoci se resetuje.">📈 dnes ${Number(f.farm_today).toLocaleString("cs-CZ")}/${Number(f.farm_daily_full).toLocaleString("cs-CZ")}${f.farm_today >= f.farm_daily_full ? " · ×¼" : ""}</span>${f.golden_event ? `<span class="stk-chip" title="Zlatá horečka: zvýšená šance na zlatý produkt (×${f.golden_mult} sedláci)" style="background:rgba(255,210,74,.16);border-color:rgba(255,210,74,.5);color:#ffd24a">🌟 ZLATÁ HOREČKA ${f.golden_pct} %</span>` : ""}</span>
+        <span class="stk-s-r"><span class="stk-chip">🌾 Krmivo ${f.krmivo}</span><span class="faint" style="font-size:11px">ze sklizně</span>${f.prod_bonus ? `<span class="stk-chip" style="background:rgba(146,110,255,.14);border-color:rgba(146,110,255,.35);color:#c3b0ff">🐕 +${f.prod_bonus}%</span>` : ""}<span class="stk-chip${f.farm_today >= f.farm_daily_full ? "" : " ok"}" title="Denní produkce v plné výši do ${fmtPts(f.farm_daily_full)} sedláků; nad strop jde jen čtvrtina (XP taky). Každý level stodoly strop zvedá o 5 000. O půlnoci se resetuje.">📈 dnes ${Number(f.farm_today).toLocaleString("cs-CZ")}/${Number(f.farm_daily_full).toLocaleString("cs-CZ")}${f.farm_today >= f.farm_daily_full ? " · ×¼" : ""}</span>${f.golden_event ? `<span class="stk-chip" title="Zlatá horečka: zvýšená šance na zlatý produkt (×${f.golden_mult} sedláci)" style="background:rgba(255,210,74,.16);border-color:rgba(255,210,74,.5);color:#ffd24a">🌟 ZLATÁ HOREČKA ${f.golden_pct} %</span>` : ""}</span>
       </div>
       <div class="stk-status" style="border-color:${patron.gifts ? "rgba(185,95,255,.45)" : "rgba(255,183,55,.22)"}">
         <span class="stk-s-l">🎁 <b>Patron sezóny</b> <span class="stk-chip${patron.gifts ? " ok" : ""}">${patron.gifts} tento měsíc</span>
@@ -3339,9 +3365,9 @@ async function loadFarm() {
           : `<span class="faint">odměna +${fmtPts(f.contract.reward)}</span>`}</span></div>` : ""}
       <div class="stk-scene" style="--stk-hero:url('/img/farm/statek-hero-c.webp'),url('/img/farm/statek-hero.webp'),url('/img/farm/statek-hero.svg')"><div class="stk-pasture">${pasture}</div></div>
       ${cta}${feedBtn}
-      ${f.barn && f.barn.next_cost ? `<div style="margin:10px 0 0;text-align:center"><button class="btn btn-ghost" data-action="farm-barn" data-cost="${f.barn.next_cost}" title="Prestige stodoly: každý level = +1 slot na zvíře (navždy)">🏠 Vylepšit stodolu na lvl ${f.barn.level + 1} (+1 slot) · ${fmtPts(f.barn.next_cost)}</button></div>`
+      ${f.barn && f.barn.next_cost ? `<div style="margin:10px 0 0;text-align:center"><button class="btn btn-ghost" data-action="farm-barn" data-cost="${f.barn.next_cost}" title="Prestige stodoly: každý level = +1 slot na zvíře a +5 000 k dennímu stropu produkce (navždy)">🏠 Vylepšit stodolu na lvl ${f.barn.level + 1} (+1 slot · +5k denní strop) · ${fmtPts(f.barn.next_cost)}</button></div>`
         : f.barn && f.barn.level > 1 ? `<div class="faint" style="margin:10px 0 0;text-align:center;font-size:12px">🏆 Stodola na maximu (lvl ${f.barn.level})</div>` : ""}
-      <p class="stk-info">Sloty: <b>${f.n_slots}</b>${f.sub ? " (💜 sub +1)" : " · 💜 sub má +1 slot"}${f.barn && f.barn.level > 1 ? ` (🏠 stodola lvl ${f.barn.level})` : ""}${f.active_slots < f.n_slots ? " · sezónní patron slot skončil — prodej zvíře v něm před další koupí" : ""}. Krmení bere <b>krmivo</b> (zdarma ze zahrádky), jinak sedláky. Produkt = <b>XP</b> (mimo strop) + sedláci, <b>levelem roste</b> ⭐. Zlatý produkt (${f.golden_pct} %) ×${f.golden_mult}. Nenakrmené zvíře neprodukuje.</p>
+      <p class="stk-info">Sloty: <b>${f.n_slots}</b>${f.sub ? " (💜 sub +1)" : " · 💜 sub má +1 slot"}${f.barn && f.barn.level > 1 ? ` (🏠 stodola lvl ${f.barn.level})` : ""}${f.active_slots < f.n_slots ? " · sezónní patron slot skončil — prodej zvíře v něm před další koupí" : ""}. Produkční zvířata mají <b>max. level 10</b>. Pes se <b>nekrmí ani neleveluje</b> — rovnou přidává +10 % produkce a chrání před liškou. Krmení bere krmivo ze zahrádky, jinak sedláky.</p>
       <div class="stk-shop-title">🐾 Zvířata k koupi</div>
       <div class="stk-shop">${shop}</div>
       <div class="stk-shop-title" style="margin-top:18px">🏆 Farmářský žebříček týdne</div>
@@ -3385,7 +3411,7 @@ async function farmBuyConfirm(animal) {
     closeModal();
     toast(r.level > 1 ? `Koupil jsi ${r.icon} ${esc(r.name)} — ze stáje se vrací na ⭐${r.level}! Teď ho nakrm 🌾`
       : `Koupil jsi ${r.icon} ${esc(r.name)}! Teď ho nakrm 🌾`, "success");
-    renderHeader(); loadFarm();
+    renderHeader(); refreshBonusDot(); loadWeeklySummary(); loadFarm();
   } catch (e) { toast(e.message, "error"); }
 }
 async function farmFeed(slot) {
@@ -3394,7 +3420,7 @@ async function farmFeed(slot) {
     if (state.user) state.user.points = r.balance;
     if (r.leveled_up) { toast(`⭐ LEVEL UP! ${esc(r.name)} je teď level ${r.level} — větší výnos!`, "success"); try { confettiBurst(); } catch (e) {} }
     else toast(`Nakrmeno ${r.used_krmivo ? "krmivem 🌾 (zdarma)" : "🌾"} — ${esc(r.name)} produkuje`, "success");
-    renderHeader(); loadFarm();
+    renderHeader(); refreshBonusDot(); loadWeeklySummary(); loadFarm();
   } catch (e) { toast(e.message, "error"); }
 }
 async function farmTurbo(slot) {
@@ -3503,7 +3529,7 @@ async function farmFeedAll() {
     toast(r.count
       ? `Nakrmeno ${r.count}× 🌾${r.krmivo_used ? ` (${r.krmivo_used}× krmivem zdarma)` : ""}${r.skipped ? ` · na ${r.skipped} nezbylo` : ""}`
       : "Nebylo koho nakrmit — nebo nezbývají sedláci. 🌾", r.count ? "success" : "info");
-    renderHeader(); loadFarm();
+    renderHeader(); refreshBonusDot(); loadWeeklySummary(); loadFarm();
   } catch (e) { toast(e.message, "error"); }
 }
 async function farmCollectAll() {
@@ -3512,7 +3538,7 @@ async function farmCollectAll() {
     if (state.user) state.user.points = r.balance;
     toast(`Sebráno ${r.count}× · +${fmtPts(r.total)} 🥚${r.golden ? ` · 🌟 ${r.golden}× zlaté!` : ""}`, "success");
     try { confettiBurst(); } catch (e) {}
-    renderHeader(); loadFarm();
+    renderHeader(); refreshBonusDot(); loadWeeklySummary(); loadFarm();
   } catch (e) { toast(e.message, "error"); }
 }
 
@@ -3862,6 +3888,7 @@ async function refreshBonusDot() {
   } catch (e) { return; }
   renderHeader();
   renderOnbCard();
+  renderQuickCard();
 }
 
 /* ---------- Onboarding checklist pro nováčky (≤14 dní, homepage) ---------- */
@@ -3874,6 +3901,8 @@ function renderOnbCard() {
     { done: !c.daily, icon: "🔥", txt: "Vyzvedni denní bonus", href: "#/bonusy" },
     { done: !c.wheel, icon: "🎡", txt: "Zatoč kolem štěstí", href: "#/bonusy" },
     { done: c.onb_planted, icon: "🌱", txt: "Zasaď první semínko", href: "#/zahrada" },
+    { done: c.onb_animal, icon: "🐔", txt: "Pořiď první zvíře", href: "#/statek" },
+    { done: c.onb_crew, icon: "🛡️", txt: "Přidej se k partě", href: "#/crews" },
     { done: questDone, icon: "📋", txt: "Splň denní úkol", href: "#/ukoly" },
   ];
   const doneN = steps.filter((s) => s.done).length;
@@ -3888,6 +3917,26 @@ function renderOnbCard() {
       ? `<span class="onb-step onb-done">✓ ${s.txt}</span>`
       : `<a class="onb-step" href="${s.href}">${s.icon} ${s.txt} →</a>`).join("")}</div>
   </div>`;
+}
+function renderQuickCard() {
+  const box = document.getElementById("quickCard"); if (!box) return;
+  const c = claimsData, farmAccess = state.user && (state.user.role === "admin" || state.user.farm_public);
+  if (!state.user || !c) { box.innerHTML = ""; return; }
+  const actions = [];
+  if (c.garden > 0) actions.push(`<button class="quick-action" data-action="grd-harvest-all">🌾 Sklidit vše <b>${c.garden}×</b></button>`);
+  if (farmAccess && c.farm_ready > 0) actions.push(`<button class="quick-action" data-action="farm-collect-all">🥚 Sebrat vše <b>${c.farm_ready}×</b></button>`);
+  if (farmAccess && c.farm_hungry > 0) actions.push(`<button class="quick-action" data-action="farm-feed-all">🐔 Nakrmit vše <b>${c.farm_hungry}×</b></button>`);
+  if (c.daily || c.wheel) actions.push(`<a class="quick-action" href="#/bonusy">🎁 Vyzvednout bonusy</a>`);
+  if (c.quests > 0) actions.push(`<a class="quick-action" href="#/ukoly">📋 Vyzvednout úkoly <b>${c.quests}×</b></a>`);
+  box.innerHTML = actions.length ? `<div class="panel quick-panel"><div class="section-title">⚡ Rychlé akce</div><div class="quick-actions">${actions.join("")}</div></div>` : "";
+}
+async function loadWeeklySummary() {
+  const box = document.getElementById("weeklyCard"); if (!box || !state.user) return;
+  try {
+    const w = await api("/me/weekly-summary");
+    box.innerHTML = `<div class="panel weekly-panel"><div class="row-between"><div class="section-title">📊 Tvůj týden</div><span class="faint">od pondělí</span></div>
+      <div class="weekly-stats"><span><b>+${fmtPts(w.earned)}</b><small>poctivě získáno</small></span><span><b>${w.harvests}×</b><small>sklizeň</small></span><span><b>${w.farm_products}×</b><small>produkty statku</small></span><span><b>${w.orders}×</b><small>objednávky</small></span>${w.gifts_received ? `<span><b>+${fmtPts(w.gifts_received)}</b><small>přijaté dary</small></span>` : ""}</div></div>`;
+  } catch (e) { box.innerHTML = ""; }
 }
 async function loadProfTab(tab) {
   document.querySelectorAll('[data-action="prof-tab"]').forEach((b) => b.classList.toggle("active", b.dataset.tab === tab));
@@ -6856,6 +6905,8 @@ function farmGuide() {
   const steps = [
     ["🐾", "Kup a nakrm", "Kup zvíře do volného slotu. Krmivo ze <b>Zahrádky</b> je zdarma, jinak krmíš za sedláky."],
     ["⏱️", "Seber produkci", "Po dokončení cyklu seber produkt za <b>sedláky + XP</b>; zvíře pak znovu čeká na krmení."],
+    ["⭐", "Leveluj do 10", "Každých pět krmení zvedne produkční zvíře o level. Maximum je <b>level 10</b>."],
+    ["🐕", "Pes je výjimka", "Pes se <b>nekrmí ani neleveluje</b>. Ihned přidá +10 % produkce všem zvířatům a odežene lišku."],
     ["📋", "Plň Zakázku dne", "Produkty se počítají do denní zakázky. Dokonči ji pro další odměnu."],
     ["🦊", "Chraň statek", "Liška může číhat na hotový produkt — výkupné je půlka jeho hodnoty. Pes ji odežene; patron s 15 gifty tento měsíc taky."],
     ["⚡", "Giftni a zrychli", "Každý gift sub dá turbo žeton: vyber zvíře a jeho příští cyklus poběží 2× rychleji."],
@@ -7214,7 +7265,7 @@ document.addEventListener("click", (e) => {
 
 /* Service worker pro Web Push (notifikace do mobilu). Registruje se 1× na pozadí. */
 if ("serviceWorker" in navigator) {
-  window.addEventListener("load", () => { navigator.serviceWorker.register("/sw.js?v=2026071248").catch(() => {}); });
+  window.addEventListener("load", () => { navigator.serviceWorker.register("/sw.js?v=2026071250").catch(() => {}); });
 }
 
 document.addEventListener("change", (e) => {

@@ -4,6 +4,10 @@ Každý agent sem PŘIDÁ záznam hned po každé dokončené práci (změna kó
 
 ---
 
+## 2026-07-18
+
+- **[Claude] Denní strop Statku navázán na stodolu — NASAZENO (cache 2026071250)** — reakce na stížnost Martech1 (750k utopených ve statku, strop 20k trefuje na stodole lvl 2). Místo plošného zvednutí (inflace) strop nově roste se stodolou: `FARM_DAILY_FULL 20000 + FARM_DAILY_PER_BARN 5000 × (barn_level − 1)` → lvl 5 = 40k/den plné sazby; nad strop dál ×0,25 (`FARM_SOFT_RATE` beze změny). Tím prestige stodola (sink 50k–1M) kupuje i denní kapacitu, ne jen slot — do teď sloty navíc jen rychleji narážely do stropu a marginální hodnota sinku klesala. Nový helper `farm._daily_full(conn, uid)` (jediný zdroj pravdy) použitý v `_award_product` i `status()` → frontend chip 📈 dnes N/M se přizpůsobí sám. UI texty: tooltip chipu + tlačítko stodoly „(+1 slot · +5k denní strop)". Nový test `test_barn_raises_daily_cap` (lvl 3: plný výnos na 20k, soft nad 30k; status kontrakt). Ověřeno lokálně živě (dev DB, curl s injektovanou session: `farm_daily_full: 30000` při barn 3; session uklizena). Deploy `python deploy.py --deploy`: predeploy 495/495 + frontend OK, maintenance ověřena vypnutá, atomický release, health 200 + DB ok, CF Purge Everything. Živě ověřeno: prod `farm.py` obsahuje `_daily_full`/konstantu, veřejný app.js v=2026071250 má oba nové texty. Bez změny produkčních dat. Pozn.: deploy odvezl i Codexův UX balíček 2026071249 (v tree byl nasazený, ale necommitnutý) — no-op, commit dorovnává repo na produkci.
+
 ## 2026-07-17
 
 - **[Codex] UX balíček 2/3/4/6/7/8 — NASAZENO (cache 2026071249, release webos-1784305600079870900)** — `python deploy.py --deploy`: predeploy 494/494, frontend balance a `node --check` OK; atomický release na Contabo, restart/health/DB OK, údržba vypnutá a Cloudflare Purge Everything dokončen. Živě ověřeno: veřejný build 2026071249 obsahuje rychlé akce, týdenní souhrn i stav darů; produkční `/data/app.db` má novou tabulku `support_ticket_events`. Bez ruční změny produkčních dat.

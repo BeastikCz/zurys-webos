@@ -102,6 +102,18 @@ def test_gift_creates_pending_and_escrows(client):
     assert mine[0]["note"] == "díky za pomoc", "důvod se má uložit a vrátit adminovi"
 
 
+def test_users_see_gift_status(client):
+    s_tok, s_name, _ = _make_user(points=5000)
+    r_tok, r_name, _ = _make_user(points=0)
+    assert _gift(client, s_tok, r_name, 750, note="výhra").status_code == 200
+    sent = client.get("/api/exchange/gifts", headers=_hdr(s_tok)).json()[0]
+    received = client.get("/api/exchange/gifts", headers=_hdr(r_tok)).json()[0]
+    assert sent["direction"] == "sent" and sent["peer"] == r_name and sent["status"] == "pending"
+    assert received["direction"] == "received" and received["peer"] == s_name
+    client.post(f"/api/admin/gift-requests/{sent['id']}/approve", headers=_hdr(_make_user("admin")[0]))
+    assert client.get("/api/exchange/gifts", headers=_hdr(r_tok)).json()[0]["status"] == "approved"
+
+
 def test_approve_moves_points_and_canonicalizes(client):
     """Povolení připíše body příjemci a escrow řádek přejmenuje na 'Dar pro X 🎁'."""
     from app.db import get_conn

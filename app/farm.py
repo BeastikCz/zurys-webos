@@ -24,7 +24,8 @@ FOX_RANSOM_MIN, FOX_RANSOM_MAX = 50, 200   # …sevřeno, ať to není nula ani 
 FOX_RANSOM = 200               # fallback pro pending lišky z doby fixního výkupného
 
 STARTER_COST = 500             # první zvíře vůbec (slepice) za zlomek ceny – onboarding nováčka
-FARM_DAILY_FULL = 20000        # sedláci z produkce/den v plné výši; nad strop jen FARM_SOFT_RATE
+FARM_DAILY_FULL = 20000        # základ: sedláci z produkce/den v plné výši; nad strop jen FARM_SOFT_RATE
+FARM_DAILY_PER_BARN = 5000     # +strop za každý level stodoly nad 1 (sink kupuje i denní kapacitu, lvl 5 = 40k)
 FARM_SOFT_RATE = 0.25          # (XP jde ze snížené částky taky – měkký strop, ne tvrdý blok)
 
 # Zakázky: denní kontrakt z vlastněných druhů („dodej 3× vejce + 2× mléko"). Odměna sedláci BEZ XP,
@@ -338,6 +339,13 @@ def _farm_today(conn, uid: int) -> int:
     return r["farm_today"] or 0
 
 
+def _daily_full(conn, uid: int) -> int:
+    """Denní strop plné sazby: základ + bonus za level stodoly (sink kupuje i kapacitu, ne jen slot)."""
+    r = conn.execute("SELECT barn_level FROM users WHERE id = ?", (uid,)).fetchone()
+    lvl = max(1, min(BARN_MAX, ((r["barn_level"] if r else 1) or 1)))
+    return FARM_DAILY_FULL + FARM_DAILY_PER_BARN * (lvl - 1)
+
+
 def _farm_today_add(conn, uid: int, amount: int) -> None:
     today = now_iso()[:10]
     conn.execute("UPDATE users SET farm_today = CASE WHEN COALESCE(farm_day,'') = ? "
@@ -488,7 +496,7 @@ def status(conn, user) -> dict:
             "patron": patron,
             "turbo": _turbo_status(conn, user["id"]),
             "fox": ({"slot": fox["slot"], "ransom": fox.get("ransom", FOX_RANSOM)} if fox else None),
-            "farm_today": _farm_today(conn, user["id"]), "farm_daily_full": FARM_DAILY_FULL,
+            "farm_today": _farm_today(conn, user["id"]), "farm_daily_full": _daily_full(conn, user["id"]),
             "starter": _starter_eligible(conn, user["id"]), "starter_cost": STARTER_COST,
             "contract": _contract_public(conn, user["id"]),
             "barn": {"level": _barn_level(user), "max": BARN_MAX,
@@ -641,8 +649,8 @@ def feed_all(conn, user) -> dict:
 def _award_product(conn, user_id, a, level, bonus):
     from .deps import add_points
     base = _reward_at(a, level, bonus)
-    # měkký denní strop: nad FARM_DAILY_FULL sedláků z produkce jde jen zlomek (grinder ochrana faucetu)
-    soft = _farm_today(conn, user_id) >= FARM_DAILY_FULL
+    # měkký denní strop (základ + stodola): nad něj jde jen zlomek (grinder ochrana faucetu)
+    soft = _farm_today(conn, user_id) >= _daily_full(conn, user_id)
     paid = max(1, int(base * FARM_SOFT_RATE)) if soft else base
     golden = random.random() < _golden_chance(conn)
     add_points(conn, user_id, paid, f"Statek: {a['product']} {a['pico']}" + (" (nad denní strop)" if soft else ""))

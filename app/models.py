@@ -532,6 +532,10 @@ class UserPointsIn(BaseModel):
     reason: Optional[str] = "Úprava adminem"
 
 
+class TicketRefundIn(BaseModel):
+    amount: int = Field(ge=1, le=1_000_000)
+
+
 # --- Admin: objednávky ---
 class UserAdminMetaIn(BaseModel):
     watchlisted: Optional[bool] = None

@@ -254,6 +254,41 @@ def leaderboard_weekly(conn: sqlite3.Connection = Depends(db_dep)):
     return data
 
 
+@router.get("/me/weekly-summary")
+def my_weekly_summary(user: sqlite3.Row = Depends(require_user),
+                      conn: sqlite3.Connection = Depends(db_dep)):
+    """Malý osobní souhrn týdne; načítá se jen na homepage, ne v polling agregátu /me/claims."""
+    now = datetime.now(timezone.utc)
+    start = (now - timedelta(days=now.weekday())).replace(hour=0, minute=0, second=0, microsecond=0).isoformat()
+    earned = 0
+    for row in conn.execute(
+        "SELECT reason,SUM(change) gained FROM points_log "
+        "WHERE user_id=? AND change>0 AND created_at>=? GROUP BY reason", (user["id"], start)
+    ):
+        if classify_xp(row["reason"])[0] != "zero":
+            earned += row["gained"]
+    harvests = conn.execute(
+        "SELECT COUNT(*) c FROM points_log WHERE user_id=? AND created_at>=? "
+        "AND (reason LIKE 'Sklizeň%' OR reason LIKE 'Zlatá sklizeň:%')",
+        (user["id"], start),
+    ).fetchone()["c"]
+    farm_products = conn.execute(
+        "SELECT COUNT(*) c FROM points_log WHERE user_id=? AND created_at>=? AND change>0 "
+        "AND reason LIKE 'Statek:%' AND reason NOT LIKE 'Statek: zlaté%' "
+        "AND reason NOT LIKE 'Statek: zakázka%' AND reason NOT LIKE 'Statek: prodej%'",
+        (user["id"], start),
+    ).fetchone()["c"]
+    orders = conn.execute(
+        "SELECT COUNT(*) c FROM orders WHERE user_id=? AND created_at>=?", (user["id"], start)
+    ).fetchone()["c"]
+    gifts = conn.execute(
+        "SELECT COALESCE(SUM(amount),0) n FROM gift_requests "
+        "WHERE to_user_id=? AND status='approved' AND decided_at>=?", (user["id"], start)
+    ).fetchone()["n"]
+    return {"week_start": start, "earned": earned, "harvests": harvests,
+            "farm_products": farm_products, "orders": orders, "gifts_received": gifts}
+
+
 _season_cache = {"at": 0.0, "data": None}
 
 
@@ -1149,6 +1184,23 @@ def gift_points(data: GiftIn, request: Request,
                        f"Body máš zatím zablokované – pokud admin žádost zamítne, vrátí se ti zpět."}
 
 
+@router.get("/exchange/gifts")
+def my_gifts(user: sqlite3.Row = Depends(require_user),
+             conn: sqlite3.Connection = Depends(db_dep)):
+    """Poslední dary uživatele včetně čekajícího/schváleného/zamítnutého stavu."""
+    rows = conn.execute(
+        "SELECT g.id,g.from_user_id,g.to_user_id,g.amount,g.status,g.note,g.created_at,g.decided_at, "
+        "f.username from_name,t.username to_name FROM gift_requests g "
+        "JOIN users f ON f.id=g.from_user_id JOIN users t ON t.id=g.to_user_id "
+        "WHERE g.from_user_id=? OR g.to_user_id=? ORDER BY g.id DESC LIMIT 30",
+        (user["id"], user["id"]),
+    ).fetchall()
+    return [{"id": r["id"], "direction": "sent" if r["from_user_id"] == user["id"] else "received",
+             "peer": r["to_name"] if r["from_user_id"] == user["id"] else r["from_name"],
+             "amount": r["amount"], "status": r["status"], "note": r["note"] or "",
+             "created_at": r["created_at"], "decided_at": r["decided_at"]} for r in rows]
+
+
 # ---------------- Notifikace (zvoneček v hlavičce) ----------------
 @router.get("/notifications")
 def notifications_list(user: sqlite3.Row = Depends(require_user),
@@ -1365,6 +1417,11 @@ def my_claims(user: sqlite3.Row = Depends(require_user),
     garden_ready = conn.execute(
         "SELECT COUNT(*) c FROM garden WHERE user_id = ? AND ready_at <= ?",
         (user["id"], now_iso())).fetchone()["c"]
+    farm_counts = conn.execute(
+        "SELECT SUM(CASE WHEN animal_key!='horse' AND ready_at!='' AND ready_at<=? THEN 1 ELSE 0 END) ready, "
+        "SUM(CASE WHEN animal_key!='horse' AND ready_at='' THEN 1 ELSE 0 END) hungry "
+        "FROM farm_animals WHERE user_id=?", (now_iso(), user["id"])
+    ).fetchone()
     quests = get_quests(conn, user["id"]) if QUESTS_ENABLED else []
     bp = battlepass.status(conn, user)
     lp = levelpass.status(conn, user)
@@ -1375,8 +1432,14 @@ def my_claims(user: sqlite3.Row = Depends(require_user),
     onb_planted = bool(is_new and conn.execute(
         "SELECT 1 FROM points_log WHERE user_id = ? AND reason LIKE 'Zasazení:%' LIMIT 1",
         (user["id"],)).fetchone())    # „už někdy zasadil" — jen pro nováčky (levný EXISTS po user_id indexu)
+    onb_animal = bool(is_new and conn.execute(
+        "SELECT 1 FROM farm_collection WHERE user_id=? AND animal_key!='__complete__' LIMIT 1",
+        (user["id"],)).fetchone())
+    onb_crew = bool(is_new and conn.execute(
+        "SELECT 1 FROM crew_members WHERE user_id=? LIMIT 1", (user["id"],)
+    ).fetchone())
     return {
-        "is_new": is_new, "onb_planted": onb_planted,
+        "is_new": is_new, "onb_planted": onb_planted, "onb_animal": onb_animal, "onb_crew": onb_crew,
         "daily": daily_can,
         "wheel": wheel_can,
         "partner": sum(1 for l in status_for_user(conn, user["id"])["links"] if l["claimable"]),
@@ -1389,6 +1452,8 @@ def my_claims(user: sqlite3.Row = Depends(require_user),
             for q in quests if q["period"] == "daily"
         ],
         "garden": garden_ready,
+        "farm_ready": farm_counts["ready"] or 0,
+        "farm_hungry": farm_counts["hungry"] or 0,
         "battlepass": bp["claimable"] + bp["claimable_premium"],
         "levelpass": lp["claimable"],
         "streak": streak,

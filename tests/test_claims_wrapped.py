@@ -58,16 +58,52 @@ def test_me_claims_onboarding_fields(client):
         uid, tok = _mk_session(conn)
         d = client.get("/api/me/claims", cookies={"webos_session": tok}).json()
         assert d["is_new"] is True and d["onb_planted"] is False
+        assert d["onb_animal"] is False and d["onb_crew"] is False
+        assert d["farm_ready"] == 0 and d["farm_hungry"] == 0
 
         conn.execute("INSERT INTO points_log (user_id, change, reason, created_at) VALUES (?,?,?,?)",
                      (uid, -20, "Zasazení: mrkev (záhon 1)", now_iso()))
+        conn.execute("INSERT INTO farm_collection (user_id,animal_key,created_at) VALUES (?,?,?)",
+                     (uid, "chicken", now_iso()))
+        conn.execute("INSERT INTO farm_animals (user_id,slot,animal_key,ready_at,bought_at) VALUES (?,?,?,?,?)",
+                     (uid, 0, "chicken", "", now_iso()))
+        crew_id = conn.execute(
+            "INSERT INTO crews (name,tag,emblem,leader_id,code,created_at) VALUES (?,?,?,?,?,?)",
+            (f"crew_{uid}", f"C{uid}", "🌾", uid, f"code_{uid}", now_iso())).lastrowid
+        conn.execute("INSERT INTO crew_members (crew_id,user_id,role,joined_at) VALUES (?,?,'leader',?)",
+                     (crew_id, uid, now_iso()))
         conn.commit()
-        assert client.get("/api/me/claims", cookies={"webos_session": tok}).json()["onb_planted"] is True
+        d2 = client.get("/api/me/claims", cookies={"webos_session": tok}).json()
+        assert d2["onb_planted"] is True and d2["onb_animal"] is True and d2["onb_crew"] is True
+        assert d2["farm_hungry"] == 1
 
         old = (datetime.now(timezone.utc) - timedelta(days=30)).isoformat()
         conn.execute("UPDATE users SET created_at=? WHERE id=?", (old, uid))
         conn.commit()
         assert client.get("/api/me/claims", cookies={"webos_session": tok}).json()["is_new"] is False
+    finally:
+        conn.close()
+
+
+def test_weekly_summary(client):
+    from app.db import get_conn, now_iso
+    conn = get_conn()
+    try:
+        uid, tok = _mk_session(conn)
+        sender, _ = _mk_session(conn)
+        conn.executemany(
+            "INSERT INTO points_log (user_id,change,reason,created_at) VALUES (?,?,?,?)",
+            [(uid, 500, "Sklizeň: mrkev 🌾", now_iso()),
+             (uid, 300, "Statek: vejce 🥚", now_iso()),
+             (uid, 999, "Dar od kamaráda 🎁", now_iso())])
+        conn.execute("INSERT INTO orders (user_id,product_name,points_spent,status,created_at) VALUES (?,?,?,'pending',?)",
+                     (uid, "Test", 100, now_iso()))
+        conn.execute("INSERT INTO gift_requests (from_user_id,to_user_id,amount,status,created_at,decided_at) "
+                     "VALUES (?,?,250,'approved',?,?)", (sender, uid, now_iso(), now_iso()))
+        conn.commit()
+        d = client.get("/api/me/weekly-summary", cookies={"webos_session": tok}).json()
+        assert d["earned"] == 800 and d["harvests"] == 1 and d["farm_products"] == 1
+        assert d["orders"] == 1 and d["gifts_received"] == 250
     finally:
         conn.close()
 

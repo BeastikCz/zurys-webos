@@ -350,6 +350,33 @@ def test_daily_soft_cap_reduces_payout():
         conn.close()
 
 
+def test_barn_raises_daily_cap():
+    from app.db import get_conn, now_iso
+    from app import farm
+    conn = get_conn()
+    try:
+        uid = _user(conn); conn.commit()
+        farm.buy(conn, _row(conn, uid), "chicken")
+        # farm_today = základní strop → bez stodoly by byl soft, se stodolou lvl 3 (+10k) plný výnos
+        conn.execute("UPDATE users SET farm_today=?, farm_day=?, barn_level=3 WHERE id=?",
+                     (farm.FARM_DAILY_FULL, now_iso()[:10], uid))
+        conn.commit()
+        assert farm._daily_full(conn, uid) == farm.FARM_DAILY_FULL + 2 * farm.FARM_DAILY_PER_BARN
+        assert farm.status(conn, _row(conn, uid))["farm_daily_full"] == farm._daily_full(conn, uid)
+        farm.feed(conn, _row(conn, uid), 0); _ready_now(conn, uid, 0)
+        rc = farm.collect(conn, _row(conn, uid), 0)
+        assert rc["ok"] and rc["reward"] >= 130, f"pod zvednutým stropem musí být plný výnos: {rc}"
+        # nad zvednutým stropem znovu jen FARM_SOFT_RATE
+        conn.execute("UPDATE users SET farm_today=? WHERE id=?", (farm._daily_full(conn, uid), uid))
+        conn.commit()
+        farm.feed(conn, _row(conn, uid), 0); _ready_now(conn, uid, 0)
+        rc = farm.collect(conn, _row(conn, uid), 0)
+        assert rc["ok"] and rc["reward"] <= int(130 * 1.1 * farm.FARM_SOFT_RATE) * farm.GOLDEN_MULT
+        assert rc["reward"] < 130 or rc["golden"], f"nad zvednutý strop musí být snížený výnos: {rc}"
+    finally:
+        conn.close()
+
+
 def test_golden_event_boosts_chance():
     from app.db import get_conn
     from app import farm

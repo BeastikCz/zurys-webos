@@ -36,6 +36,7 @@ def test_ticket_flow_is_separate_and_private(client):
     created = client.post("/api/tickets", json=payload, headers=user)
     assert created.status_code == 200
     ticket_id = created.json()["id"]
+    assert client.get(f"/api/tickets/{ticket_id}", headers=user).json()["events"][0]["event"] == "created"
     assert client.get(f"/api/tickets/{ticket_id}", headers=stranger).status_code == 404
     assert client.get("/api/tickets/admin/all", headers=broadcaster).status_code == 403
     assert client.get(f"/api/tickets/admin/{ticket_id}", headers=broadcaster).status_code == 403
@@ -51,6 +52,7 @@ def test_ticket_flow_is_separate_and_private(client):
     thread = client.get(f"/api/tickets/{ticket_id}", headers=user).json()
     assert thread["ticket"]["status"] == "in_progress"
     assert [message["body"] for message in thread["messages"]] == [payload["body"], "Prověřujeme to."]
+    assert any(e["event"] == "status" for e in thread["events"])
 
     assert client.post(f"/api/tickets/admin/{ticket_id}/status/closed", headers=admin).status_code == 200
     closed_reply = client.post(f"/api/tickets/{ticket_id}/reply", json={"body": "Ještě něco."}, headers=user)
@@ -131,3 +133,21 @@ def test_attach_and_notify(client):
     finally:
         conn.close()
     assert "vyřešený" in n2[0]
+
+
+def test_ticket_refund_is_atomic_and_visible(client):
+    uid, user = _session()
+    _, admin = _session("admin")
+    ticket_id = client.post("/api/tickets", json={"category": "orders", "subcategory": "refund",
+                            "subject": "Refund", "body": "Prosím vrátit body."}, headers=user).json()["id"]
+    r = client.post(f"/api/tickets/admin/{ticket_id}/refund", json={"amount": 450}, headers=admin)
+    assert r.status_code == 200 and r.json()["balance"] == 450
+    detail = client.get(f"/api/tickets/{ticket_id}", headers=user).json()
+    assert any(e["event"] == "refund" and "450" in e["detail"] for e in detail["events"])
+    conn = get_conn()
+    try:
+        assert conn.execute("SELECT points FROM users WHERE id=?", (uid,)).fetchone()["points"] == 450
+        assert conn.execute("SELECT COUNT(*) FROM admin_audit WHERE action='user.points' AND details LIKE ?",
+                            (f"%ticket #{ticket_id}%",)).fetchone()[0] == 1
+    finally:
+        conn.close()
