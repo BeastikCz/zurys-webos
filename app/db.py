@@ -130,7 +130,7 @@ CREATE TABLE IF NOT EXISTS raffle_entries (
 
 CREATE TABLE IF NOT EXISTS raffle_winners (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
-    product_id INTEGER NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+    product_id INTEGER NOT NULL,   -- BEZ FK: historie výher musí přežít smazání dolosované tomboly (odznak Šťastlivec)
     user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     created_at TEXT NOT NULL
 );
@@ -517,6 +517,16 @@ CREATE TABLE IF NOT EXISTS support_ticket_messages (
     seen       INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS idx_support_messages_ticket ON support_ticket_messages(ticket_id, id);
+CREATE TABLE IF NOT EXISTS support_ticket_events (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    ticket_id  INTEGER NOT NULL REFERENCES support_tickets(id) ON DELETE CASCADE,
+    actor_id   INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    actor_name TEXT,
+    event      TEXT NOT NULL,                    -- created | status | refund
+    detail     TEXT,
+    created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_support_events_ticket ON support_ticket_events(ticket_id, id);
 CREATE TABLE IF NOT EXISTS fair_log (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id     INTEGER NOT NULL,
@@ -1062,6 +1072,23 @@ def init_db() -> None:
                 conn.execute("ALTER TABLE crew_members_new RENAME TO crew_members")
                 conn.execute("CREATE INDEX IF NOT EXISTS idx_crewmem_crew ON crew_members(crew_id)")
             set_setting(conn, "_mig_crewmem_fk", "1")
+        # raffle_winners: FK product_id ON DELETE CASCADE mazala historii výher, když se dolosovaná
+        # tombola smazala ze shopu → achievements daemon (stat 'raffle') výhru neviděl a odznak
+        # Šťastlivec se neudělil (ticket matejlus007 17.7.). Přestav bez FK na produkt; user FK zůstává.
+        # Na produ provedeno ručně 17.7. vč. rekonstrukce výherců z admin_audit (flag už je '1').
+        if get_setting(conn, "_mig_rafflewin_keep_history", "") != "1":
+            if any(r[2] == "products" for r in conn.execute("PRAGMA foreign_key_list(raffle_winners)")):
+                conn.execute(
+                    "CREATE TABLE raffle_winners_new ("
+                    " id INTEGER PRIMARY KEY AUTOINCREMENT,"
+                    " product_id INTEGER NOT NULL,"
+                    " user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,"
+                    " created_at TEXT NOT NULL)")
+                conn.execute("INSERT INTO raffle_winners_new "
+                             "SELECT id, product_id, user_id, created_at FROM raffle_winners")
+                conn.execute("DROP TABLE raffle_winners")
+                conn.execute("ALTER TABLE raffle_winners_new RENAME TO raffle_winners")
+            set_setting(conn, "_mig_rafflewin_keep_history", "1")
         # Garden v1 ukládala aktivní útok jako pest=1 bez času. Převeď ho na v2
         # časovaný útok od zasazení; pest=0 pak znamená nezachráněný a funguje rescue.
         conn.execute(
