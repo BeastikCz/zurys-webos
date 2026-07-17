@@ -2763,20 +2763,20 @@ function isSubUser(u) { return !!u && (u.is_sub || ["admin", "broadcaster", "mod
 function auctionCardHTML(a) {
   const me = state.user && a.leader === state.user.username;
   const recent = a.current_bid ? "" : `<div class="faint" style="font-size:12px;margin-top:8px">Zatím bez příhozu — buď první! 🔨</div>`;   // historie příhozů se veřejně neukazuje (soukromí dražitelů)
-  const chips = [a.min_next, a.min_next + a.min_increment * 4, a.min_next + a.min_increment * 19];
+  const chips = [a.min_next, a.min_next + a.min_increment * 4];
   const locked = a.sub_only && !isSubUser(state.user);
   const buyNow = a.buy_now && a.buy_now > (a.current_bid || 0);
   const bg = a.image_url ? `background-image:url('${esc(a.image_url)}')` : "";
+  const feeTip = "První příhoz do aukce: +10 % vstupní poplatek (max 5 000). Při přehození se ti vrací 100 % příhozu, další příhozy už bez poplatku.";
   return `<div class="panel auc-card${a.sub_only ? " auc-sub" : ""}">
     <div class="auc-hero" style="${bg}">
       ${a.image_url ? "" : `<span class="auc-hero-emoji">🔨</span>`}
-      <div class="auc-hero-badges">${a.sub_only ? `<span class="da-b b-sub">💜 SUB</span>` : ""}<span class="da-b b-end">🔴 LIVE</span></div>
+      <div class="auc-hero-badges">${a.sub_only ? `<span class="da-b b-sub">💜 SUB</span>` : ""}</div>
       <div class="auc-count auc-hero-timer${a.seconds_left < 60 ? " auc-urgent" : ""}" data-aucleft="${a.seconds_left}">⏳ ${grdDur(a.seconds_left)}</div>
     </div>
     <div class="auc-body">
       <div class="auc-title">${esc(a.title)}</div>
-      <div class="auc-type">AUKCE O SKIN${a.sub_only ? " · JEN PRO SUBY 💜" : ""}</div>
-      <div class="auc-bid-now">${a.current_bid ? `<span class="faint">aktuálně</span> <b>${fmtPts(a.current_bid)}</b> 🌾 ${a.leader ? `· vede <b style="color:${me ? "var(--farm-green,#46d369)" : "var(--accent)"}">${esc(a.leader)}${me ? " (ty!)" : ""}</b>` : ""}` : `<span class="faint">vyvolávací cena</span> <b>${fmtPts(a.start_bid)}</b> 🌾`}</div>
+      <div class="auc-bid-now">${a.current_bid ? `<b>${fmtPts(a.current_bid)}</b> 🌾 ${a.leader ? `<span class="faint">· vede</span> <b style="color:${me ? "var(--farm-green,#46d369)" : "var(--accent)"}">${esc(a.leader)}${me ? " (ty!)" : ""}</b>` : ""}` : `<span class="faint">vyvolávací cena</span> <b>${fmtPts(a.start_bid)}</b> 🌾`}<span class="auc-fee-tip" title="${esc(feeTip)}">🎟</span></div>
       ${locked
         ? `<div class="faint" style="text-align:center;padding:10px;background:rgba(168,85,247,.08);border-radius:10px">💜 Tahle aukce je jen pro <b>suby</b>. Přihoď si sub na Kicku a draž!</div>`
         : `<div class="auc-bidrow">
@@ -2784,7 +2784,6 @@ function auctionCardHTML(a) {
             <button class="btn btn-accent" data-action="auction-bid" data-id="${a.id}">🔨 Přihodit</button>
           </div>
           <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">${chips.map((v) => `<button class="btn btn-ghost btn-sm" data-action="auction-amt" data-id="${a.id}" data-amt="${v}">${fmtPts(v)}</button>`).join("")}${buyNow ? `<button class="btn btn-sm" data-action="auction-buynow" data-id="${a.id}" style="margin-left:auto;background:linear-gradient(135deg,#b07ad9,#8a4fc0);color:#fff;border:none">💎 Kup teď ${fmtPts(a.buy_now)}</button>` : ""}</div>
-          <div class="faint" style="font-size:11.5px;margin-top:6px">🎟 První příhoz do aukce: +10 % vstupní poplatek (max 5 000). Při přehození se ti vrací <b>100 %</b> příhozu, další příhozy už bez poplatku.</div>
 `}
       ${recent}
     </div>
@@ -7266,7 +7265,7 @@ document.addEventListener("click", (e) => {
 
 /* Service worker pro Web Push (notifikace do mobilu). Registruje se 1× na pozadí. */
 if ("serviceWorker" in navigator) {
-  window.addEventListener("load", () => { navigator.serviceWorker.register("/sw.js?v=2026071251").catch(() => {}); });
+  window.addEventListener("load", () => { navigator.serviceWorker.register("/sw.js?v=2026071252").catch(() => {}); });
 }
 
 document.addEventListener("change", (e) => {

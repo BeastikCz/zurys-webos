@@ -1938,18 +1938,19 @@ button.grd-plot { font: inherit; cursor: pointer; }
 /* 🔨 Aukce o skiny */
 .auc-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr)); gap: 14px; }
 .auc-card { border-color: var(--accent-2, var(--border)); padding: 0; overflow: hidden; display: flex; flex-direction: column; }
-.auc-hero { position: relative; aspect-ratio: 16 / 9; background-size: contain; background-repeat: no-repeat; background-position: center;
+.auc-hero { position: relative; aspect-ratio: 2.2 / 1; background-size: contain; background-repeat: no-repeat; background-position: center;
   background-color: #0d0f14; background-image: radial-gradient(circle at 50% 40%, rgba(255,180,51,.10), transparent 70%); border-bottom: 1px solid var(--border); }
 .auc-hero[style*="url"] { background-color: #0b0d11; }
-.auc-hero-emoji { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 58px; opacity: .4; }
-.auc-hero-badges { position: absolute; top: 10px; left: 10px; display: flex; gap: 6px; z-index: 2; }
-.auc-hero-timer { position: absolute; top: 10px; right: 10px; background: rgba(8,10,14,.82); padding: 4px 11px; border-radius: 999px;
-  font-size: 13px; font-weight: 800; color: var(--accent-2); z-index: 2; -webkit-backdrop-filter: blur(2px); backdrop-filter: blur(2px); }
-.auc-body { padding: 13px 15px 15px; }
-.auc-title { font-size: 16px; font-weight: 800; margin-bottom: 2px; }
-.auc-type { font-size: 10.5px; letter-spacing: .05em; color: var(--text-dim); text-transform: uppercase; margin-bottom: 9px; }
-.auc-bid-now { font-size: 14px; margin-bottom: 10px; }
-.auc-bid-now b { font-size: 18px; color: var(--accent); }
+.auc-hero-emoji { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 46px; opacity: .4; }
+.auc-hero-badges { position: absolute; top: 8px; left: 8px; display: flex; gap: 6px; z-index: 2; }
+.auc-hero-timer { position: absolute; top: 8px; right: 8px; background: rgba(8,10,14,.82); padding: 3px 10px; border-radius: 999px;
+  font-size: 12px; font-weight: 800; color: var(--accent-2); z-index: 2; -webkit-backdrop-filter: blur(2px); backdrop-filter: blur(2px); }
+.auc-body { padding: 11px 14px 13px; }
+.auc-title { font-size: 15px; font-weight: 800; margin-bottom: 7px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.auc-bid-now { font-size: 13.5px; margin-bottom: 9px; display: flex; align-items: center; gap: 5px; }
+.auc-bid-now b { font-size: 16.5px; color: var(--accent); }
+.auc-fee-tip { margin-left: auto; cursor: help; opacity: .55; font-size: 13px; }
+.auc-fee-tip:hover { opacity: 1; }
 .auc-count { font-variant-numeric: tabular-nums; }
 .auc-bidrow { display: flex; gap: 8px; align-items: center; }
 .auc-bidrow .input { flex: 1; }
