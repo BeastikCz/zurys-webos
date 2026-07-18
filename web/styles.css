@@ -1937,11 +1937,11 @@ button.grd-plot { font: inherit; cursor: pointer; }
 
 /* 🔨 Aukce o skiny */
 .auc-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 400px), 1fr)); gap: 12px; }
-.auc-card { border-color: var(--accent-2, var(--border)); padding: 0; overflow: hidden; display: flex; flex-direction: row; align-items: stretch; }
-.auc-hero { position: relative; width: 126px; min-width: 126px; background-size: contain; background-repeat: no-repeat; background-position: center;
-  background-color: #0d0f14; background-image: radial-gradient(circle at 50% 40%, rgba(255,180,51,.10), transparent 70%); border-right: 1px solid var(--border); }
+.auc-card { border-color: var(--accent-2, var(--border)); padding: 0; overflow: hidden; display: flex; flex-direction: column; }
+.auc-hero { position: relative; aspect-ratio: 2.2 / 1; background-size: contain; background-repeat: no-repeat; background-position: center;
+  background-color: #0d0f14; background-image: radial-gradient(circle at 50% 40%, rgba(255,180,51,.10), transparent 70%); border-bottom: 1px solid var(--border); }
 .auc-hero[style*="url"] { background-color: #0b0d11; }
-.auc-hero-emoji { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 34px; opacity: .4; }
+.auc-hero-emoji { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 46px; opacity: .4; }
 .auc-hero-badges { position: absolute; top: 6px; left: 6px; display: flex; gap: 6px; z-index: 2; }
 .auc-body { flex: 1; min-width: 0; padding: 10px 12px 11px; }
 .auc-top { display: flex; align-items: center; gap: 8px; margin-bottom: 5px; }
@@ -1962,10 +1962,6 @@ button.grd-plot { font: inherit; cursor: pointer; }
 .auc-bid { display: flex; justify-content: space-between; font-size: 12.5px; color: var(--text-dim); }
 .auc-bid b { color: var(--text); }
 .auc-card.auc-sub { border-color: #a855f7; box-shadow: 0 0 24px -10px rgba(168,85,247,.5); }
-@media (max-width: 480px) {
-  .auc-hero { width: 92px; min-width: 92px; }
-  .auc-hero-emoji { font-size: 26px; }
-}
 .auc-banner { display: block; margin: 10px 0 0; padding: 9px 16px; border-radius: 12px; text-align: center;
   background: linear-gradient(135deg, rgba(255,180,35,.16), rgba(176,122,217,.16)); border: 1px solid var(--accent-2, var(--border));
   color: var(--text); font-size: 13.5px; font-weight: 600; text-decoration: none; animation: bpPulse 2.4s ease-in-out infinite; }
