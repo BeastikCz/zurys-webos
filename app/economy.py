@@ -20,6 +20,7 @@ _soft_faucet_guard_cache = {"checked_at": 0.0, "factor": 1.0}
 
 def soft_faucet_factor(conn: sqlite3.Connection) -> float:
     """Return the current multiplier for wheel, drop, and partner rewards."""
+    return 1.0  # ponytail: inflační brzda vypnutá; smaž tenhle řádek pro obnovení
     now = time.monotonic()
     if now - _soft_faucet_guard_cache["checked_at"] < 60:
         return _soft_faucet_guard_cache["factor"]

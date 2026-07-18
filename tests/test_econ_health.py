@@ -116,7 +116,9 @@ def test_health_aggregates_faucet_sink_and_categories(client):
     assert h["net_total"] == sum(c["net"] for c in h["by_category"])
 
 
-def test_soft_faucet_guard_halves_rewards():
+def test_soft_faucet_guard_disabled():
+    """Inflační brzda je vypnutá (soft_faucet_factor vrací vždy 1.0) → plná odměna
+    i za podmínek, které by ji dřív spustily. Znovuzapnutí = smaž `return 1.0`."""
     uid = _mk_user(10_000)
     _mk_log(uid, 1, "Sledování streamu")
     old_pct = economy.SOFT_FAUCET_GUARD_PCT
@@ -133,8 +135,8 @@ def test_soft_faucet_guard_halves_rewards():
         economy._soft_faucet_guard_cache.clear()
         economy._soft_faucet_guard_cache.update(old_cache)
         conn.close()
-    assert award == {"amount": 50, "guarded": True}
-    assert balance == 10_050
+    assert award == {"amount": 100, "guarded": False}
+    assert balance == 10_100
 
 
 def test_health_endpoint_access_control(client):
