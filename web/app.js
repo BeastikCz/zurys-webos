@@ -2768,15 +2768,14 @@ function auctionCardHTML(a) {
   const buyNow = a.buy_now && a.buy_now > (a.current_bid || 0);
   const bg = a.image_url ? `background-image:url('${esc(a.image_url)}')` : "";
   const feeTip = "První příhoz do aukce: +10 % vstupní poplatek (max 5 000). Při přehození se ti vrací 100 % příhozu, další příhozy už bez poplatku.";
-  const bids = a.bids_count ? `<span class="faint" style="font-size:11.5px">· 🔨 ${a.bids_count} příhozů</span>` : "";
+  const bids = a.bids_count ? `<span class="faint" style="font-size:11.5px" title="${a.bids_count} příhozů">· 🔨 ${a.bids_count}×</span>` : "";
   return `<div class="panel auc-card${a.sub_only ? " auc-sub" : ""}">
     <div class="auc-hero" style="${bg}">
       ${a.image_url ? "" : `<span class="auc-hero-emoji">🔨</span>`}
-      <div class="auc-hero-badges">${a.sub_only ? `<span class="da-b b-sub">💜 SUB</span>` : ""}</div>
-      <div class="auc-count auc-hero-timer${a.seconds_left < 60 ? " auc-urgent" : ""}" data-aucleft="${a.seconds_left}">⏳ ${grdDur(a.seconds_left)}</div>
+      ${a.sub_only ? `<div class="auc-hero-badges"><span class="da-b b-sub">💜 SUB</span></div>` : ""}
     </div>
     <div class="auc-body">
-      <div class="auc-title">${esc(a.title)}</div>
+      <div class="auc-top"><div class="auc-title">${esc(a.title)}</div><span class="auc-count auc-timer${a.seconds_left < 60 ? " auc-urgent" : ""}" data-aucleft="${a.seconds_left}">⏳ ${grdDur(a.seconds_left)}</span></div>
       <div class="auc-bid-now">${a.current_bid ? `<b>${fmtPts(a.current_bid)}</b> 🌾 ${a.leader ? `<span class="faint">· vede</span> <b style="color:${me ? "var(--farm-green,#46d369)" : "var(--accent)"}">${esc(a.leader)}${me ? " (ty!)" : ""}</b>` : ""}` : `<span class="faint">vyvolávací cena</span> <b>${fmtPts(a.start_bid)}</b> 🌾`}${bids}<span class="auc-fee-tip" data-action="auction-feetip">🎟<span class="auc-fee-pop">${esc(feeTip)}</span></span></div>
       ${locked
         ? `<div class="faint" style="text-align:center;padding:10px;background:rgba(168,85,247,.08);border-radius:10px">💜 Tahle aukce je jen pro <b>suby</b>. Přihoď si sub na Kicku a draž!</div>`
@@ -7267,7 +7266,7 @@ document.addEventListener("click", (e) => {
 
 /* Service worker pro Web Push (notifikace do mobilu). Registruje se 1× na pozadí. */
 if ("serviceWorker" in navigator) {
-  window.addEventListener("load", () => { navigator.serviceWorker.register("/sw.js?v=2026071253").catch(() => {}); });
+  window.addEventListener("load", () => { navigator.serviceWorker.register("/sw.js?v=2026071255").catch(() => {}); });
 }
 
 document.addEventListener("change", (e) => {

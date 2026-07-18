@@ -1936,19 +1936,19 @@ button.grd-plot { font: inherit; cursor: pointer; }
 }
 
 /* 🔨 Aukce o skiny */
-.auc-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr)); gap: 14px; }
-.auc-card { border-color: var(--accent-2, var(--border)); padding: 0; overflow: hidden; display: flex; flex-direction: column; }
-.auc-hero { position: relative; aspect-ratio: 2.2 / 1; background-size: contain; background-repeat: no-repeat; background-position: center;
-  background-color: #0d0f14; background-image: radial-gradient(circle at 50% 40%, rgba(255,180,51,.10), transparent 70%); border-bottom: 1px solid var(--border); }
+.auc-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 400px), 1fr)); gap: 12px; }
+.auc-card { border-color: var(--accent-2, var(--border)); padding: 0; overflow: hidden; display: flex; flex-direction: row; align-items: stretch; }
+.auc-hero { position: relative; width: 126px; min-width: 126px; background-size: contain; background-repeat: no-repeat; background-position: center;
+  background-color: #0d0f14; background-image: radial-gradient(circle at 50% 40%, rgba(255,180,51,.10), transparent 70%); border-right: 1px solid var(--border); }
 .auc-hero[style*="url"] { background-color: #0b0d11; }
-.auc-hero-emoji { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 46px; opacity: .4; }
-.auc-hero-badges { position: absolute; top: 8px; left: 8px; display: flex; gap: 6px; z-index: 2; }
-.auc-hero-timer { position: absolute; top: 8px; right: 8px; background: rgba(8,10,14,.82); padding: 3px 10px; border-radius: 999px;
-  font-size: 12px; font-weight: 800; color: var(--accent-2); z-index: 2; -webkit-backdrop-filter: blur(2px); backdrop-filter: blur(2px); }
-.auc-body { padding: 11px 14px 13px; }
-.auc-title { font-size: 15px; font-weight: 800; margin-bottom: 7px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.auc-bid-now { font-size: 13.5px; margin-bottom: 9px; display: flex; align-items: center; gap: 5px; }
-.auc-bid-now b { font-size: 16.5px; color: var(--accent); }
+.auc-hero-emoji { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 34px; opacity: .4; }
+.auc-hero-badges { position: absolute; top: 6px; left: 6px; display: flex; gap: 6px; z-index: 2; }
+.auc-body { flex: 1; min-width: 0; padding: 10px 12px 11px; }
+.auc-top { display: flex; align-items: center; gap: 8px; margin-bottom: 5px; }
+.auc-title { flex: 1; min-width: 0; font-size: 14.5px; font-weight: 800; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.auc-timer { font-size: 12px; font-weight: 800; color: var(--accent-2); white-space: nowrap; }
+.auc-bid-now { font-size: 13px; margin-bottom: 8px; display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
+.auc-bid-now b { font-size: 15.5px; color: var(--accent); }
 .auc-fee-tip { position: relative; margin-left: auto; cursor: pointer; opacity: .55; font-size: 13px; }
 .auc-fee-tip:hover { opacity: 1; }
 .auc-fee-pop { display: none; position: absolute; top: 22px; right: 0; width: 200px; z-index: 5; text-align: left;
@@ -1957,11 +1957,15 @@ button.grd-plot { font: inherit; cursor: pointer; }
 .auc-fee-tip:hover .auc-fee-pop, .auc-fee-tip.open .auc-fee-pop { display: block; }
 .auc-count { font-variant-numeric: tabular-nums; }
 .auc-bidrow { display: flex; gap: 8px; align-items: center; }
-.auc-bidrow .input { flex: 1; }
+.auc-bidrow .input { flex: 1; min-width: 0; }
 .auc-bids { margin-top: 12px; border-top: 1px solid var(--border); padding-top: 8px; display: flex; flex-direction: column; gap: 3px; }
 .auc-bid { display: flex; justify-content: space-between; font-size: 12.5px; color: var(--text-dim); }
 .auc-bid b { color: var(--text); }
 .auc-card.auc-sub { border-color: #a855f7; box-shadow: 0 0 24px -10px rgba(168,85,247,.5); }
+@media (max-width: 480px) {
+  .auc-hero { width: 92px; min-width: 92px; }
+  .auc-hero-emoji { font-size: 26px; }
+}
 .auc-banner { display: block; margin: 10px 0 0; padding: 9px 16px; border-radius: 12px; text-align: center;
   background: linear-gradient(135deg, rgba(255,180,35,.16), rgba(176,122,217,.16)); border: 1px solid var(--accent-2, var(--border));
   color: var(--text); font-size: 13.5px; font-weight: 600; text-decoration: none; animation: bpPulse 2.4s ease-in-out infinite; }
@@ -2286,7 +2290,8 @@ a.onb-step:hover { border-color: var(--accent, #ff9d2e); background: rgba(255,15
 .lb-collapse.open::after { display: none; }
 .lb-fold > summary.section-title { cursor: pointer; list-style: none; display: flex; align-items: center; gap: 8px; margin-top: 28px; user-select: none; }
 .lb-fold > summary.section-title::-webkit-details-marker { display: none; }
-.lb-fold > summary.section-title::after { content: "▸"; margin-left: auto; color: var(--muted); transition: transform .15s; }
+.lb-fold > summary.section-title::after { content: "▸"; margin-left: auto; color: var(--muted); transition: transform .15s;
+  flex: none; height: auto; background: none; }  /* přebij dekorativní linku ze .section-title::after – jinak se šipka roztáhne a po rotate(90deg) udělá svislou čáru přes stránku */
 .lb-fold[open] > summary.section-title::after { transform: rotate(90deg); }
 
 /* ---------- Můj profil — redesign (hero + dlaždice + 2 sloupce) ---------- */
