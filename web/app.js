@@ -6905,7 +6905,7 @@ function farmGuide() {
   const steps = [
     ["🐾", "Kup a nakrm", "Kup zvíře do volného slotu. Krmivo ze <b>Zahrádky</b> je zdarma, jinak krmíš za sedláky."],
     ["⏱️", "Seber produkci", "Po dokončení cyklu seber produkt za <b>sedláky + XP</b>; zvíře pak znovu čeká na krmení."],
-    ["⭐", "Leveluj do 10", "Každých pět krmení zvedne produkční zvíře o level. Maximum je <b>level 10</b>."],
+    ["⭐", "Leveluj do 25", "Každých <b>dvacet</b> krmení zvedne produkční zvíře o level. Maximum je <b>level 25</b>."],
     ["🐕", "Pes je výjimka", "Pes se <b>nekrmí ani neleveluje</b>. Ihned přidá +10 % produkce všem zvířatům a odežene lišku."],
     ["📋", "Plň Zakázku dne", "Produkty se počítají do denní zakázky. Dokonči ji pro další odměnu."],
     ["🦊", "Chraň statek", "Liška může číhat na hotový produkt — výkupné je půlka jeho hodnoty. Pes ji odežene; patron s 15 gifty tento měsíc taky."],
@@ -7266,7 +7266,7 @@ document.addEventListener("click", (e) => {
 
 /* Service worker pro Web Push (notifikace do mobilu). Registruje se 1× na pozadí. */
 if ("serviceWorker" in navigator) {
-  window.addEventListener("load", () => { navigator.serviceWorker.register("/sw.js?v=2026071260").catch(() => {}); });
+  window.addEventListener("load", () => { navigator.serviceWorker.register("/sw.js?v=2026071261").catch(() => {}); });
 }
 
 document.addEventListener("change", (e) => {

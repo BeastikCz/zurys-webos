@@ -49,10 +49,10 @@ GOLDEN_EVENT_CHANCE = 0.10     # „Zlatá horečka" (launch event): šance na z
 GOLDEN_MULT = 3
 PRODUCT_PICOS = ("🥚", "🥛", "🧶", "🧀", "💩", "🌟")   # markery produkce v points_log (žebříček)
 SELL_REFUND_PCT = 0.5          # prodej zvířete = % ceny zpět
-FEED_PER_LEVEL = 5             # kolik nakrmení = +1 level
-MAX_LEVEL = 10
-LEVEL_REWARD_STEP = 0.10       # +10 % výnosu za level nad 1
-LEVEL_SPEED_STEP = 0.03        # −3 % času cyklu za level (floor 40 %)
+FEED_PER_LEVEL = 20            # kolik nakrmení = +1 level (lvl25 = 480 krmení ≈ týdny těžkého grindu)
+MAX_LEVEL = 25
+LEVEL_REWARD_STEP = 0.04       # +4 % výnosu za level nad 1 (lvl25 = +96 % ≈ starý lvl10 → faucet ~stejný)
+LEVEL_SPEED_STEP = 0.015       # −1,5 % času cyklu za level (floor 40 %; lvl25 = 64 %)
 HARVEST_KRMIVO = 1             # kolik krmiva padne za 1 sklizeň zahrádky
 COLLECTION_REWARD = 25000      # jednorázový bonus za kompletní sbírku
 
