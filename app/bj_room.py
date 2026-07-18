@@ -344,9 +344,9 @@ def leave(conn, uid, room_id):
         return {"left": True}
     s = _seat(conn, room_id, uid)
     if s:
-        if room["status"] == "betting" and s["bet"] > 0:
+        rc = conn.execute("DELETE FROM bj_seats WHERE id=? AND user_id=?", (s["id"], uid)).rowcount
+        if rc == 1 and room["status"] == "betting" and s["bet"] > 0:
             add_points(conn, uid, s["bet"], "Blackjack stůl – odchod (vrácení sázky)")
-        conn.execute("DELETE FROM bj_seats WHERE id=?", (s["id"],))
         conn.commit()
     remaining = _seats(conn, room_id)
     if not remaining:

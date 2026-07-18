@@ -300,7 +300,11 @@
 
   function fromKey(key){const [kind,v]=key.split(":");return eventData(kind,Number(v));}
   window.ZurysAlerts={enqueue:(data)=>enqueue(eventData(data.kind||data.type,Number(data.value||data.count||1),data))};
-  window.addEventListener("message",e=>{if(e.data&&e.data.type==="zurys-alert")window.ZurysAlerts.enqueue(e.data);});
+  window.addEventListener("message",e=>{
+    if(e.data&&e.data.type==="zurys-alert"&&e.origin===window.location.origin){
+      window.ZurysAlerts.enqueue(e.data);
+    }
+  });
 
   if(studio){
     const picker=document.getElementById("eventPicker"),play=document.getElementById("playBtn"),auto=document.getElementById("autoBtn"),mute=document.getElementById("muteBtn"),vol=document.getElementById("volume");

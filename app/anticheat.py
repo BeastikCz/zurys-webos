@@ -137,13 +137,9 @@ def evaluate_risk(conn: sqlite3.Connection, user, request: Request,
     """
     ip = client_ip(request)
 
-    # Důvěryhodná IP (NAT operátora / síť streamera apod.) → anticheat ji ignoruje:
-    # skóre 0, nikdy neblokuje, žádný alert. fp_hash necháme dopočítat, ať dál
-    # funguje cross-drop cooldown i logy. Spravováno v config.TRUSTED_IPS.
-    if ip in TRUSTED_IPS:
-        fp_hash, webdriver = _last_signal(conn, user["id"]) if user else (None, False)
-        return {"score": 0, "reasons": [], "block": False, "soft": False,
-                "ip": ip, "fp_hash": fp_hash, "webdriver": webdriver}
+    # Důvěryhodná IP: suppress ONLY multi-account signal (it's noisy on shared IPs).
+    # Still evaluate device, automation, new-account, and timing signals.
+    skip_multi_account = ip in TRUSTED_IPS
 
     # Admin nikdy blokován
     if user and user["role"] == ROLE_ADMIN:
@@ -185,8 +181,8 @@ def evaluate_risk(conn: sqlite3.Connection, user, request: Request,
     elif age < 24:
         score += 15; reasons.append("nový účet <24 h")
 
-    # Sdílená IP s jinými účty
-    if _rule_enabled(conn, "multi_account"):
+    # Sdílená IP s jinými účty (skip on trusted IPs – too noisy for NAT/office networks)
+    if not skip_multi_account and _rule_enabled(conn, "multi_account"):
         shared = conn.execute(
             "SELECT COUNT(DISTINCT user_id) AS c FROM login_events "
             "WHERE ip = ? AND user_id <> ? AND ip IS NOT NULL AND ip <> ''",
