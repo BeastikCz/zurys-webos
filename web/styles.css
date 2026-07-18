@@ -74,8 +74,8 @@ main { padding: 0 0 80px; min-height: calc(100vh - var(--header-h)); overflow-x:
 .section-title { font-size: 16px; font-weight: 800; margin: 6px 0 14px; text-transform: uppercase; letter-spacing: .03em; }
 
 /* PTS mince */
-.coin { display: inline-block; width: 16px; height: 16px; border-radius: 4px; vertical-align: -3px;
-  background: url('/uploads/coin.png') center/contain no-repeat, radial-gradient(circle at 35% 30%, #ffd98a, #ff9d2e 60%, #e07a10); }
+.coin { display: inline-block; width: 18px; height: 18px; border-radius: 0; vertical-align: -4px;
+  background: url('/sedlak-cut.png') center/contain no-repeat; }
 
 /* ============ Topbar ============ */
 .topbar { position: sticky; top: 0; z-index: 50; height: var(--header-h); display: flex; align-items: center;
@@ -93,6 +93,7 @@ main { padding: 0 0 80px; min-height: calc(100vh - var(--header-h)); overflow-x:
 .top-right { display: flex; align-items: center; gap: 10px; margin-left: auto; }
 .pts-pill { display: inline-flex; align-items: center; gap: 8px; background: var(--surface-2); border: 1px solid rgba(255,157,46,.45); padding: 7px 14px; border-radius: 999px; font-weight: 800; font-size: 14px; font-variant-numeric: tabular-nums; }
 .pts-pill b { color: var(--accent); } .pts-pill .lbl { color: var(--text-faint); font-size: 11px; font-weight: 700; }
+.pts-pill .coin { width: 24px; height: 24px; margin: -4px 0; }
 .icon-btn { position: relative; width: 40px; height: 40px; border-radius: 10px; background: var(--surface-2); border: 1px solid var(--border); color: var(--text); display: grid; place-items: center; font-size: 16px; transition: .14s; }
 .icon-btn:hover { border-color: var(--accent); color: var(--accent); }
 .cart-badge { position: absolute; top: -6px; right: -6px; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: var(--accent); color: var(--accent-ink); font-size: 11px; font-weight: 800; display: grid; place-items: center; }
@@ -1375,6 +1376,24 @@ footer.site-footer { border-top: 1px solid var(--border); padding: 22px 0; color
 .support-events span { display: grid; grid-template-columns: minmax(90px,auto) 1fr auto; gap: 8px; align-items: baseline; font-size: 11px; }
 .support-events em { color: var(--muted); font-style: normal; }
 .support-events small { color: var(--muted); white-space: nowrap; }
+.support-waiting { color: var(--warning); font-size: 11px; font-weight: 800; white-space: nowrap; }
+.support-user-ctx-tickets { display: flex; flex-direction: column; gap: 3px; padding-top: 5px; border-top: 1px dashed var(--border); }
+.support-user-ctx-tickets b { font-size: 10px; text-transform: uppercase; letter-spacing: .04em; }
+.support-user-ctx-tickets a { color: var(--muted); display: flex; align-items: center; gap: 6px; }
+.support-user-ctx-tickets a:hover { color: var(--accent); }
+.support-notes { display: flex; flex-direction: column; gap: 6px; margin-top: 9px; padding: 9px 12px; background: rgba(255,194,61,.07); border: 1px solid rgba(255,194,61,.35); border-radius: 10px; font-size: 11px; }
+.support-notes > b { color: var(--warning); font-size: 11px; }
+.support-notes > span { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: baseline; }
+.support-notes em { font-style: normal; white-space: pre-wrap; }
+.support-notes small { color: var(--muted); white-space: nowrap; }
+.support-note-add { display: flex; gap: 6px; }
+.support-note-add .input { min-height: 34px; font-size: 12px; }
+.support-points-rows { display: flex; flex-direction: column; gap: 4px; padding: 8px 0 6px; border-top: 1px dashed var(--border); font-size: 11px; }
+.support-points-rows span { display: grid; grid-template-columns: minmax(70px,auto) 1fr auto; gap: 8px; align-items: baseline; }
+.support-points-rows em { color: var(--muted); font-style: normal; }
+.support-points-rows small { color: var(--muted); white-space: nowrap; }
+.pf-in { color: var(--success); }
+.pf-out { color: var(--danger); }
 .support-templates { display: flex; gap: 7px; flex-wrap: wrap; margin-top: 10px; }
 .support-refund { display: flex; gap: 7px; align-items: center; flex-wrap: wrap; padding-top: 5px; border-top: 1px dashed var(--border); }
 .support-refund .input { width: 120px; padding: 6px 9px; font-size: 12px; }
