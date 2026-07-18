@@ -47,5 +47,7 @@ def test_cloudflare_header_enters_ddos_guard(client, monkeypatch):
     monkeypatch.setattr(deps, "_ORIGIN_LOCK_ACTIVE", True)
     monkeypatch.setattr(ddos, "observe", lambda ip: seen.append(ip) or 0)
 
-    assert client.get("/api/health", headers={"cf-connecting-ip": "203.0.113.10"}).status_code == 200
+    # DDoS guard is skipped on origin-lock-free routes (/api/health, /api/monitor/healthz, /api/_origin_check)
+    # Test /api/news (public route) to verify CF header enters DDoS observation
+    assert client.get("/api/news", headers={"cf-connecting-ip": "203.0.113.10"}).status_code == 200
     assert seen == ["203.0.113.10"]
