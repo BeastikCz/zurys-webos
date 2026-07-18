@@ -7266,7 +7266,7 @@ document.addEventListener("click", (e) => {
 
 /* Service worker pro Web Push (notifikace do mobilu). Registruje se 1× na pozadí. */
 if ("serviceWorker" in navigator) {
-  window.addEventListener("load", () => { navigator.serviceWorker.register("/sw.js?v=2026071261").catch(() => {}); });
+  window.addEventListener("load", () => { navigator.serviceWorker.register("/sw.js?v=2026071262").catch(() => {}); });
 }
 
 document.addEventListener("change", (e) => {

@@ -455,3 +455,32 @@ def test_feed_all_uses_krmivo_then_points_and_skips_broke():
         assert r2["count"] == 0 and r2["skipped"] == 2
     finally:
         conn.close()
+
+
+def test_fed_rescale_migration_keeps_old_level():
+    """Migrace _mig_farm_fed_rescale: starý level (fed//5, cap 10) přežije přechod na FEED_PER_LEVEL 20."""
+    from app.db import get_conn, init_db, set_setting
+    from app import farm
+    conn = get_conn()
+    try:
+        uid = _user(conn)
+        assert farm.buy(conn, _row(conn, uid), "chicken")["ok"]
+        conn.execute("UPDATE farm_animals SET fed_count=83 WHERE user_id=? AND slot=0", (uid,))  # heavy feeder — byl cap lvl 10
+        from app.db import now_iso
+        conn.execute("INSERT OR REPLACE INTO farm_collection (user_id, animal_key, created_at, fed_count) "
+                     "VALUES (?, 'goat', ?, 23)", (uid, now_iso()))
+        set_setting(conn, "_mig_farm_fed_rescale", "")   # odemkni migraci
+        conn.commit()
+        init_db()                                        # migrace proběhne
+        conn2 = get_conn()
+        try:
+            fa = conn2.execute("SELECT fed_count FROM farm_animals WHERE user_id=? AND slot=0", (uid,)).fetchone()
+            assert farm._level(fa["fed_count"]) == 10, "heavy feeder (fed 83, starý cap lvl 10) musí zůstat lvl 10"
+            assert fa["fed_count"] == 180                # (45//5)*20 — přebytek nad cap zahozen
+            fc = conn2.execute("SELECT fed_count FROM farm_collection WHERE user_id=? AND animal_key='goat'", (uid,)).fetchone()
+            assert fc["fed_count"] == 92                 # (23//5)*20 + 3*4 → lvl 5 + 12/20
+            assert farm._level(fc["fed_count"]) == 5
+        finally:
+            conn2.close()
+    finally:
+        conn.close()

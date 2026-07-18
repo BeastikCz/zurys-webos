@@ -1091,6 +1091,15 @@ def init_db() -> None:
                 conn.execute("DROP TABLE raffle_winners")
                 conn.execute("ALTER TABLE raffle_winners_new RENAME TO raffle_winners")
             set_setting(conn, "_mig_rafflewin_keep_history", "1")
+        # Statek 18.7.: FEED_PER_LEVEL 5→20 + MAX_LEVEL 10→25 srazily živě počítaný level
+        # (level = 1 + fed_count//FEED_PER_LEVEL). Přeškáluj fed_count na novou stupnici tak,
+        # aby STARÝ level (cap 10 při fed 45+) i rozkrmený zbytek zůstaly; dál už level = 20 krmení.
+        if get_setting(conn, "_mig_farm_fed_rescale", "") != "1":
+            for tbl in ("farm_animals", "farm_collection"):
+                conn.execute(f"UPDATE {tbl} SET fed_count ="
+                             " (min(fed_count, 45) / 5) * 20 + (min(fed_count, 45) % 5) * 4"
+                             " WHERE fed_count > 0")
+            set_setting(conn, "_mig_farm_fed_rescale", "1")
         # Garden v1 ukládala aktivní útok jako pest=1 bez času. Převeď ho na v2
         # časovaný útok od zasazení; pest=0 pak znamená nezachráněný a funguje rescue.
         conn.execute(
