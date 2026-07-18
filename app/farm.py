@@ -540,13 +540,12 @@ def buy(conn, user, animal_key: str) -> dict:
     if not try_debit(conn, user["id"], cost, f"Statek: koupě {a['name']} {a['icon']}"):
         return {"ok": False, "error": f"Nemáš dost sedláků ({cost})."}
     try:
+        conn.execute("SAVEPOINT farm_buy")
         conn.execute("INSERT INTO farm_animals (user_id, slot, animal_key, ready_at, fed_count, bought_at) "
                      "VALUES (?, ?, ?, '', 0, ?)", (user["id"], slot, animal_key, now_iso()))
     except sqlite3.IntegrityError:
-        from .deps import add_points
+        conn.execute("ROLLBACK TO SAVEPOINT farm_buy")
         conn.rollback()
-        add_points(conn, user["id"], cost, "Vrácení za zvíře (souběh)", xp=False)
-        conn.commit()
         return {"ok": False, "error": "Slot se mezitím obsadil. Zkus znovu."}
     _note_collection(conn, user["id"], animal_key)
     # „stáj": druh už jsi trénoval → nové zvíře nastoupí s uloženým levelem (fed_count ze sbírky)

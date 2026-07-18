@@ -1899,6 +1899,8 @@ def fair_rotate(data: FairSeedIn, user: sqlite3.Row = Depends(require_user),
                 conn: sqlite3.Connection = Depends(db_dep)):
     """Změní seed: ODHALÍ starý server seed (na ověření minulých her) + nasadí nový commit
     a nový/zadaný client seed, nonce=0. Klasický commit-reveal cyklus."""
+    if conn.execute("SELECT 1 FROM mines_games WHERE user_id=? AND status='active'", (user["id"],)).fetchone():
+        raise HTTPException(status_code=400, detail="Nemůžeš rotovat seed během aktivní hry Mines.")
     old_ss, old_sh, _cs, _n = _fair_ensure(conn, user["id"])
     new_ss = fairness.new_server_seed()
     new_cs = (data.client_seed or "").strip()[:64] or fairness.new_client_seed()

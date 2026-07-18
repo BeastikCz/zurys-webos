@@ -83,11 +83,12 @@ def _expire_open(conn) -> None:
     changed = False
     for g in rows:
         if _seconds_since(g["created_at"]) > OPEN_TTL_S:
-            add_points(conn, g["p1_id"], g["stake"], f"Vypršelá hra #{g['id']} – vrácení vkladu")
-            restore_wager_limit(conn, g["p1_id"], g["stake"])   # nikdo se nepřidal → vrať i denní limit
-            conn.execute("UPDATE games SET status='cancelled', updated_at=? WHERE id=?",
-                         (now_iso(), g["id"]))
-            changed = True
+            rc = conn.execute("UPDATE games SET status='cancelled', updated_at=? WHERE id=? AND status='open'",
+                         (now_iso(), g["id"])).rowcount
+            if rc == 1:
+                add_points(conn, g["p1_id"], g["stake"], f"Vypršelá hra #{g['id']} – vrácení vkladu")
+                restore_wager_limit(conn, g["p1_id"], g["stake"])
+                changed = True
     if changed:
         conn.commit()
 
@@ -497,10 +498,12 @@ def _expire_open_duels(conn) -> None:
     changed = False
     for d in rows:
         if _seconds_since(d["created_at"]) > DUEL_OPEN_TTL_S:
-            add_points(conn, d["p1_id"], d["stake"], f"Vypršelá výzva (duel #{d['id']}) – vrácení vkladu")
-            restore_wager_limit(conn, d["p1_id"], d["stake"])   # nikdo nepřijal → vrať i denní limit
-            conn.execute("UPDATE duels SET status='cancelled', updated_at=? WHERE id=?", (now_iso(), d["id"]))
-            changed = True
+            rc = conn.execute("UPDATE duels SET status='cancelled', updated_at=? WHERE id=? AND status='open'",
+                         (now_iso(), d["id"])).rowcount
+            if rc == 1:
+                add_points(conn, d["p1_id"], d["stake"], f"Vypršelá výzva (duel #{d['id']}) – vrácení vkladu")
+                restore_wager_limit(conn, d["p1_id"], d["stake"])
+                changed = True
     if changed:
         conn.commit()
 

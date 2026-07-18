@@ -399,16 +399,14 @@ def buy_decor(conn, user, key: str) -> dict:
     if not try_debit(conn, user["id"], d["cost"], f"Dekorace zahrádky: {d['name']} {d['icon']}"):
         return {"ok": False, "error": f"Nemáš dost sedláků ({d['cost']})."}
     try:
+        conn.execute("SAVEPOINT garden_decor_buy")
         conn.execute("INSERT INTO garden_decor (user_id, decor_key, created_at) VALUES (?, ?, ?)",
                      (user["id"], key, now_iso()))
-        conn.commit()
     except _sqlite3.IntegrityError:
-        # Concurrent request already bought same decor — refund and signal duplicate.
-        from .deps import add_points
+        conn.execute("ROLLBACK TO SAVEPOINT garden_decor_buy")
         conn.rollback()
-        add_points(conn, user["id"], d["cost"], f"Vrácení za dekoraci (souběh): {d['name']}", xp=False)
-        conn.commit()
         return {"ok": False, "error": "Tuhle dekoraci už máš. ✅"}
+    conn.commit()
     bal = conn.execute("SELECT points FROM users WHERE id = ?", (user["id"],)).fetchone()["points"]
     return {"ok": True, "balance": bal, "name": d["name"], "icon": d["icon"]}
 
