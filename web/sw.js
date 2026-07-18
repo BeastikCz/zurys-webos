@@ -1,8 +1,8 @@
 /* Zurys service worker — drží PWA shell dostupný i při výpadku sítě. API zůstává vždy online. */
-const CACHE = "zurys-shell-2026071252";   // digity = cache verze; bumpuje deploy.py spolu s index.html
+const CACHE = "zurys-shell-2026071253";   // digity = cache verze; bumpuje deploy.py spolu s index.html
 const APP_SHELL = [
   "/", "/index.html", "/manifest.json", "/sedlak-cut.png",
-  "/styles.css?v=2026071252", "/farm.css?v=2026071252", "/app.js?v=2026071252",
+  "/styles.css?v=2026071253", "/farm.css?v=2026071253", "/app.js?v=2026071253",
 ];
 
 self.addEventListener("install", (event) => event.waitUntil(

@@ -2743,7 +2743,7 @@ async function loadShopAuctions() {                         // aukce ŽIJOU v sh
     const active = d.active || [];
     if (!active.length) { box.innerHTML = ""; return; }     // žádná aukce → sekce zmizí
     const tb = d.top_bidders || [];
-    const lb = tb.length ? `<div class="section-title" style="margin:18px 0 8px;font-size:14px">🏆 Top dražitelé</div><div class="panel" style="padding:8px 14px">${tb.map((b, i) => `<div style="display:flex;justify-content:space-between;align-items:center;font-size:13px;padding:3px 0"><span>${["🥇", "🥈", "🥉"][i] || (i + 1) + "."} <b>${esc(b.username || "?")}</b></span><span class="faint">${b.wins}× výhra · ${fmtPts(b.spent)} 🌾</span></div>`).join("")}</div>` : "";
+    const lb = tb.length ? `<details class="lb-fold"><summary class="section-title" style="margin:14px 0 0;font-size:14px">🏆 Top dražitelé</summary><div class="panel" style="padding:8px 14px;margin-top:8px">${tb.map((b, i) => `<div style="display:flex;justify-content:space-between;align-items:center;font-size:13px;padding:3px 0"><span>${["🥇", "🥈", "🥉"][i] || (i + 1) + "."} <b>${esc(b.username || "?")}</b></span><span class="faint">${b.wins}× výhra · ${fmtPts(b.spent)} 🌾</span></div>`).join("")}</div></details>` : "";
     box.innerHTML = `<div class="section-title auc-live-title" style="margin:18px 0 10px"><span class="auc-live-dot"></span> LIVE aukce <span class="faint" style="font-weight:400;font-size:13px">— přihazuj sedláky, kdo dá nejvíc do konce, bere skin! 🔨</span></div>`
       + `<div class="auc-grid">${active.map(auctionCardHTML).join("")}</div>` + lb;
     _startAuctionTimer();
@@ -2768,6 +2768,7 @@ function auctionCardHTML(a) {
   const buyNow = a.buy_now && a.buy_now > (a.current_bid || 0);
   const bg = a.image_url ? `background-image:url('${esc(a.image_url)}')` : "";
   const feeTip = "První příhoz do aukce: +10 % vstupní poplatek (max 5 000). Při přehození se ti vrací 100 % příhozu, další příhozy už bez poplatku.";
+  const bids = a.bids_count ? `<span class="faint" style="font-size:11.5px">· 🔨 ${a.bids_count} příhozů</span>` : "";
   return `<div class="panel auc-card${a.sub_only ? " auc-sub" : ""}">
     <div class="auc-hero" style="${bg}">
       ${a.image_url ? "" : `<span class="auc-hero-emoji">🔨</span>`}
@@ -2776,7 +2777,7 @@ function auctionCardHTML(a) {
     </div>
     <div class="auc-body">
       <div class="auc-title">${esc(a.title)}</div>
-      <div class="auc-bid-now">${a.current_bid ? `<b>${fmtPts(a.current_bid)}</b> 🌾 ${a.leader ? `<span class="faint">· vede</span> <b style="color:${me ? "var(--farm-green,#46d369)" : "var(--accent)"}">${esc(a.leader)}${me ? " (ty!)" : ""}</b>` : ""}` : `<span class="faint">vyvolávací cena</span> <b>${fmtPts(a.start_bid)}</b> 🌾`}<span class="auc-fee-tip" title="${esc(feeTip)}">🎟</span></div>
+      <div class="auc-bid-now">${a.current_bid ? `<b>${fmtPts(a.current_bid)}</b> 🌾 ${a.leader ? `<span class="faint">· vede</span> <b style="color:${me ? "var(--farm-green,#46d369)" : "var(--accent)"}">${esc(a.leader)}${me ? " (ty!)" : ""}</b>` : ""}` : `<span class="faint">vyvolávací cena</span> <b>${fmtPts(a.start_bid)}</b> 🌾`}${bids}<span class="auc-fee-tip" data-action="auction-feetip">🎟<span class="auc-fee-pop">${esc(feeTip)}</span></span></div>
       ${locked
         ? `<div class="faint" style="text-align:center;padding:10px;background:rgba(168,85,247,.08);border-radius:10px">💜 Tahle aukce je jen pro <b>suby</b>. Přihoď si sub na Kicku a draž!</div>`
         : `<div class="auc-bidrow">
@@ -7040,6 +7041,7 @@ function handleAction(action, el) {
     case "cart-clear": clearCart(); pageCart(); break;
     case "checkout": doCheckout(); break;
     case "acc-toggle": { const item = document.querySelector(`.acc-item[data-acc="${el.dataset.i}"]`); item.classList.toggle("open"); break; }
+    case "auction-feetip": el.classList.toggle("open"); break;   // mobil nemá hover → klik toggluje popover
     case "prof-tab": loadProfTab(el.dataset.tab); break;
     case "save-trade": saveTradeUrl(); break;
     case "copy-trade": navigator.clipboard && navigator.clipboard.writeText(el.dataset.url).then(() => toast("Trade link zkopírován ✓", "success")); break;
@@ -7265,7 +7267,7 @@ document.addEventListener("click", (e) => {
 
 /* Service worker pro Web Push (notifikace do mobilu). Registruje se 1× na pozadí. */
 if ("serviceWorker" in navigator) {
-  window.addEventListener("load", () => { navigator.serviceWorker.register("/sw.js?v=2026071252").catch(() => {}); });
+  window.addEventListener("load", () => { navigator.serviceWorker.register("/sw.js?v=2026071253").catch(() => {}); });
 }
 
 document.addEventListener("change", (e) => {
