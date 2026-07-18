@@ -64,8 +64,15 @@ def claim(conn, user, milestone: int) -> dict:
     if milestone in claimed:
         return {"ok": False, "error": "Tenhle milník už máš vyzvednutý. 🎁"}
     claimed.append(milestone)
-    conn.execute("UPDATE login_calendar SET claimed_ms = ? WHERE user_id = ? AND month = ?",
-                 (json.dumps(sorted(claimed)), user["id"], _month()))
+    month = _month()
+    claimed_json_str = json.dumps(sorted(claimed))
+    rc = conn.execute(
+        "UPDATE login_calendar SET claimed_ms = ? "
+        "WHERE user_id = ? AND month = ? AND claimed_ms NOT LIKE ?",
+        (claimed_json_str, user["id"], month, f'%{milestone}%')).rowcount
+    if rc != 1:
+        conn.rollback()
+        return {"ok": False, "error": "Tenhle milník už máš vyzvednutý (souběh). 🎁"}
     add_points(conn, user["id"], reward, f"Login kalendář – {need} dní 🗓️")
     conn.commit()
     bal = conn.execute("SELECT points FROM users WHERE id = ?", (user["id"],)).fetchone()["points"]

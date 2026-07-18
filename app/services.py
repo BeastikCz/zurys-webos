@@ -223,6 +223,17 @@ def apply_purchase(conn: sqlite3.Connection, user: sqlite3.Row,
                 conn.rollback()
                 raise HTTPException(status_code=400,
                                     detail=f"Odměna „{p['name']}“ se mezitím vyprodala. Zkus to prosím znovu.")
+        # Raffle cap check (must be atomic with INSERT within transaction)
+        cap = p.get("max_per_person_pct", 0) or 0
+        if p["type"] == "raffle" and cap > 0:
+            existing = conn.execute(
+                "SELECT COUNT(*) FROM raffle_entries WHERE product_id=? AND user_id=?",
+                (product_id, user["id"])).fetchone()[0]
+            if existing + qty > cap:
+                conn.rollback()
+                raise HTTPException(status_code=400,
+                                    detail=f"Přečet limitu tomboly „{p['name']}" (souběh).  "
+                                           f"Máš {existing}, limit je {cap}.")
         for _ in range(qty):
             cur = conn.execute(
                 "INSERT INTO orders (user_id, product_id, product_name, points_spent, status, created_at) "

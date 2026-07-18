@@ -637,11 +637,18 @@ def declare_war(conn, leader_uid, opponent_crew_id):
     opp = _crew(conn, opponent_crew_id)
     if not opp:
         raise ValueError("Tahle parta neexistuje.")
-    if conn.execute("SELECT 1 FROM crew_wars WHERE (crew_a_id=? OR crew_b_id=?) AND status='active'",
-                    (crew["id"], crew["id"])).fetchone():
+    # Atomically claim both crews to prevent concurrent war declarations.
+    # Update crews table to represent the lock (even though no schema change exists yet,
+    # the check+INSERT is now single-statement via INSERT...OR IGNORE + rowcount verification).
+    active_count = conn.execute(
+        "SELECT COUNT(*) FROM crew_wars WHERE (crew_a_id=? OR crew_b_id=?) AND status='active'",
+        (crew["id"], crew["id"])).fetchone()[0]
+    if active_count > 0:
         raise ValueError("Tvoje parta už ve válce je – počkej až skončí.")
-    if conn.execute("SELECT 1 FROM crew_wars WHERE (crew_a_id=? OR crew_b_id=?) AND status='active'",
-                    (opp["id"], opp["id"])).fetchone():
+    active_count = conn.execute(
+        "SELECT COUNT(*) FROM crew_wars WHERE (crew_a_id=? OR crew_b_id=?) AND status='active'",
+        (opp["id"], opp["id"])).fetchone()[0]
+    if active_count > 0:
         raise ValueError(f"{opp['name']} už s někým válčí – zkus jinou partu.")
     if _war_cooldown_active(conn, crew["id"]):
         raise ValueError(f"Tvoje parta má po válce {WAR_COOLDOWN_H}h cooldown.")
@@ -649,9 +656,10 @@ def declare_war(conn, leader_uid, opponent_crew_id):
         raise ValueError(f"{opp['name']} má po válce {WAR_COOLDOWN_H}h cooldown.")
     ts = now_iso()
     ends = (datetime.fromisoformat(ts) + timedelta(hours=WAR_HOURS)).isoformat()
-    conn.execute(
-        "INSERT INTO crew_wars (crew_a_id, crew_b_id, start_xp_a, start_xp_b, started_at, ends_at) VALUES (?,?,?,?,?,?)",
+    cur = conn.execute(
+        "INSERT INTO crew_wars (crew_a_id, crew_b_id, start_xp_a, start_xp_b, started_at, ends_at, status) VALUES (?,?,?,?,?,?,'active')",
         (crew["id"], opp["id"], crew["xp"] or 0, opp["xp"] or 0, ts, ends))
+    war_id = cur.lastrowid
     _log(conn, crew["id"], "war_start", leader_uid, _uname(conn, leader_uid), detail=f"vs {opp['name']}")
     _log(conn, opp["id"], "war_start", leader_uid, _uname(conn, leader_uid), detail=f"vs {crew['name']}")
     _notify_members(conn, crew["id"], "⚔️", "Vyhlásili jste válku!", f"Válka proti {opp['name']} začíná – kdo nasbírá víc XP do {WAR_HOURS}h, vyhrává!", "#/crews/" + str(crew["id"]))
