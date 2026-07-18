@@ -1625,9 +1625,13 @@ function supportStatusBadge(status) {
   const item = SUPPORT_STATUSES[status] || SUPPORT_STATUSES.open;
   return `<span class="support-status is-${esc(status)}">${item.label}</span>`;
 }
+// Ticket čeká na odpověď podpory: poslední zpráva od uživatele a není dořešený
+function supportAwaits(ticket) {
+  return !!ticket.last_from_user && (ticket.status === "open" || ticket.status === "in_progress");
+}
 function supportCounts() {
-  const counts = { all: _supportTickets.length, open: 0, in_progress: 0, resolved: 0, closed: 0 };
-  _supportTickets.forEach((ticket) => { if (counts[ticket.status] != null) counts[ticket.status]++; });
+  const counts = { all: _supportTickets.length, open: 0, in_progress: 0, resolved: 0, closed: 0, waiting: 0 };
+  _supportTickets.forEach((ticket) => { if (counts[ticket.status] != null) counts[ticket.status]++; if (supportAwaits(ticket)) counts.waiting++; });
   return counts;
 }
 function renderSupportTicketList() {
@@ -1635,14 +1639,15 @@ function renderSupportTicketList() {
   const query = (document.getElementById("supportSearch")?.value || "").trim().toLowerCase();
   const category = document.getElementById("supportCategoryFilter")?.value || "all";
   const rows = _supportTickets.filter((ticket) => {
-    if (_supportStatus !== "all" && ticket.status !== _supportStatus) return false;
+    if (_supportStatus === "waiting" ? !supportAwaits(ticket)
+        : (_supportStatus !== "all" && ticket.status !== _supportStatus)) return false;
     if (category !== "all" && ticket.category !== category) return false;
     return !query || `${ticket.subject} ${ticket.last_body || ""} ${ticket.username || ""}`.toLowerCase().includes(query);
   });
   document.querySelectorAll("[data-action='support-filter']").forEach((button) => button.classList.toggle("active", button.dataset.status === _supportStatus));
   box.innerHTML = rows.length ? rows.map((ticket) => `
     <a class="support-ticket-row${ticket.id === _supportSelected ? " active" : ""}" href="#/podpora/${ticket.id}">
-      <div class="support-ticket-top">${supportStatusBadge(ticket.status)}<span class="support-ticket-id">#${ticket.id}</span><span class="support-ticket-age">${timeAgo(ticket.updated_at)}</span></div>
+      <div class="support-ticket-top">${supportStatusBadge(ticket.status)}${canManageSupport(state.user) && supportAwaits(ticket) ? `<span class="support-waiting" title="Poslední zpráva je od uživatele – čeká na odpověď podpory">⏳ ${timeAgo(ticket.updated_at)}</span>` : ""}<span class="support-ticket-id">#${ticket.id}</span><span class="support-ticket-age">${timeAgo(ticket.updated_at)}</span></div>
       <b class="support-ticket-subject">${esc(ticket.subject)}</b>
       ${canManageSupport(state.user) ? `<span class="support-ticket-user">${esc(ticket.username)}</span>` : ""}
       <span class="support-ticket-preview">${esc((ticket.last_body || "").slice(0, 110))}</span>
@@ -1664,7 +1669,7 @@ function renderSupportShell() {
     <div class="support-layout${_supportSelected ? " has-detail" : ""}">
       <aside class="support-sidebar">
         <input class="input" id="supportSearch" maxlength="100" placeholder="Hledat tickety…" aria-label="Hledat tickety">
-        <div class="support-filters">${["all", "open", "in_progress", "resolved", "closed"].map((status) => `<button class="support-filter${_supportStatus === status ? " active" : ""}" data-action="support-filter" data-status="${status}">${status === "all" ? "Vše" : SUPPORT_STATUSES[status].short}</button>`).join("")}</div>
+        <div class="support-filters">${(staff ? ["all", "waiting", "open", "in_progress", "resolved", "closed"] : ["all", "open", "in_progress", "resolved", "closed"]).map((status) => `<button class="support-filter${_supportStatus === status ? " active" : ""}" data-action="support-filter" data-status="${status}">${status === "all" ? "Vše" : status === "waiting" ? `⏳ Čeká${counts.waiting ? ` (${counts.waiting})` : ""}` : SUPPORT_STATUSES[status].short}</button>`).join("")}</div>
         <select class="select" id="supportCategoryFilter" aria-label="Filtrovat podle kategorie"><option value="all">Všechny kategorie</option>${Object.entries(SUPPORT_CATEGORIES).map(([key, value]) => `<option value="${key}">${value.label}</option>`).join("")}</select>
         <div id="supportTicketList" class="support-ticket-list"></div>
       </aside>
@@ -1696,6 +1701,7 @@ const SUPPORT_TEMPLATES = [
 ];
 function supportUserCtx(u, ticketId) {
   const orders = (u.orders || []).map((o) => `<span>#${o.id} · ${esc(o.product_name || "?")} · ${fmtPts(o.points_spent)} · ${esc(o.status)} · ${timeAgo(o.created_at)}</span>`).join("") || "<span>Žádné objednávky.</span>";
+  const history = (u.tickets || []).map((t) => `<a href="#/podpora/${t.id}">${supportStatusBadge(t.status)} #${t.id} · ${esc(t.subject)} · ${timeAgo(t.created_at)}</a>`).join("");
   return `<div class="support-user-ctx">
     <div class="support-user-ctx-row">
       <a href="#/u/${encodeURIComponent(u.username)}"><b>${esc(u.username)}</b></a>
@@ -1704,16 +1710,37 @@ function supportUserCtx(u, ticketId) {
       <span>${u.ticket_count}× ticket</span>${u.banned ? `<span class="support-ctx-ban">BAN</span>` : ""}
     </div>
     <div class="support-user-ctx-orders">${orders}</div>
+    ${history ? `<div class="support-user-ctx-tickets"><b>Předchozí tickety</b>${history}</div>` : ""}
     <div class="support-refund">
       <input class="input" id="supportRefundAmount" type="number" min="1" max="1000000" placeholder="sedláků">
       <button class="btn btn-sm btn-ghost" data-action="support-refund" data-uid="${u.id}" data-id="${ticketId}">💰 Připsat body (refund)</button>
-      <button class="btn btn-sm btn-ghost" data-action="support-pointsfeed" data-uid="${u.id}">📜 Pohyby bodů</button>
+      <button class="btn btn-sm btn-ghost" data-action="support-points" data-uid="${u.id}">📜 Pohyby bodů</button>
     </div>
+    <div id="supportPointsBox" hidden></div>
   </div>`;
+}
+// Interní poznámky (event='note') – jen pro staff, uživateli je backend nevrací
+function supportNotes(notes, ticketId) {
+  return `<div class="support-notes">
+    <b>📝 Interní poznámky <span class="faint">(uživatel nevidí)</span></b>
+    ${notes.map((n) => `<span><em>${esc(n.detail)}</em><small>${esc(n.actor_name || "?")} · ${timeAgo(n.created_at)}</small></span>`).join("")}
+    <div class="support-note-add"><input class="input" id="supportNoteInput" maxlength="300" placeholder="Přidat poznámku…"><button class="btn btn-sm btn-ghost" data-action="support-note" data-id="${ticketId}">Uložit</button></div>
+  </div>`;
+}
+// Posledních pár pohybů bodů přímo v ticketu (ať admin nemusí odcházet do admin panelu)
+async function toggleSupportPoints(uid) {
+  const box = document.getElementById("supportPointsBox"); if (!box) return;
+  if (!box.hidden) { box.hidden = true; return; }
+  box.hidden = false; box.innerHTML = `<span class="faint">Načítám…</span>`;
+  try {
+    const d = await api(`/admin/security/points-feed?q=${uid}&limit=10`);
+    box.innerHTML = `<div class="support-points-rows">${d.rows.map((r) => `<span><b class="${r.change > 0 ? "pf-in" : "pf-out"}">${r.change > 0 ? "+" : ""}${fmtPts(r.change)}</b><em>${esc(r.reason)}</em><small>${timeAgo(r.created_at)}</small></span>`).join("") || "<span>Žádné pohyby.</span>"}</div>
+      <button class="btn btn-sm btn-ghost" data-action="support-pointsfeed" data-uid="${uid}">Celý feed v admin panelu →</button>`;
+  } catch (e) { box.innerHTML = `<span class="faint">${esc(e.message)}</span>`; }
 }
 function supportEventHistory(events) {
   if (!events || !events.length) return "";
-  const icons = { created: "🎫", status: "🔄", refund: "💰" };
+  const icons = { created: "🎫", status: "🔄", refund: "💰", note: "📝" };
   return `<details class="support-events"><summary>Historie ticketu (${events.length})</summary><div>${events.slice().reverse().map((e) => `<span><b>${icons[e.event] || "•"} ${esc(e.actor_name || "Systém")}</b><em>${esc(e.detail || "")}</em><small>${timeAgo(e.created_at)}</small></span>`).join("")}</div></details>`;
 }
 async function loadSupportDetail(ticketId) {
@@ -1730,7 +1757,8 @@ async function loadSupportDetail(ticketId) {
       ${supportProgress(ticket.status)}
       <div class="support-detail-meta"><b>${esc(supportCategory(ticket))}</b><span>Vytvořeno ${timeAgo(ticket.created_at)}</span><span>Aktualizováno ${timeAgo(ticket.updated_at)}</span></div>
       ${staff && data.user_ctx ? supportUserCtx(data.user_ctx, ticket.id) : ""}
-      ${supportEventHistory(data.events)}
+      ${staff ? supportNotes(data.events.filter((e) => e.event === "note"), ticket.id) : ""}
+      ${supportEventHistory(data.events.filter((e) => e.event !== "note"))}
       <div class="support-conversation">${dmBubbles(data.messages, staff)}</div>
       ${closed ? `<div class="support-closed-note">Ticket je uzavřený. Pokud řešíš něco dalšího, založ nový.</div>` : `${staff ? `<div class="support-templates">${SUPPORT_TEMPLATES.map((t, i) => `<button class="btn btn-sm btn-ghost" data-action="support-template" data-i="${i}">📋 ${t[0]}</button>`).join("")}</div>` : ""}${!staff && ticket.status !== "resolved" ? `<div class="support-templates"><button class="btn btn-sm btn-ghost" data-action="support-resolve" data-id="${ticket.id}">✅ Problém je vyřešený, díky</button></div>` : ""}<div class="dm-composer support-composer"><textarea class="input" id="supportReplyInput" rows="3" maxlength="2000" placeholder="Napište odpověď…"></textarea><input type="file" id="supportAttachFile" accept="image/png,image/jpeg,image/webp,image/gif" hidden data-id="${ticket.id}"><button class="btn btn-ghost" data-action="support-attach" title="Přiložit screenshot (max 6 MB)">📎</button><button class="btn btn-primary" data-action="support-reply" data-id="${ticket.id}">Odeslat odpověď</button></div>`}`;
     const thread = box.querySelector(".dm-thread"); if (thread) thread.scrollTop = thread.scrollHeight;
@@ -1786,6 +1814,14 @@ async function refundFromTicket(userId, ticketId) {
   try {
     await api(`/tickets/admin/${ticketId}/refund`, { method: "POST", body: { amount } });
     toast(`Připsáno ${fmtPts(amount)}.`, "success");
+    await loadSupportDetail(ticketId);
+  } catch (e) { toast(e.message, "error"); }
+}
+async function addSupportNote(ticketId) {
+  const input = document.getElementById("supportNoteInput");
+  const body = input?.value.trim() || ""; if (!body) { toast("Prázdná poznámka.", "error"); return; }
+  try {
+    await api(`/tickets/admin/${ticketId}/note`, { method: "POST", body: { body } });
     await loadSupportDetail(ticketId);
   } catch (e) { toast(e.message, "error"); }
 }
@@ -7004,6 +7040,8 @@ function handleAction(action, el) {
     case "support-refund": refundFromTicket(Number(el.dataset.uid), id); break;
     case "support-attach": document.getElementById("supportAttachFile")?.click(); break;
     case "support-pointsfeed": adminState.tab = "security"; adminState.secTab = "points"; adminState.pfQuery = String(el.dataset.uid); adminState.pfOffset = 0; navigate("admin"); break;
+    case "support-points": toggleSupportPoints(Number(el.dataset.uid)); break;
+    case "support-note": addSupportNote(id); break;
     case "support-filter": _supportStatus = el.dataset.status; renderSupportTicketList(); break;
     case "shop-disc-save": saveShopDiscount(); break;
     case "ban-cluster": banCluster(el.dataset.ids, el.dataset.label); break;
@@ -7266,7 +7304,7 @@ document.addEventListener("click", (e) => {
 
 /* Service worker pro Web Push (notifikace do mobilu). Registruje se 1× na pozadí. */
 if ("serviceWorker" in navigator) {
-  window.addEventListener("load", () => { navigator.serviceWorker.register("/sw.js?v=2026071262").catch(() => {}); });
+  window.addEventListener("load", () => { navigator.serviceWorker.register("/sw.js?v=2026071263").catch(() => {}); });
 }
 
 document.addEventListener("change", (e) => {

@@ -135,6 +135,39 @@ def test_attach_and_notify(client):
     assert "vyřešený" in n2[0]
 
 
+def test_admin_notes_waiting_flag_and_ticket_history(client):
+    uid, user = _session()
+    _, broadcaster = _session("broadcaster")
+    _, admin = _session("admin")
+    payload = {"category": "web", "subcategory": "bug", "subject": "První ticket", "body": "Popis."}
+    first_id = client.post("/api/tickets", json=payload, headers=user).json()["id"]
+    ticket_id = client.post("/api/tickets", json={**payload, "subject": "Druhý ticket"},
+                            headers=user).json()["id"]
+
+    # last_from_user: po vytvoření čeká na podporu, po odpovědi admina ne
+    row = next(r for r in client.get("/api/tickets/admin/all", headers=admin).json() if r["id"] == ticket_id)
+    assert row["last_from_user"] == 1
+    client.post(f"/api/tickets/admin/{ticket_id}/reply", json={"body": "Řeším."}, headers=admin)
+    row = next(r for r in client.get("/api/tickets/admin/all", headers=admin).json() if r["id"] == ticket_id)
+    assert row["last_from_user"] == 0
+
+    # interní poznámka: jen admin; vidí ji admin, uživatel nikdy
+    assert client.post(f"/api/tickets/admin/{ticket_id}/note", json={"body": "Interní: čekám na Kick API."},
+                       headers=broadcaster).status_code == 403
+    assert client.post(f"/api/tickets/admin/{ticket_id}/note", json={"body": "Interní: čekám na Kick API."},
+                       headers=admin).status_code == 200
+    admin_events = client.get(f"/api/tickets/admin/{ticket_id}", headers=admin).json()["events"]
+    assert any(e["event"] == "note" and "Kick API" in e["detail"] for e in admin_events)
+    user_events = client.get(f"/api/tickets/{ticket_id}", headers=user).json()["events"]
+    assert not any(e["event"] == "note" for e in user_events)
+
+    # user_ctx obsahuje předchozí tickety uživatele (bez toho otevřeného)
+    ctx = client.get(f"/api/tickets/admin/{ticket_id}", headers=admin).json()["user_ctx"]
+    history_ids = [t["id"] for t in ctx["tickets"]]
+    assert first_id in history_ids and ticket_id not in history_ids
+    assert {"id", "subject", "status", "created_at"} <= set(ctx["tickets"][0].keys())
+
+
 def test_ticket_refund_is_atomic_and_visible(client):
     uid, user = _session()
     _, admin = _session("admin")

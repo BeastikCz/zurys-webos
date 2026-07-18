@@ -69,17 +69,19 @@ def _event(conn, ticket_id, actor_id, event, detail):
     )
 
 
-def _events(conn, ticket_id):
+def _events(conn, ticket_id, staff=False):
+    """Historie ticketu; interní poznámky (event='note') vidí jen staff."""
+    extra = "" if staff else " AND event != 'note'"
     return [dict(r) for r in conn.execute(
-        "SELECT event,actor_name,detail,created_at FROM support_ticket_events "
-        "WHERE ticket_id=? ORDER BY id", (ticket_id,),
+        f"SELECT event,actor_name,detail,created_at FROM support_ticket_events "
+        f"WHERE ticket_id=?{extra} ORDER BY id", (ticket_id,),
     ).fetchall()]
 
 
 def _summary(r):
     return {k: r[k] for k in ("id", "user_id", "username", "avatar_url", "role", "category",
                                "subcategory", "subject", "status", "created_at", "updated_at",
-                               "last_body", "unread") if k in r.keys()}
+                               "last_body", "unread", "last_from_user") if k in r.keys()}
 
 
 def _add_message(conn, ticket, from_id, body, image=None):
@@ -174,7 +176,8 @@ def admin_all(staff: sqlite3.Row = Depends(require_admin), conn: sqlite3.Connect
     rows = conn.execute(
         "SELECT t.*, u.username, u.avatar_url, u.role, "
         "COALESCE((SELECT body FROM support_ticket_messages WHERE ticket_id=t.id ORDER BY id DESC LIMIT 1),'') last_body, "
-        "(SELECT COUNT(*) FROM support_ticket_messages m WHERE m.ticket_id=t.id AND m.from_id=t.user_id AND m.seen=0) unread "
+        "(SELECT COUNT(*) FROM support_ticket_messages m WHERE m.ticket_id=t.id AND m.from_id=t.user_id AND m.seen=0) unread, "
+        "COALESCE((SELECT m.from_id=t.user_id FROM support_ticket_messages m WHERE m.ticket_id=t.id ORDER BY m.id DESC LIMIT 1),0) last_from_user "
         "FROM support_tickets t JOIN users u ON u.id=t.user_id "
         "ORDER BY CASE t.status WHEN 'open' THEN 0 WHEN 'in_progress' THEN 1 WHEN 'resolved' THEN 2 ELSE 3 END, "
         "t.updated_at DESC LIMIT 200"
@@ -208,12 +211,17 @@ def admin_thread(ticket_id: int, staff: sqlite3.Row = Depends(require_admin),
         ticket_count = conn.execute(
             "SELECT COUNT(*) c FROM support_tickets WHERE user_id = ?", (u["id"],)
         ).fetchone()["c"]
+        recent = conn.execute(
+            "SELECT id, subject, status, created_at FROM support_tickets "
+            "WHERE user_id = ? AND id != ? ORDER BY id DESC LIMIT 5", (u["id"], ticket_id)
+        ).fetchall()
         user_ctx = {"id": u["id"], "username": u["username"], "kick_username": u["kick_username"],
                     "points": u["points"], "level": level_info(u["earned_total"])["level"],
                     "banned": u["banned"], "created_at": u["created_at"],
-                    "ticket_count": ticket_count, "orders": [dict(o) for o in orders]}
-    return {"ticket": dict(ticket), "messages": messages, "events": _events(conn, ticket_id),
-            "user_ctx": user_ctx}
+                    "ticket_count": ticket_count, "orders": [dict(o) for o in orders],
+                    "tickets": [dict(t) for t in recent]}
+    return {"ticket": dict(ticket), "messages": messages,
+            "events": _events(conn, ticket_id, staff=True), "user_ctx": user_ctx}
 
 
 @router.post("/admin/{ticket_id}/reply")
@@ -223,6 +231,18 @@ def admin_reply(ticket_id: int, data: DmIn, staff: sqlite3.Row = Depends(require
     if not ticket:
         raise HTTPException(status_code=404, detail="Ticket nenalezen.")
     _add_message(conn, ticket, staff["id"], data.body)
+    return {"ok": True}
+
+
+@router.post("/admin/{ticket_id}/note")
+def admin_note(ticket_id: int, data: DmIn, staff: sqlite3.Row = Depends(require_admin),
+               conn: sqlite3.Connection = Depends(db_dep)):
+    """Interní poznámka – vidí ji jen staff, uživateli se nikdy nevrací (filtr v _events)."""
+    ticket = _ticket(conn, ticket_id)
+    if not ticket:
+        raise HTTPException(status_code=404, detail="Ticket nenalezen.")
+    _event(conn, ticket_id, staff["id"], "note", data.body.strip())
+    conn.commit()
     return {"ok": True}
 
 
