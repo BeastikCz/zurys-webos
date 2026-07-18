@@ -484,7 +484,8 @@ async def ip_ban_guard(request: Request, call_next):
     rec = ipban.check(ip)
     if rec is not None:
         return ipban.block_page(ip, rec)
-    if request.headers.get("fly-client-ip") or request.headers.get("cf-connecting-ip"):
+    skip_ddos = request.url.path in _ORIGIN_LOCK_FREE
+    if not skip_ddos and (request.headers.get("fly-client-ip") or request.headers.get("cf-connecting-ip")):
         rate = ddos.observe(ip)
         if (ddos.autoban_enabled() and rate > ddos.AUTOBAN_PER_MIN
                 and ip not in TRUSTED_IPS and not _is_staff_request(request)):

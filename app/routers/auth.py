@@ -83,6 +83,8 @@ def _find_or_create_kick_user(conn: sqlite3.Connection, kick_username: str,
             (str(kick_id),)).fetchone()
     if not row:
         row = conn.execute("SELECT * FROM users WHERE kick_username = ?", (key,)).fetchone()
+        if row and kick_id and row["kick_id"] and row["kick_id"] != str(kick_id):
+            row = None
     if row:
         updates, params = [], []
         if kick_id and not row["kick_id"]:
@@ -100,7 +102,7 @@ def _find_or_create_kick_user(conn: sqlite3.Connection, kick_username: str,
             conn.execute(f"UPDATE users SET {', '.join(updates)} WHERE id = ?", params)
             conn.commit()
         return conn.execute("SELECT * FROM users WHERE id = ?", (row["id"],)).fetchone()
-    role = ROLE_ADMIN if key in [a.lower() for a in ADMIN_KICK_USERNAMES] else ROLE_USER
+    role = ROLE_ADMIN if kick_id and key in [a.lower() for a in ADMIN_KICK_USERNAMES] else ROLE_USER
     cur = conn.execute(
         "INSERT INTO users (kick_username, kick_id, username, avatar_url, points, role, created_at) "
         "VALUES (?, ?, ?, ?, 0, ?, ?)",

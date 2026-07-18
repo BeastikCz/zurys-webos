@@ -311,6 +311,7 @@ def attach(ticket_id: int, data: ImageUploadIn, user: sqlite3.Row = Depends(requ
     """Příloha (screenshot) k ticketu – vlastník nebo admin. Validace formátu/velikosti
     je sdílená s uploady odměn (jen PNG/JPG/WEBP/GIF, max 6 MB, přípona dle MIME)."""
     import secrets
+    import shutil
     from .admin import _decode_image_dataurl
     rate_limit(f"ticket:attach:{user['id']}", 5, 300)
     ticket = _ticket(conn, ticket_id)
@@ -318,6 +319,9 @@ def attach(ticket_id: int, data: ImageUploadIn, user: sqlite3.Row = Depends(requ
         raise HTTPException(status_code=404, detail="Ticket nenalezen.")
     raw, ext = _decode_image_dataurl(data.data)
     UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+    stat = shutil.disk_usage(UPLOAD_DIR)
+    if stat.free < 100 * 1024 * 1024:
+        raise HTTPException(status_code=507, detail="Disk je plný – nemůžeme přidat přílohu.")
     name = f"ticket_{secrets.token_hex(8)}.{ext}"
     (UPLOAD_DIR / name).write_bytes(raw)
     _add_message(conn, ticket, user["id"], "📎 obrázek", image=f"/uploads/{name}")

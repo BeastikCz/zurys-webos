@@ -188,8 +188,13 @@ def send_offsite_backup() -> bool:
                 shutil.copy2(p, tmp)
                 c = sqlite3.connect(str(tmp))
                 c.isolation_level = None
-                c.execute("DELETE FROM sessions")
-                c.execute("DELETE FROM bot_tokens")
+                # Delete all user-facing sensitive tables; keep only game/order recovery data
+                sensitive = {"users", "login_events", "admin_audit", "app_settings", "notifications",
+                            "sessions", "bot_tokens", "farm_animals", "garden_plants", "login_calendar",
+                            "points_log", "crew_members", "dm_threads", "gift_subs", "farm_collection",
+                            "redeem_codes", "email_subscribers", "shop_items"}
+                for table in sensitive:
+                    c.execute(f"DELETE FROM {table}")
                 c.execute("VACUUM")
                 c.close()
                 alerts.send_file(tmp, caption=f"💾 Off-site záloha DB · {today} · {kb} kB")
