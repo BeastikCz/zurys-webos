@@ -48,7 +48,6 @@ def get_conn() -> sqlite3.Connection:
     conn = sqlite3.connect(DB_PATH, timeout=15, check_same_thread=False)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
-    conn.execute("PRAGMA journal_mode = WAL")
     # synchronous=NORMAL: s WAL je to bezpečné (DB zůstane konzistentní; při tvrdém pádu
     # OS/power se může ztratit jen pár posledních commitů) a HLAVNĚ to ruší fsync na každý
     # commit → mnohonásobně vyšší write throughput. Bez toho 1 SQLite writer nestíhal nápor
@@ -989,6 +988,8 @@ def init_db() -> None:
     """Vytvoří tabulky a doplní chybějící sloupce (bez nutnosti reset DB)."""
     conn = get_conn()
     try:
+        # journal_mode is persistent database state; changing it per request can take an exclusive lock.
+        conn.execute("PRAGMA journal_mode = WAL")
         conn.executescript(SCHEMA)
         # crews.tag: NOT NULL UNIQUE → nullable (aby šel tag NEPOVINNÝ). SQLite neumí ALTER drop-NOT-NULL,
         # takže přestav tabulku. Bezpečné jen u PRÁZDNÉ crews (žádná data k zachování). MUSÍ běžet PŘED

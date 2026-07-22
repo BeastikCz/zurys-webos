@@ -11,6 +11,7 @@ Fail-safe: při chybě drží poslední známý stav; když nikdy nedetekoval, v
 (radši nedávat body, než je sypat při offline).
 """
 import json
+import threading
 import time
 import urllib.parse
 import urllib.request
@@ -22,6 +23,9 @@ from . import kickbot
 _TTL = 45
 HTTP_TIMEOUT = 8
 _cache = {"at": 0.0, "live": False, "ok": False}   # ok = už proběhla úspěšná detekce
+
+
+_refresh_lock = threading.Lock()
 
 
 def _detect(conn) -> bool:
@@ -57,6 +61,9 @@ def is_live(conn) -> bool:
     now = time.monotonic()
     if _cache["ok"] and now - _cache["at"] < _TTL:
         return _cache["live"]
+    if not _refresh_lock.acquire(blocking=False):
+        # ponytail: stale state is better than blocking every request on the same Kick call.
+        return _cache["live"]
     try:
         live = _detect(conn)
         _cache.update(at=now, live=live, ok=True)
@@ -64,6 +71,8 @@ def is_live(conn) -> bool:
     except Exception:
         _cache["at"] = now            # nezahlcovat – zkus zas až za TTL
         return _cache["live"] if _cache["ok"] else False
+    finally:
+        _refresh_lock.release()
 
 
 def get_mode(conn) -> str:

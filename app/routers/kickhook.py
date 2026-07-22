@@ -9,6 +9,7 @@ import time
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, BackgroundTasks, Request, Response
+from starlette.concurrency import run_in_threadpool
 
 from ..db import get_conn, now_iso
 from .. import kickevents, kickbot, alerts
@@ -45,14 +46,8 @@ def _send_command_reply(text: str) -> None:
         print("[kick-webhook] reply send error:", e)
 
 
-@router.post("/kick/webhook")
-async def kick_webhook(request: Request, background: BackgroundTasks):
-    body = await request.body()
-    h = request.headers
-    msg_id = h.get("kick-event-message-id", "")
-    ts = h.get("kick-event-message-timestamp", "")
-    etype = h.get("kick-event-type", "")
-    sig = h.get("kick-event-signature", "")
+def _process_webhook(body: bytes, msg_id: str, ts: str, etype: str, sig: str,
+                     background: BackgroundTasks) -> Response:
 
     # 1) ověření podpisu – jen reálný Kick smí spustit přičtení bodů
     if not kickevents.verify(msg_id, ts, body, sig):
@@ -113,3 +108,18 @@ async def kick_webhook(request: Request, background: BackgroundTasks):
                     cooldown=(900 if locked else 300))
 
     return Response(status_code=200)
+
+
+@router.post("/kick/webhook")
+async def kick_webhook(request: Request, background: BackgroundTasks):
+    body = await request.body()
+    h = request.headers
+    return await run_in_threadpool(
+        _process_webhook,
+        body,
+        h.get("kick-event-message-id", ""),
+        h.get("kick-event-message-timestamp", ""),
+        h.get("kick-event-type", ""),
+        h.get("kick-event-signature", ""),
+        background,
+    )
