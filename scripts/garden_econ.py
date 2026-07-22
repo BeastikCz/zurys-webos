@@ -1,5 +1,5 @@
 """Reálná ekonomika zahrádky z produkce (read-only). Pro ideaci monetizace.
-flyctl ssh console -a zurys-shop -C "python3 -" < scripts/garden_econ.py
+Get-Content -Raw scripts/garden_econ.py | ssh -i "$env:USERPROFILE\.ssh\hetzner_zurys" root@169.58.8.1 "cd /opt/webos/app && WEBOS_DATA_DIR=/data /opt/webos/venv/bin/python -"
 """
 import sqlite3
 from datetime import datetime, timezone, timedelta

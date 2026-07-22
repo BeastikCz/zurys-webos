@@ -1,6 +1,6 @@
 """StreamElements donaty → overlay alerty (poll v daemon threadu, žádný webhook).
 
-Aktivní jen se secrets SE_JWT + SE_CHANNEL_ID (Fly secrets) – jinak úplný no-op,
+Aktivní jen se serverovými ENV SE_JWT + SE_CHANNEL_ID – jinak úplný no-op,
 vzor alerts.py. Poll 1× za POLL_SEC, overlay si nové řádky bere z /api/recent-events
 (klíče don_latest_id + donates, vlastní kurzor mimo points_log id-space).
 

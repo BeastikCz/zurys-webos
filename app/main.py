@@ -35,15 +35,15 @@ from .ratelimit import rate_limit
 from .seed import seed_if_empty, sync_changelog
 from .routers import auth, shop, cart, misc, admin, drops, botconsole, games, predictions, kickhook, blackjack, dm, mines, push, auctions, crews, tickets
 
-# Vypínač HER (piškvorky/duely/blackjack). Mimo provoz, když WEBOS_GAMES_OFF=1 (nastaveno ve fly.toml).
+# Vypínač HER (piškvorky/duely/blackjack). Mimo provoz, když WEBOS_GAMES_OFF=1 v serverovém ENV.
 # Lokálně/testy (bez env) = hry zapnuté, ať projdou herní testy. Zpět do provozu: WEBOS_GAMES_OFF=0 + deploy.
 GAMES_OFF = os.environ.get("WEBOS_GAMES_OFF", "0") == "1"
 
 # Origin lock: pouští jen requesty přes Cloudflare (s tajným headerem). Vypnuto = fail-open,
-# dokud není WEBOS_ORIGIN_SECRET nastaven (Fly secret). Pak přímý přístup na *.fly.dev bez
+# dokud není WEBOS_ORIGIN_SECRET nastaven v serverovém ENV. Pak přímý přístup na origin bez
 # klíče dostane 403. Revert = secret smazat. CF klíč přidává Transform Rule (Set X-Origin-Verify).
 WEBOS_ORIGIN_SECRET = os.environ.get("WEBOS_ORIGIN_SECRET", "")
-# VŽDY průchozí (Fly health-check chodí PŘÍMO na stroj, bez CF; + diagnostika):
+# VŽDY průchozí (lokální health-check chodí přímo na stroj, bez CF; + diagnostika):
 _ORIGIN_LOCK_FREE = {"/api/health", "/api/monitor/healthz", "/api/_origin_check"}
 
 # Global read-only polling must not let one browser farm fill the worker queue.
@@ -340,11 +340,11 @@ try:
 finally:
     _cb.close()
 
-# Produkce je na VPS explicitně WEBOS_PROD=1; Fly zůstává kompatibilní fallback.
+# Produkce je na VPS explicitně WEBOS_PROD=1; FLY_APP_NAME zůstává jen legacy fallback.
 _PROD = is_production()
 
 # Sentry: neošetřené výjimky se stacktrace + kontextem requestu (doplněk k Discord 500 alertu,
-# co je jen 1 řádek a má cooldown). No-op bez SENTRY_DSN (Fly secret) → lokál/testy nedotčené.
+# co je jen 1 řádek a má cooldown). No-op bez SENTRY_DSN v ENV → lokál/testy nedotčené.
 # Revert = smaž secret (init se přeskočí) nebo řádek v requirements. Chyba initu NESMÍ shodit boot.
 _sentry = None
 if os.environ.get("SENTRY_DSN"):
@@ -491,9 +491,9 @@ def _blocked_ip_response(request: Request, ip: str, rec):
 async def ip_ban_guard(request: Request, call_next):
     """Zabanovaná IP nedostane appku vůbec – vrátí se blokační stránka (403).
 
-    Navíc lehká detekce náporu: počítá JEN reálné klientské IP (Fly-Client-IP) a při
+    Navíc lehká detekce náporu: počítá JEN reálné klientské IP z důvěryhodné proxy a při
     výrazném překročení prahu dá IP krátký dočasný auto-ban (vše v paměti, žádné DB
-    na hot-path). Interní Fly proxy ani loopback se nikdy nepočítají ani nebanují.
+    na hot-path). Interní proxy ani loopback se nikdy nepočítají ani nebanují.
     """
     # Kick webhook je ověřený podpisem – vyřaď z IP banů i DDoS počítání
     # (jinak by chat-heavy stream mohl zabanovat Kickovu IP a eventy by ustaly).
@@ -570,7 +570,7 @@ async def maintenance_guard(request: Request, call_next):
 
 @app.middleware("http")
 async def origin_lock(request: Request, call_next):
-    """Pustí jen provoz přes Cloudflare (tajný header). Přímý přístup na *.fly.dev → 403.
+    """Pustí jen provoz přes Cloudflare (tajný header). Přímý přístup na origin → 403.
     Aktivní jen když je WEBOS_ORIGIN_SECRET nastaven; /api/health ap. jsou vždy průchozí."""
     if WEBOS_ORIGIN_SECRET and request.url.path not in _ORIGIN_LOCK_FREE:
         if request.headers.get("x-origin-verify") != WEBOS_ORIGIN_SECRET:

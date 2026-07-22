@@ -1462,7 +1462,7 @@ def my_claims(user: sqlite3.Row = Depends(require_user),
 
 
 import os as _os
-GARDEN_OFF = _os.environ.get("WEBOS_GARDEN_OFF", "0") == "1"   # zahrádka mimo provoz (redesign); env ve fly.toml. Lokálně/testy = zapnutá.
+GARDEN_OFF = _os.environ.get("WEBOS_GARDEN_OFF", "0") == "1"   # zahrádka mimo provoz (redesign); serverové ENV. Lokálně/testy = zapnutá.
 FARMING_ACTIONS_PER_MIN = 30
 
 

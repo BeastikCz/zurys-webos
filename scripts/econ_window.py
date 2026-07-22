@@ -1,6 +1,6 @@
 """Ekonomika za okno 21.6 00:00 -> 29.6 12:00 UTC: vydělano (change>0) vs prodělano/utraceno (change<0).
 Den po dni + rozpad kategorií (faucet/sink/gambling). Read-only.
-flyctl ssh console -a zurys-shop -C "python3 -" < scripts/econ_window.py
+Get-Content -Raw scripts/econ_window.py | ssh -i "$env:USERPROFILE\.ssh\hetzner_zurys" root@169.58.8.1 "cd /opt/webos/app && WEBOS_DATA_DIR=/data /opt/webos/venv/bin/python -"
 """
 import sqlite3, json
 

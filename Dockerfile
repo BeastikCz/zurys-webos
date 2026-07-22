@@ -1,5 +1,4 @@
-# WebOS – ZURYS Drop Arena. Image pro nasazení na Fly.io.
-# Fly si tohle sestaví ve svém cloudu (Docker nepotřebuješ mít u sebe).
+# WebOS – ZURYS Drop Arena. Volitelný kontejnerový image; produkce běží na Contabo.
 FROM python:3.12-slim
 
 ENV PYTHONUNBUFFERED=1 \
@@ -16,7 +15,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY app/ ./app/
 COPY web/ ./web/
 
-# Trvalý disk pro SQLite + zálohy se připojí na /data (viz fly.toml)
+# Trvalý disk pro SQLite + zálohy se připojí na /data.
 EXPOSE 8080
 
 # JEDEN worker – kvůli SQLite, in-memory rate-limiteru i budoucímu chat readeru.

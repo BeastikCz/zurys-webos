@@ -5,7 +5,7 @@ Co umí:
   - volitelný **OPATRNÝ auto-dočasný ban** IP, která výrazně přestřelí běžný provoz.
 
 Bezpečnostní pojistky (proti vyhození legitimních diváků):
-  - počítají se JEN reálné klientské IP (z hlavičky `Fly-Client-IP`); interní Fly proxy
+  - počítají se JEN reálné klientské IP (Cloudflare nebo legacy proxy hlavička); interní proxy
     ani loopback se sem nikdy nedostanou → proxy se NIKDY nezabanuje,
   - práh je vysoko NAD běžným provozem (legit divák ~pár desítek req/min),
   - auto-ban je jen DOČASNÝ a KRÁTKÝ (sám expiruje) a dá se vypnout,
@@ -49,7 +49,7 @@ def observe(ip: str) -> int:
 
     Vždy jen POČÍTÁ (i když je auto-ban vypnutý) – rozhodnutí o banu dělá volající
     podle `autoban_enabled()` + `AUTOBAN_PER_MIN`. Volá se POUZE s reálnou klientskou
-    IP (Fly-Client-IP) – ne s proxy/loopback.
+    IP z důvěryhodné proxy hlavičky – ne s proxy/loopback.
     """
     if not ip:
         return 0

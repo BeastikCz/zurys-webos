@@ -8,14 +8,14 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 
 def is_production() -> bool:
-    """Production is explicit on VPS; Fly remains compatible fallback."""
+    """Production is explicit on VPS; FLY_APP_NAME is a legacy compatibility fallback."""
     return os.environ.get("WEBOS_PROD") == "1" or bool(os.environ.get("FLY_APP_NAME"))
 
 # Datová složka + SQLite databáze.
-# Na hostingu (Fly.io) se nastaví WEBOS_DATA_DIR=/data (trvalý disk) – lokálně zůstává ./data.
+# Na Contabo se nastaví WEBOS_DATA_DIR=/data (trvalý disk) – lokálně zůstává ./data.
 DATA_DIR = Path(os.environ.get("WEBOS_DATA_DIR") or (BASE_DIR / "data"))
 DB_PATH = DATA_DIR / "app.db"
-UPLOAD_DIR = DATA_DIR / "uploads"   # nahrané obrázky (na Fly = trvalý disk), servíruje se na /uploads
+UPLOAD_DIR = DATA_DIR / "uploads"   # nahrané obrázky (na Contabo = trvalý disk), servíruje se na /uploads
 
 # Statický frontend (SPA)
 WEB_DIR = BASE_DIR / "web"
@@ -191,7 +191,7 @@ if _kick_cfg.exists():
         print("[config] kick.json se nepodařilo načíst:", _e)
 
 
-# Produkční override přes ENV proměnné (Fly.io „secrets"). ENV má přednost před kick.json.
+# Produkční override přes serverové ENV proměnné. ENV má přednost před kick.json.
 # Tajný client_secret tak na serveru NEleží v souboru, ale v zašifrovaných secrets.
 KICK_CLIENT_ID = os.environ.get("KICK_CLIENT_ID", KICK_CLIENT_ID)
 KICK_CLIENT_SECRET = os.environ.get("KICK_CLIENT_SECRET", KICK_CLIENT_SECRET)

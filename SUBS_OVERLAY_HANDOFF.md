@@ -2,7 +2,7 @@
 
 > ✅ **VYŘEŠENO (1.7.2026):** sub/resub/gift alerty live od 21.6. (Kick → points_log →
 > `/api/recent-events` poll). Donaty dořešeny 1.7. (StreamElements poller `app/se_tips.py`,
-> potřebuje Fly secrets `SE_JWT` + `SE_CHANNEL_ID`). Replay protection = id kurzory + baseline.
+> potřebuje serverové ENV `SE_JWT` + `SE_CHANNEL_ID`). Replay protection = id kurzory + baseline.
 > Dokument zůstává jako reference (OBS URL, event API, zvuky, tiery).
 
 ## Goal

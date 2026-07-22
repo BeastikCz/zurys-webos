@@ -1,6 +1,6 @@
 """Deploy brana pro zurys.live: pre-flight -> bump cache -> sync na Contabo -> health -> CF purge.
 
-Od 12.7.2026 bezi produkce na Contabo VPS (169.58.8.1), NE na Fly. Deploy = tar
+Od 12.7.2026 bezi produkce pouze na Contabo VPS (169.58.8.1). Fly.io je zrusene. Deploy = tar
 pracovniho stromu (app/ web/ requirements.txt) pres SSH + restart systemd service.
 Zabaluje rucni kroky co se pri deployi zapominaji (maintenance gate, bump cache verze)
 a nechava ostry deploy za explicitni pojistkou.
@@ -68,7 +68,7 @@ def check_production():
     try:
         status, hdrs, data = _get(HEALTHZ)
     except Exception as e:
-        print("NOK  health nedostupny (%s) - zkontroluj sit / Fly" % type(e).__name__)
+        print("NOK  health nedostupny (%s) - zkontroluj sit / Contabo" % type(e).__name__)
         return False
     checks = (data or {}).get("checks", {})
     if hdrs.get("X-Maintenance") == "1" or checks.get("maintenance") == "on":

@@ -1,6 +1,6 @@
 """Web Push – notifikace do mobilu / oznamovacího centra (i když je appka zavřená).
 
-VAPID klíče: ENV (Fly secrets) WEBPUSH_VAPID_PRIVATE/_PUBLIC/_SUBJECT mají přednost;
+VAPID klíče: serverové ENV WEBPUSH_VAPID_PRIVATE/_PUBLIC/_SUBJECT mají přednost;
 fallback lokální webpush.json (gitignored, stejný princip jako kick.json). Bez klíčů =
 vypnuto (no-op), aby šlo běžet i lokálně bez configu.
 
@@ -35,7 +35,7 @@ def _load() -> None:
     _PUBLIC = os.environ.get("WEBPUSH_VAPID_PUBLIC", _PUBLIC)          # 2) ENV override (prod)
     _PRIVATE_PEM = os.environ.get("WEBPUSH_VAPID_PRIVATE", _PRIVATE_PEM)
     _SUBJECT = os.environ.get("WEBPUSH_VAPID_SUBJECT", _SUBJECT)
-    # Fly secret bývá jednořádkový → privátní klíč smí přijít jako base64(PEM); rozkóduj.
+    # ENV secret bývá jednořádkový → privátní klíč smí přijít jako base64(PEM); rozkóduj.
     if _PRIVATE_PEM and not _PRIVATE_PEM.lstrip().startswith("-----BEGIN"):
         try:
             import base64

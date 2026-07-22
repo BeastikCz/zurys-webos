@@ -1,6 +1,6 @@
 """Forenzika: kde se vzalo skytlixovo +X sedláků v týdenním žebříčku.
 Zrcadlí přesně /leaderboard/weekly: SUM(change) WHERE change>0 AND created_at >= pondělí 00:00 UTC.
-Read-only. Spuštění: flyctl ssh console -a zurys-shop -C "python3 -" < scripts/skytlix_week.py
+Read-only. Spuštění: Get-Content -Raw scripts/skytlix_week.py | ssh -i "$env:USERPROFILE\.ssh\hetzner_zurys" root@169.58.8.1 "cd /opt/webos/app && WEBOS_DATA_DIR=/data /opt/webos/venv/bin/python -"
 """
 import sqlite3
 from datetime import datetime, timezone, timedelta

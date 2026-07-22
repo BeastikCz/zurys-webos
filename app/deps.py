@@ -28,7 +28,7 @@ def db_dep():
 
 
 # CF-Connecting-IP je důvěryhodný JEN pokud origin_lock ověřil, že request přišel přes CF.
-# Bez WEBOS_ORIGIN_SECRET (fail-open) mohl request přijít přímo na Fly → header je spoofovatelný.
+# Bez WEBOS_ORIGIN_SECRET (fail-open) může request přijít přímo na origin → header je spoofovatelný.
 _ORIGIN_LOCK_ACTIVE = bool(os.environ.get("WEBOS_ORIGIN_SECRET", ""))
 
 
@@ -36,7 +36,7 @@ def client_ip(request: Request) -> str:
     """Reálná IP klienta.
 
     BEZPEČNOST: CF-Connecting-IP bereme jen když je aktivní origin_lock (WEBOS_ORIGIN_SECRET),
-    čímž je zaručeno, že request prošel přes Cloudflare. Bez origin_lock fallback na Fly-Client-IP.
+    čímž je zaručeno, že request prošel přes Cloudflare. Legacy fallback používá Fly-Client-IP.
     """
     if _ORIGIN_LOCK_ACTIVE:
         cf = request.headers.get("cf-connecting-ip")
@@ -47,7 +47,7 @@ def client_ip(request: Request) -> str:
         return fly.strip()
     if request.client and request.client.host:
         return request.client.host
-    # poslední záchrana mimo Fly: poslední (proxy-přidaný) záznam XFF
+    # poslední záchrana mimo známé proxy: poslední (proxy-přidaný) záznam XFF
     xff = request.headers.get("x-forwarded-for")
     if xff:
         return xff.split(",")[-1].strip()

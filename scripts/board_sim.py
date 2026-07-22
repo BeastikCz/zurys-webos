@@ -1,6 +1,6 @@
 """Simulace: jak se zmeni weekly + season board po vylouceni 'zero' (gambling/admin/transfer).
 Replikuje app.deps.classify_xp PRESNE (kopie _XP_ZERO_KW). Read-only.
-flyctl ssh console -a zurys-shop -C "python3 -" < scripts/board_sim.py
+Get-Content -Raw scripts/board_sim.py | ssh -i "$env:USERPROFILE\.ssh\hetzner_zurys" root@169.58.8.1 "cd /opt/webos/app && WEBOS_DATA_DIR=/data /opt/webos/venv/bin/python -"
 """
 import sqlite3
 from datetime import datetime, timezone, timedelta

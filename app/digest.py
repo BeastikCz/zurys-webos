@@ -164,14 +164,14 @@ def _maybe_send(conn) -> None:
     _, infl_ping = _econ_week(conn)
     alerts.send("📊 Denní ZURYS digest", detail=compose(conn),
                 key="daily-digest", cooldown=0, ping=infl_ping)
-    send_offsite_backup()        # off-site DB záloha na Discord (mimo Fly disk)
+    send_offsite_backup()        # off-site DB záloha na Discord (mimo Contabo disk)
     set_setting(conn, "digest_last_date", today)
     conn.commit()
 
 
 def send_offsite_backup() -> bool:
     """Pošle dnešní snapshot DB jako přílohu na Discord (off-site pojistka proti ztrátě
-    dat – lokální zálohy leží na témže Fly disku jako živá DB). Vrátí, zda se odeslalo."""
+    dat – lokální zálohy leží na témže VPS disku jako živá DB). Vrátí, zda se odeslalo."""
     if not alerts.enabled():
         return False
     try:

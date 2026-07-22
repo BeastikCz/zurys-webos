@@ -9,7 +9,7 @@ Použití:
     → v prohlížeči na http://127.0.0.1:8000 vlož do konzole vypsaný document.cookie řádek
     → reload → jsi přihlášený admin, Statek je v navigaci (#/statek)
 
-NIKDY nepouštět na produkci (tam je DB /data/app.db na Fly, ne tady).
+NIKDY nepouštět na produkci (tam je DB /data/app.db na Contabo, ne tady).
 """
 import secrets
 import sqlite3

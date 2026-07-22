@@ -1,5 +1,5 @@
 """Údržba: health + monitoring endpointy musí projít i během údržby (kvůli
-externímu uptime monitoru / Fly), kdežto běžné API se zavře (503).
+externímu uptime monitoru / origin health-checku), kdežto běžné API se zavře (503).
 
     .venv/Scripts/python.exe -m pytest tests/test_maintenance_allowlist.py -v
 """
