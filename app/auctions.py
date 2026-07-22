@@ -3,7 +3,8 @@
 Escrow: příhoz ZABLOKUJE (odečte) sedláky. Přehození → předchozímu vůdci se vrátí 100 %.
 Sink = jednorázový vstupní poplatek při PRVNÍM příhozu do aukce (ENTRY_FEE_PCT z něj, strop
 ENTRY_FEE_CAP) — další příhozy do téže aukce jsou bez poplatku, bid war nekrvácí.
-Vítěz (current_bidder při ends_at) má sedláky odečtené napořád = sink (skin doručí admin ručně).
+Vítěz (current_bidder při ends_at) má sedláky odečtené. U skinu webu jsou sink; u komunitního skinu
+zůstanou v escrow do potvrzení převzetí, potom dostane prodávající 95 % a 5 % se spálí.
 Anti-snipe: příhoz v posledních ANTISNIPE_SEC s prodlouží konec o ANTISNIPE_SEC (ať nikdo nesnipuje).
 Finalizace LAZY (na čtení/příhozu) – žádný daemon; frontend countdown polluje, takže uzavře včas.
 Atomicita: podmíněný UPDATE (current_bid < můj) → vyhraje jen 1 příhoz i při souběhu (1 SQLite writer).
@@ -25,6 +26,71 @@ MAX_MINUTES = 7 * 24 * 60   # max délka aukce (7 dní)
 ENTRY_FEE_PCT = 0.10        # jednorázový vstupní poplatek = % z PRVNÍHO příhozu do aukce (sink)…
 ENTRY_FEE_CAP = 5000        # …se stropem: velké aukce platí flat 5k, malé úměrně míň. Přehození vrací 100 %.
                             #   Zrušení aukce vrací escrow i poplatky (není to chyba bidera). Souběh-reject vrací vše.
+MARKET_FEE_PCT = 5          # komunitní komisní nabídka: prodávající dostane 95 %, zbytek je sink
+
+
+def wear_from_float(value: float) -> str:
+    """Oficiální CS intervaly; dolní mez patří do nové kategorie."""
+    if value < 0.07:
+        return "FN"
+    if value < 0.15:
+        return "MW"
+    if value < 0.38:
+        return "FT"
+    if value < 0.45:
+        return "WW"
+    return "BS"
+
+
+def _start_market_delivery(conn, auction) -> bool:
+    """Po prodeji nechá cenu v escrow a otevře předání mezi prodávajícím a vítězem."""
+    if not auction["seller_user_id"] or not auction["winner_id"]:
+        return False
+    if conn.execute(
+        "UPDATE auctions SET delivery_status='awaiting_delivery',sold_at=? "
+        "WHERE id=? AND delivery_status=''",
+        (now_iso(), auction["id"]),
+    ).rowcount != 1:
+        return False
+    from .deps import notify
+    winner = _username(conn, auction["winner_id"]) or "neznámý uživatel"
+    seller = _username(conn, auction["seller_user_id"]) or "prodávající"
+    notify(conn, auction["seller_user_id"], "📦", "Skin se prodal – čeká na odeslání",
+           f"„{auction['title']}“ koupil {winner}. Cena zůstává v escrow, dokud kupující nepotvrdí převzetí.", "#/shop")
+    notify(conn, auction["winner_id"], "🛡️", "Nákup je chráněný escrow",
+           f"„{auction['title']}“ ti pošle {seller}. Potvrď převzetí až po kontrole skinu.", "#/shop")
+    return True
+
+
+def _release_seller(conn, auction, by_admin: bool = False) -> tuple[int, int] | None:
+    """Atomicky uvolní escrow prodávajícímu právě jednou."""
+    seller_id = auction["seller_user_id"]
+    price = int(auction["current_bid"] or 0)
+    if not seller_id or not auction["winner_id"] or price <= 0 or auction["seller_paid_at"]:
+        return None
+    fee = max(1, (price * MARKET_FEE_PCT + 99) // 100)
+    payout = max(0, price - fee)
+    completed_at = now_iso()
+    if conn.execute(
+        "UPDATE auctions SET seller_payout=?,market_fee=?,seller_paid_at=?,"
+        "delivery_status='completed',delivery_completed_at=? "
+        "WHERE id=? AND seller_paid_at IS NULL AND delivery_status<>'refunded'",
+        (payout, fee, completed_at, completed_at, auction["id"]),
+    ).rowcount != 1:
+        return None
+    from .deps import add_points, notify
+    if payout:
+        add_points(conn, seller_id, payout,
+                   f"Komunitní trh #{auction['id']} – výnos po {MARKET_FEE_PCT}% poplatku", xp=False)
+    winner_name = _username(conn, auction["winner_id"]) or "kupující"
+    notify(conn, seller_id, "🌾", "Obchod dokončen",
+           (f"Admin uvolnil escrow za „{auction['title']}“." if by_admin else
+            f"{winner_name} potvrdil převzetí „{auction['title']}“.")
+           + f" Dostáváš {payout}; poplatek trhu je {fee}.", "#/shop")
+    notify(conn, auction["winner_id"], "✅", "Obchod dokončen",
+           (f"Admin dokončil obchod „{auction['title']}“." if by_admin else
+            f"Převzetí „{auction['title']}“ bylo potvrzeno. Díky za bezpečný obchod."), "#/shop")
+    return payout, fee
 
 
 def _finalize_expired(conn) -> None:
@@ -43,8 +109,11 @@ def _finalize_expired(conn) -> None:
             continue
         fa = conn.execute("SELECT * FROM auctions WHERE id = ?", (a["id"],)).fetchone()
         if fa["winner_id"]:
-            notify(conn, fa["winner_id"], "🏆", "Vyhrál jsi aukci! 🔨",
-                   f"Vyhrál jsi „{fa['title']}\" za {fa['current_bid']} sedláků! Admin ti pošle skin. 🎉", "#/shop")
+            if fa["seller_user_id"]:
+                _start_market_delivery(conn, fa)
+            else:
+                notify(conn, fa["winner_id"], "🏆", "Vyhrál jsi aukci! 🔨",
+                       f"Vyhrál jsi „{fa['title']}\" za {fa['current_bid']} sedláků! Admin ti pošle skin. 🎉", "#/shop")
             if fa["chat_announce"]:
                 _announce_async(f"🏆 AUKCE DOKLEPNUTÁ! „{fa['title']}\" bere {_username(conn, fa['winner_id'])} "
                                 f"za {fa['current_bid']} sedláků. 🔨🌾")
@@ -97,6 +166,10 @@ def list_public(conn) -> dict:
     _finalize_expired(conn)
     conn.commit()
     now = datetime.now(timezone.utc)
+    completed_sales = {r["seller_user_id"]: r["c"] for r in conn.execute(
+        "SELECT seller_user_id,COUNT(*) c FROM auctions WHERE delivery_status='completed' "
+        "AND seller_user_id IS NOT NULL GROUP BY seller_user_id"
+    )}
     active = []
     for a in conn.execute("SELECT * FROM auctions WHERE status = 'active' ORDER BY ends_at ASC"):
         secs = max(0, int((datetime.fromisoformat(a["ends_at"]) - now).total_seconds()))
@@ -112,12 +185,17 @@ def list_public(conn) -> dict:
                        "current_bid": a["current_bid"], "leader": _username(conn, a["current_bidder_id"]),
                        "min_next": _min_next(a), "min_increment": a["min_increment"], "start_bid": a["start_bid"],
                        "bids_count": a["bids_count"], "seconds_left": secs, "ends_at": a["ends_at"],
-                       "buy_now": a["buy_now"] or 0, "sub_only": bool(a["sub_only"])})
+                       "buy_now": a["buy_now"] or 0, "sub_only": bool(a["sub_only"]),
+                       "seller": _username(conn, a["seller_user_id"]), "sale_type": a["sale_type"],
+                       "description": a["market_description"] or "", "wear": a["wear"] or "",
+                       "float_value": a["float_value"],
+                       "seller_completed_sales": completed_sales.get(a["seller_user_id"], 0)})
     ended = []
     for a in conn.execute("SELECT * FROM auctions WHERE status = 'ended' AND winner_id IS NOT NULL "
                           "ORDER BY id DESC LIMIT 6"):
         ended.append({"id": a["id"], "title": a["title"], "image_url": a["image_url"] or "",
-                      "winner": _username(conn, a["winner_id"]), "final_bid": a["current_bid"]})
+                      "winner": _username(conn, a["winner_id"]), "final_bid": a["current_bid"],
+                      "seller": _username(conn, a["seller_user_id"]), "sale_type": a["sale_type"]})
     return {"active": active, "ended": ended, "top_bidders": top_bidders(conn)}
 
 
@@ -125,7 +203,7 @@ def top_bidders(conn, limit: int = 5) -> list:
     """Žebříček dražitelů: kdo vyhrál nejvíc aukcí (a utratil nejvíc) – status + rivalita."""
     rows = conn.execute(
         "SELECT a.winner_id, COUNT(*) wins, COALESCE(SUM(a.current_bid),0) spent FROM auctions a "
-        "WHERE a.status = 'ended' AND a.winner_id IS NOT NULL "
+        "WHERE a.status = 'ended' AND a.winner_id IS NOT NULL AND a.sale_type = 'auction' "
         "GROUP BY a.winner_id ORDER BY wins DESC, spent DESC LIMIT ?", (limit,)).fetchall()
     return [{"username": _username(conn, r["winner_id"]), "wins": r["wins"], "spent": r["spent"]} for r in rows]
 
@@ -140,6 +218,10 @@ def bid(conn, user, auction_id: int, amount: int) -> dict:
     if a["status"] != "active" or a["ends_at"] <= now_iso():
         conn.commit()
         return {"ok": False, "error": "Aukce už skončila."}
+    if a["sale_type"] == "fixed":
+        return {"ok": False, "error": "Tohle je nabídka za pevnou cenu – použij Koupit."}
+    if a["seller_user_id"] == user["id"]:
+        return {"ok": False, "error": "Vlastní skin koupit ani dražit nemůžeš. 😄"}
     if a["sub_only"] and not _is_sub(user):
         return {"ok": False, "error": "Tahle aukce je jen pro suby. 💜"}
     if a["current_bidder_id"] == user["id"]:
@@ -198,6 +280,8 @@ def buy_now(conn, user, auction_id: int) -> dict:
     if a["status"] != "active" or a["ends_at"] <= now_iso():
         conn.commit()
         return {"ok": False, "error": "Aukce už skončila."}
+    if a["seller_user_id"] == user["id"]:
+        return {"ok": False, "error": "Vlastní skin koupit ani dražit nemůžeš. 😄"}
     if not a["buy_now"] or a["buy_now"] <= 0:
         return {"ok": False, "error": "Tahle aukce nemá kup-teď cenu."}
     if a["sub_only"] and not _is_sub(user):
@@ -227,16 +311,135 @@ def buy_now(conn, user, auction_id: int) -> dict:
                f"Někdo koupil „{a['title']}\" za kup-teď cenu. Sedláci ({real_bid}) vráceny. 💰", "#/shop")
     conn.execute("INSERT INTO auction_bids (auction_id, user_id, amount, created_at) VALUES (?,?,?,?)",
                  (auction_id, user["id"], price, now_iso()))
+    sold = conn.execute("SELECT * FROM auctions WHERE id = ?", (auction_id,)).fetchone()
+    market_escrow = _start_market_delivery(conn, sold)
     conn.commit()
     if a["chat_announce"]:
-        _announce_async(f"💎 {user['username']} VYKOUPIL „{a['title']}\" za {price} (kup teď)! Aukce končí. 🏆🔨")
+        if a["sale_type"] == "fixed":
+            _announce_async(f"💎 {user['username']} KOUPIL na Trhu „{a['title']}\" za {price} sedláků! 🌾")
+        else:
+            _announce_async(f"💎 {user['username']} VYKOUPIL „{a['title']}\" za {price} (kup teď)! Aukce končí. 🏆🔨")
     bal = conn.execute("SELECT points FROM users WHERE id = ?", (user["id"],)).fetchone()["points"]
-    return {"ok": True, "balance": bal, "price": price, "title": a["title"]}
+    return {"ok": True, "balance": bal, "price": price, "title": a["title"],
+            "market_escrow": market_escrow}
+
+
+def mark_delivered(conn, user, auction_id: int) -> dict:
+    """Prodávající označí skin jako odeslaný; peníze zůstávají v escrow."""
+    from .deps import notify
+    a = conn.execute("SELECT * FROM auctions WHERE id=?", (auction_id,)).fetchone()
+    if not a or not a["seller_user_id"] or a["status"] != "ended" or not a["winner_id"]:
+        return {"ok": False, "error": "Komunitní obchod neexistuje."}
+    if a["seller_user_id"] != user["id"]:
+        return {"ok": False, "error": "Odeslání může potvrdit jen prodávající."}
+    if a["delivery_status"] != "awaiting_delivery":
+        return {"ok": False, "error": "Obchod už není ve stavu čekání na odeslání."}
+    sent_at = now_iso()
+    if conn.execute(
+        "UPDATE auctions SET delivery_status='delivered',delivery_sent_at=? "
+        "WHERE id=? AND delivery_status='awaiting_delivery'",
+        (sent_at, auction_id),
+    ).rowcount != 1:
+        conn.rollback()
+        return {"ok": False, "error": "Stav obchodu se mezitím změnil."}
+    notify(conn, a["winner_id"], "📦", "Prodávající označil skin jako odeslaný",
+           f"Zkontroluj „{a['title']}“ ve Steamu. Převzetí potvrď až potom.", "#/shop")
+    conn.commit()
+    return {"ok": True, "delivery_status": "delivered", "delivery_sent_at": sent_at}
+
+
+def confirm_delivery(conn, user, auction_id: int) -> dict:
+    """Kupující potvrdí převzetí a tím uvolní 95 % ceny prodávajícímu."""
+    a = conn.execute("SELECT * FROM auctions WHERE id=?", (auction_id,)).fetchone()
+    if not a or not a["seller_user_id"] or a["status"] != "ended" or not a["winner_id"]:
+        return {"ok": False, "error": "Komunitní obchod neexistuje."}
+    if a["winner_id"] != user["id"]:
+        return {"ok": False, "error": "Převzetí může potvrdit jen kupující."}
+    if a["delivery_status"] != "delivered":
+        return {"ok": False, "error": "Prodávající zatím neoznačil skin jako odeslaný."}
+    settled = _release_seller(conn, a)
+    if settled is None:
+        conn.rollback()
+        return {"ok": False, "error": "Escrow už bylo vyřízeno."}
+    conn.commit()
+    return {"ok": True, "delivery_status": "completed",
+            "seller_payout": settled[0], "market_fee": settled[1]}
+
+
+def dispute_delivery(conn, user, auction_id: int, reason: str) -> dict:
+    """Kupující nebo prodávající zastaví předání pro ruční rozhodnutí admina."""
+    from .deps import notify
+    a = conn.execute("SELECT * FROM auctions WHERE id=?", (auction_id,)).fetchone()
+    if not a or not a["seller_user_id"] or not a["winner_id"] or a["status"] != "ended":
+        return {"ok": False, "error": "Komunitní obchod neexistuje."}
+    if user["id"] not in (a["seller_user_id"], a["winner_id"]):
+        return {"ok": False, "error": "Spor může otevřít jen účastník obchodu."}
+    if a["delivery_status"] not in ("awaiting_delivery", "delivered"):
+        return {"ok": False, "error": "Tento obchod už nejde nahlásit."}
+    reason = (reason or "").strip()[:500]
+    if not reason:
+        return {"ok": False, "error": "Napiš stručný důvod sporu."}
+    if conn.execute(
+        "UPDATE auctions SET delivery_status='disputed',dispute_reason=?,dispute_by_id=? "
+        "WHERE id=? AND delivery_status IN ('awaiting_delivery','delivered')",
+        (reason, user["id"], auction_id),
+    ).rowcount != 1:
+        conn.rollback()
+        return {"ok": False, "error": "Stav obchodu se mezitím změnil."}
+    other_id = a["winner_id"] if user["id"] == a["seller_user_id"] else a["seller_user_id"]
+    notify(conn, other_id, "⚠️", "U obchodu byl otevřen spor",
+           f"Obchod „{a['title']}“ teď zkontroluje admin. Escrow zůstává zamčené.", "#/shop")
+    conn.commit()
+    return {"ok": True, "delivery_status": "disputed"}
+
+
+def resolve_delivery(conn, auction_id: int, action: str) -> dict:
+    """Admin uvolní escrow prodávajícímu, nebo refunduje kupujícímu cenu i jeho vstupní fee."""
+    from .deps import add_points, notify
+    a = conn.execute("SELECT * FROM auctions WHERE id=?", (auction_id,)).fetchone()
+    if not a or not a["seller_user_id"] or a["status"] != "ended":
+        return {"ok": False, "error": "Komunitní obchod neexistuje."}
+    if not a["winner_id"]:
+        return {"ok": False, "error": "Aukce skončila bez kupujícího – není co refundovat ani vyplácet."}
+    if a["delivery_status"] in ("completed", "refunded") or a["seller_paid_at"]:
+        return {"ok": False, "error": "Escrow už bylo vyřízeno."}
+    if action == "release":
+        settled = _release_seller(conn, a, by_admin=True)
+        if settled is None:
+            conn.rollback()
+            return {"ok": False, "error": "Escrow se nepodařilo uvolnit."}
+        conn.commit()
+        return {"ok": True, "delivery_status": "completed",
+                "seller_payout": settled[0], "market_fee": settled[1]}
+    if action != "refund":
+        return {"ok": False, "error": "Neplatné rozhodnutí."}
+    completed_at = now_iso()
+    if conn.execute(
+        "UPDATE auctions SET delivery_status='refunded',delivery_completed_at=? "
+        "WHERE id=? AND seller_paid_at IS NULL AND delivery_status NOT IN ('completed','refunded')",
+        (completed_at, auction_id),
+    ).rowcount != 1:
+        conn.rollback()
+        return {"ok": False, "error": "Escrow už bylo vyřízeno."}
+    fee = conn.execute(
+        "SELECT COALESCE(SUM(fee),0) f FROM auction_bids WHERE auction_id=? AND user_id=?",
+        (auction_id, a["winner_id"]),
+    ).fetchone()["f"]
+    refunded = int(a["current_bid"] or 0) + int(fee or 0)
+    add_points(conn, a["winner_id"], refunded, f"Komunitní trh #{auction_id} – refund escrow", xp=False)
+    notify(conn, a["winner_id"], "↩️", "Escrow vráceno",
+           f"Za „{a['title']}“ ti admin vrátil {refunded} sedláků.", "#/shop")
+    notify(conn, a["seller_user_id"], "↩️", "Obchod refundován",
+           f"Admin refundoval obchod „{a['title']}“. Výplata nebyla provedena.", "#/shop")
+    conn.commit()
+    return {"ok": True, "delivery_status": "refunded", "refunded": refunded}
 
 
 # ---- Admin ----
 def create(conn, title: str, image_url: str, start_bid: int, min_increment: int, minutes: int,
-           buy_now: int = 0, sub_only: int = 0, chat_announce: int = 1) -> dict:
+           buy_now: int = 0, sub_only: int = 0, chat_announce: int = 1,
+           seller_username: str = "", sale_type: str = "auction", commit: bool = True,
+           market_description: str = "", wear: str = "", float_value: float | None = None) -> dict:
     title = (title or "").strip()
     if not title:
         return {"ok": False, "error": "Zadej název předmětu."}
@@ -244,14 +447,35 @@ def create(conn, title: str, image_url: str, start_bid: int, min_increment: int,
     start_bid = max(1, int(start_bid))
     min_increment = max(1, int(min_increment))
     buy_now = max(0, int(buy_now or 0))
+    sale_type = sale_type if sale_type in ("fixed", "auction") else "auction"
+    if float_value is not None:
+        float_value = max(0.0, min(1.0, float(float_value)))
+        wear = wear_from_float(float_value)
+    wear = wear if wear in ("FN", "MW", "FT", "WW", "BS") else ""
+    if sale_type == "fixed":
+        buy_now = start_bid
+    seller_id = None
+    seller_username = (seller_username or "").strip().lstrip("@")
+    if seller_username:
+        seller = conn.execute(
+            "SELECT id, username, banned FROM users WHERE LOWER(username)=LOWER(?) OR LOWER(kick_username)=LOWER(?) "
+            "ORDER BY (kick_username IS NOT NULL) DESC LIMIT 1", (seller_username, seller_username),
+        ).fetchone()
+        if not seller or seller["banned"]:
+            return {"ok": False, "error": "Prodávající nebyl nalezen nebo má zablokovaný účet."}
+        seller_id = seller["id"]
     ends = (datetime.now(timezone.utc) + timedelta(minutes=minutes)).isoformat()
     cur = conn.execute(
         "INSERT INTO auctions (title, image_url, start_bid, min_increment, current_bid, status, ends_at, "
-        "buy_now, sub_only, chat_announce, created_at) VALUES (?, ?, ?, ?, 0, 'active', ?, ?, ?, ?, ?)",
+        "buy_now, sub_only, chat_announce, seller_user_id, sale_type, market_description, wear, float_value, created_at) "
+        "VALUES (?, ?, ?, ?, 0, 'active', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         (title[:120], _safe_image_url(image_url), start_bid, min_increment, ends,
-         buy_now, 1 if sub_only else 0, 1 if chat_announce else 0, now_iso()))
-    conn.commit()
-    return {"ok": True, "id": cur.lastrowid, "ends_at": ends}
+         buy_now, 1 if sub_only else 0, 1 if chat_announce else 0, seller_id, sale_type,
+         (market_description or "").strip()[:500], wear, float_value, now_iso()))
+    if commit:
+        conn.commit()
+    return {"ok": True, "id": cur.lastrowid, "ends_at": ends,
+            "seller": _username(conn, seller_id), "sale_type": sale_type}
 
 
 def update(conn, auction_id: int, f: dict) -> dict:
@@ -298,11 +522,13 @@ def update(conn, auction_id: int, f: dict) -> dict:
 
 def delete(conn, auction_id: int) -> dict:
     """Smaže UKONČENOU/ZRUŠENOU aukci z historie. Aktivní se musí nejdřív zrušit (kvůli escrow)."""
-    a = conn.execute("SELECT status FROM auctions WHERE id = ?", (auction_id,)).fetchone()
+    a = conn.execute("SELECT status,seller_user_id,delivery_status FROM auctions WHERE id = ?", (auction_id,)).fetchone()
     if not a:
         return {"ok": False, "error": "Aukce nenalezena."}
     if a["status"] == "active":
         return {"ok": False, "error": "Běžící aukci nejdřív zruš (vrátí escrow), pak smaž."}
+    if a["seller_user_id"] and a["delivery_status"] not in ("completed", "refunded", ""):
+        return {"ok": False, "error": "Obchod s nevyřízeným escrow nejde smazat."}
     conn.execute("DELETE FROM auction_bids WHERE auction_id = ?", (auction_id,))
     conn.execute("DELETE FROM auctions WHERE id = ?", (auction_id,))
     conn.commit()
@@ -349,6 +575,15 @@ def admin_list(conn) -> list:
                     "ends_at": a["ends_at"], "buy_now": a["buy_now"] or 0, "sub_only": bool(a["sub_only"]),
                     "start_bid": a["start_bid"], "min_increment": a["min_increment"],
                     "chat_announce": bool(a["chat_announce"]),
+                    "seller": _username(conn, a["seller_user_id"]),
+                    "sale_type": a["sale_type"],
+                    "description": a["market_description"] or "", "wear": a["wear"] or "",
+                    "float_value": a["float_value"], "sold_at": a["sold_at"],
+                    "delivery_status": a["delivery_status"] or "",
+                    "delivery_sent_at": a["delivery_sent_at"],
+                    "delivery_completed_at": a["delivery_completed_at"],
+                    "dispute_reason": a["dispute_reason"] or "",
+                    "seller_payout": a["seller_payout"], "market_fee": a["market_fee"],
                     "who": (wrow["username"] if wrow else None),
                     "who_kick": (wrow["kick_username"] if wrow else None)})
     return out

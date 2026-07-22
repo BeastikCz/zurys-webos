@@ -1,7 +1,7 @@
 """Pydantic schémata pro vstupní data (request body)."""
 import ipaddress
 import re
-from typing import List, Optional
+from typing import List, Literal, Optional
 from urllib.parse import urlparse
 
 from pydantic import BaseModel, Field, field_validator
@@ -264,6 +264,7 @@ class AuctionCreateIn(BaseModel):
     min_increment: int = Field(default=50, ge=1, le=1_000_000_000)
     minutes: int = Field(default=10, ge=1, le=10080)   # max 7 dní
     buy_now: int = Field(default=0, ge=0, le=1_000_000_000)   # 0 = bez kup-teď
+    seller_username: str = Field(default="", max_length=80)   # prázdné = skin webu; jinak komisní nabídka
     sub_only: bool = False
     chat_announce: bool = True
 
@@ -278,6 +279,19 @@ class AuctionUpdateIn(BaseModel):
     buy_now: int | None = Field(default=None, ge=0, le=1_000_000_000)
     sub_only: bool | None = None
     chat_announce: bool | None = None
+
+
+class MarketSubmissionIn(BaseModel):
+    """Divák: skin navržený k vystavení na komunitním Trhu."""
+    title: str = Field(..., min_length=2, max_length=120)
+    image_url: str = Field(default="", max_length=500)
+    description: str = Field(default="", max_length=500)
+    wear: Literal["", "FN", "MW", "FT", "WW", "BS"] = ""
+    float_value: float | None = Field(default=None, ge=0, le=1)
+    inspect_url: str = Field(default="", max_length=1000)
+    price: int = Field(..., ge=1, le=1_000_000_000)
+    sale_type: Literal["fixed", "auction"] = "fixed"
+    duration_minutes: int = Field(default=1440, ge=60, le=7 * 24 * 60)
 
 
 class LoginCalClaimIn(BaseModel):
@@ -319,6 +333,10 @@ class FarmSlotIn(BaseModel):
 class FarmFoxIn(BaseModel):
     """Vyřešení lišky: pay=True → výkupné, pay=False → nechat jí produkt."""
     pay: bool
+
+
+class AutomationCheckpointIn(BaseModel):
+    token: str = Field(..., min_length=1, max_length=2048)
 
 
 class FarmEventIn(BaseModel):
@@ -375,8 +393,9 @@ class SelfExcludeIn(BaseModel):
 
 
 class TimeoutIn(BaseModel):
-    """Timeout (dočasný blok webu + Kick chatu). duration: 5m|15m|1h|6h|24h|7d|off."""
+    """Timeout (dočasný blok webu + Kick chatu). duration: 5m|15m|1h|6h|12h|24h|7d|off."""
     duration: str = Field(min_length=2, max_length=3)
+    reason: Optional[str] = Field(default=None, max_length=200)
 
 
 class DmIn(BaseModel):

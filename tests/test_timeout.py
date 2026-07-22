@@ -1,12 +1,13 @@
 """Timeout (dočasný blok webu + zrcadlení do Kick chatu).
 
 Ověřuje: během timeoutu padá require_user na 403; 'off' i vypršení odemkne; admin je imunní;
-timeout smí dát jen broadcaster+admin (mod ne). Kick mirror je mock/skip (účty bez kick_id).
+timeout smí dát mod+broadcaster+admin. Kick mirror je mock/skip (účty bez kick_id).
 
     .venv/Scripts/python.exe -m pytest tests/test_timeout.py -v
 """
 import secrets
 from datetime import datetime, timezone, timedelta
+from pathlib import Path
 
 from app.config import SESSION_COOKIE
 
@@ -60,10 +61,16 @@ def test_normal_user_not_blocked(client):
 def test_active_timeout_blocks_site(client):
     """Aktivní timeout (do budoucna) → require_user vrátí 403."""
     tok, _, uid = _make_user()
-    _set_timeout_until(uid, (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat())
+    until = (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat()
+    _set_timeout_until(uid, until)
     r = client.get(PROTECTED, headers=_hdr(tok))
+    me = client.get("/api/auth/me", headers=_hdr(tok))
+    js = (Path(__file__).parents[1] / "web" / "app.js").read_text(encoding="utf-8")
     assert r.status_code == 403, f"timeout měl blokovat web, dostal {r.status_code}: {r.text}"
     assert "timeout" in r.text.lower()
+    assert me.json()["user"]["timeout_until"] == until
+    assert 'const timedOut = res.status === 403 && msg.includes("Jsi v timeoutu")' in js
+    assert 'const title = timeout ? "Timeout" : "Permanently banned"' in js
 
 
 def test_expired_timeout_unblocks(client):
@@ -86,15 +93,24 @@ def test_admin_can_set_and_clear_timeout(client):
     """Admin nastaví timeout (target dostane 403) a 'off' ho zase odemkne (200). kick_id chybí → skip mirror."""
     admin_tok, _, _ = _make_user("admin")
     target_tok, _, target_id = _make_user()
-    # nastav 1h timeout
-    r = client.post(f"/api/admin/users/{target_id}/timeout", json={"duration": "1h"}, headers=_hdr(admin_tok))
+    # nastav 12h timeout s důvodem
+    before = datetime.now(timezone.utc)
+    r = client.post(f"/api/admin/users/{target_id}/timeout",
+                    json={"duration": "12h", "reason": "Automatizované skripty"},
+                    headers=_hdr(admin_tok))
     assert r.status_code == 200, r.text
     assert r.json()["timeout_until"] is not None
+    assert r.json()["timeout_reason"] == "Automatizované skripty"
+    until = datetime.fromisoformat(r.json()["timeout_until"])
+    assert timedelta(hours=11, minutes=59) <= until - before <= timedelta(hours=12, minutes=1)
+    me = client.get("/api/auth/me", headers=_hdr(target_tok)).json()["user"]
+    assert me["timeout_reason"] == "Automatizované skripty"
     assert client.get(PROTECTED, headers=_hdr(target_tok)).status_code == 403, "po nastavení má být blok"
     # zruš
     r = client.post(f"/api/admin/users/{target_id}/timeout", json={"duration": "off"}, headers=_hdr(admin_tok))
     assert r.status_code == 200, r.text
     assert r.json()["timeout_until"] is None
+    assert r.json()["timeout_reason"] is None
     assert client.get(PROTECTED, headers=_hdr(target_tok)).status_code == 200, "po 'off' má být zase přístup"
 
 
@@ -104,14 +120,19 @@ def test_invalid_duration_rejected(client):
     _, _, target_id = _make_user()
     r = client.post(f"/api/admin/users/{target_id}/timeout", json={"duration": "99x"}, headers=_hdr(admin_tok))
     assert r.status_code in (400, 422), f"neplatná délka měla spadnout, dostal {r.status_code}: {r.text}"
+    missing = client.post(f"/api/admin/users/{target_id}/timeout",
+                          json={"duration": "12h"}, headers=_hdr(admin_tok))
+    assert missing.status_code == 400
+    assert missing.json()["detail"] == "Důvod timeoutu je povinný."
 
 
-def test_mod_cannot_timeout(client):
-    """Moderátor nesmí dávat timeout (jen broadcaster+admin, jako ban) → 403."""
+def test_mod_can_timeout(client):
+    """Moderátor smí dát timeout běžnému uživateli jako svou jedinou administrační změnu."""
     mod_tok, _, _ = _make_user("mod")
     _, _, target_id = _make_user()
-    r = client.post(f"/api/admin/users/{target_id}/timeout", json={"duration": "1h"}, headers=_hdr(mod_tok))
-    assert r.status_code == 403, f"mod neměl mít právo, dostal {r.status_code}: {r.text}"
+    r = client.post(f"/api/admin/users/{target_id}/timeout",
+                    json={"duration": "1h", "reason": "Spam"}, headers=_hdr(mod_tok))
+    assert r.status_code == 200, f"mod má smět timeout, dostal {r.status_code}: {r.text}"
 
 
 def test_cannot_timeout_admin(client):

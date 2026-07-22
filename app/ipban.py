@@ -12,7 +12,7 @@ from datetime import datetime, timezone, timedelta
 
 from fastapi.responses import HTMLResponse
 
-from .db import now_iso
+from .db import get_conn, now_iso
 
 # ip -> {"reason", "created_at", "expires_at"}  (in-memory cache, žádný DB dotaz na request)
 _BANS = {}
@@ -74,7 +74,7 @@ def ban(conn, ip: str, reason: str, hours: int) -> None:
 
 
 def temp_ban(ip: str, reason: str, minutes: int) -> bool:
-    """Dočasný auto-ban POUZE v paměti (NE do DB) – pro anti-DDoS. Po restartu zmizí.
+    """Dočasný auto-ban pro anti-DDoS; zapíše se i do DB, takže přežije restart.
 
     Vrátí True, pokud se ban nastavil. Loopback se nikdy nebanuje. Pokud už platí
     nějaký (i ruční) ban, nepřepisuje ho.
@@ -85,8 +85,24 @@ def temp_ban(ip: str, reason: str, minutes: int) -> bool:
     if rec and not _expired(rec):
         return False  # už zabanováno (ruční nebo dřívější auto) – nech být
     expires = (datetime.now(timezone.utc) + timedelta(minutes=max(1, minutes))).isoformat()
-    _BANS[ip] = {"reason": (reason or "")[:200], "created_at": now_iso(),
-                 "expires_at": expires, "auto": True}
+    created = now_iso()
+    reason = (reason or "")[:200]
+    _BANS[ip] = {"reason": reason, "created_at": created, "expires_at": expires, "auto": True}
+    conn = None
+    try:
+        conn = get_conn()
+        conn.execute(
+            "INSERT INTO ip_bans (ip, reason, created_at, expires_at) VALUES (?, ?, ?, ?) "
+            "ON CONFLICT(ip) DO UPDATE SET reason=excluded.reason, created_at=excluded.created_at, "
+            "expires_at=excluded.expires_at",
+            (ip, reason, created, expires),
+        )
+        conn.commit()
+    except Exception:
+        pass  # in-memory ochrana musí fungovat i při dočasně zamčené DB
+    finally:
+        if conn is not None:
+            conn.close()
     return True
 
 

@@ -645,8 +645,10 @@ def feed_all(conn, user) -> dict:
             "skipped": skipped, "balance": bal}
 
 
-def _award_product(conn, user_id, a, level, bonus):
+def _award_product(conn, user_id, a, level, bonus, ready_at):
     from .deps import add_points
+    from .anticheat import record_automation_event
+    record_automation_event(conn, user_id, "farm", a["key"], ready_at)
     base = _reward_at(a, level, bonus)
     # měkký denní strop (základ + stodola): nad něj jde jen zlomek (grinder ochrana faucetu)
     soft = _farm_today(conn, user_id) >= _daily_full(conn, user_id)
@@ -661,6 +663,7 @@ def _award_product(conn, user_id, a, level, bonus):
 
 
 def collect(conn, user, slot: int) -> dict:
+    from .anticheat import require_automation_checkpoint
     r = conn.execute("SELECT * FROM farm_animals WHERE user_id = ? AND slot = ?", (user["id"], slot)).fetchone()
     if not r:
         return {"ok": False, "error": "Prázdný slot."}
@@ -675,11 +678,12 @@ def collect(conn, user, slot: int) -> dict:
     if fox and fox["slot"] == slot:
         return {"ok": False,
                 "error": f"Na produkt číhá liška! 🦊 Zaplať výkupné ({fox.get('ransom', FOX_RANSOM)}), nebo jí ho nech."}
+    require_automation_checkpoint(conn, user)
     if conn.execute("UPDATE farm_animals SET ready_at = '' WHERE user_id = ? AND slot = ? AND ready_at = ?",
                     (user["id"], slot, r["ready_at"])).rowcount != 1:
         conn.commit()
         return {"ok": False, "error": "Už sebráno. 🥚"}
-    reward, golden = _award_product(conn, user["id"], a, _level(r["fed_count"]), _prod_bonus(conn, user["id"]))
+    reward, golden = _award_product(conn, user["id"], a, _level(r["fed_count"]), _prod_bonus(conn, user["id"]), r["ready_at"])
     conn.commit()
     bal = conn.execute("SELECT points FROM users WHERE id = ?", (user["id"],)).fetchone()["points"]
     return {"ok": True, "reward": reward, "golden": golden, "balance": bal,
@@ -687,6 +691,8 @@ def collect(conn, user, slot: int) -> dict:
 
 
 def collect_all(conn, user) -> dict:
+    from .anticheat import require_automation_checkpoint
+    require_automation_checkpoint(conn, user)
     bonus = _prod_bonus(conn, user["id"])
     fox = _fox_pending(conn, user["id"])
     ready = conn.execute("SELECT slot, animal_key, ready_at, fed_count FROM farm_animals "
@@ -700,7 +706,7 @@ def collect_all(conn, user) -> dict:
         if conn.execute("UPDATE farm_animals SET ready_at = '' WHERE user_id = ? AND slot = ? AND ready_at = ?",
                         (user["id"], r["slot"], r["ready_at"])).rowcount != 1:
             continue
-        reward, golden = _award_product(conn, user["id"], a, _level(r["fed_count"]), bonus)
+        reward, golden = _award_product(conn, user["id"], a, _level(r["fed_count"]), bonus, r["ready_at"])
         total += reward; count += 1; golds += 1 if golden else 0
     conn.commit()
     bal = conn.execute("SELECT points FROM users WHERE id = ?", (user["id"],)).fetchone()["points"]

@@ -2,7 +2,7 @@
 const CACHE = "zurys-shell-2026071253";   // digity = cache verze; bumpuje deploy.py spolu s index.html
 const APP_SHELL = [
   "/", "/index.html", "/manifest.json", "/sedlak-cut.png",
-  "/styles.css?v=2026071262", "/farm.css?v=2026071262", "/app.js?v=2026071262",
+  "/styles.css?v=2026071293", "/farm.css?v=2026071293", "/app.js?v=2026071293",
 ];
 
 self.addEventListener("install", (event) => event.waitUntil(

@@ -91,7 +91,7 @@ def test_economy_dashboard_blocked(client, role):
     )
 
 
-# ---------------- Úprava bodů: mod SMÍ; ban/import NE; důvod povinný ----------------
+# ---------------- MOD: smí jen uživatelský seznam + timeout ----------------
 
 def _make_target(role: str = "user") -> int:
     from app.db import get_conn, now_iso
@@ -110,10 +110,26 @@ def _post(client, path: str, token: str, body=None):
     return client.post(path, json=(body or {}), headers={"Cookie": f"{SESSION_COOKIE}={token}"})
 
 
-def test_mod_can_adjust_points(client):
+def test_mod_cannot_adjust_points(client):
     uid = _make_target()
     r = _post(client, f"/api/admin/users/{uid}/points", _login_as("mod"), {"change": 100, "reason": "test"})
-    assert r.status_code == 200, f"mod má moct upravit body, dostal {r.status_code}: {r.text}"
+    assert r.status_code == 403, f"BEZPEČNOST: mod smí jen timeouty, body vrátily {r.status_code}"
+
+
+def test_mod_can_list_users_for_timeout_picker(client):
+    assert _get(client, "/api/admin/users", _login_as("mod")).status_code == 200
+
+
+@pytest.mark.parametrize(("suffix", "body"), [
+    ("role", {"role": "vip"}),
+    ("flags", {"is_vip": True}),
+    ("admin-meta", {"watchlisted": True}),
+    ("gamble-block", {"duration": "1d"}),
+])
+def test_mod_cannot_mutate_users_except_timeout(client, suffix, body):
+    uid = _make_target()
+    r = _post(client, f"/api/admin/users/{uid}/{suffix}", _login_as("mod"), body)
+    assert r.status_code == 403, f"BEZPEČNOST: mod obešel timeout-only přes {suffix}: {r.status_code}"
 
 
 def test_points_require_reason(client):
@@ -139,21 +155,11 @@ def test_broadcaster_can_still_ban(client):
     assert r.status_code == 200, f"broadcaster má pořád moct banovat, dostal {r.status_code}: {r.text}"
 
 
-def test_mod_points_over_limit_blocked(client):
-    """Moderátor nesmí přidat víc než MOD_POINTS_MAX na jeden zásah (anti-zneužití)."""
-    from app.config import MOD_POINTS_MAX
-    uid = _make_target()
-    r = _post(client, f"/api/admin/users/{uid}/points", _login_as("mod"),
-              {"change": MOD_POINTS_MAX + 1, "reason": "test"})
-    assert r.status_code == 403, f"mod nad strop měl dostat 403, dal {r.status_code}"
-
-
 def test_admin_points_no_limit(client):
     """Admin má body bez stropu."""
-    from app.config import MOD_POINTS_MAX
     uid = _make_target()
     r = _post(client, f"/api/admin/users/{uid}/points", _login_as("admin"),
-              {"change": MOD_POINTS_MAX + 1000000, "reason": "test"})
+              {"change": 1050000, "reason": "test"})
     assert r.status_code == 200, f"admin nemá mít strop, dostal {r.status_code}: {r.text}"
 
 
@@ -163,16 +169,17 @@ def test_mod_cannot_access_economy_section(client):
     assert r.status_code == 403, f"mod nesmí na ekonomiku, dostal {r.status_code}"
 
 
-def test_mod_can_manage_orders(client):
-    """Moderátor smí na objednávky VČETNĚ pomocného /order-products – jinak se sekce v UI nenačte."""
+def test_mod_cannot_manage_orders(client):
     tok = _login_as("mod")
-    assert _get(client, "/api/admin/orders?status=all", tok).status_code == 200, "mod má vidět objednávky"
-    assert _get(client, "/api/admin/order-products", tok).status_code == 200, "mod potřebuje i order-products (filtr)"
+    assert _get(client, "/api/admin/orders?status=all", tok).status_code == 403
+    assert _get(client, "/api/admin/order-products", tok).status_code == 403
 
 
-def test_mod_can_access_products(client):
-    """Moderátor smí na sekci Odměny (products) – správa shop položek."""
-    assert _get(client, "/api/admin/products", _login_as("mod")).status_code == 200, "mod má vidět/spravovat odměny"
+@pytest.mark.parametrize("path", [
+    "/api/admin/products", "/api/admin/games", "/api/predictions/admin/all",
+])
+def test_mod_blocked_from_other_sections(client, path):
+    assert _get(client, path, _login_as("mod")).status_code == 403
 
 
 # ---------------- Predikční moderátor (predictor): vidí admin, ale JEN predikce ----------------

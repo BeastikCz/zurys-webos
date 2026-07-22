@@ -209,6 +209,20 @@ CREATE TABLE IF NOT EXISTS auctions (
     bids_count        INTEGER NOT NULL DEFAULT 0,
     status            TEXT NOT NULL DEFAULT 'active',
     winner_id         INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    seller_user_id    INTEGER REFERENCES users(id) ON DELETE SET NULL, -- komunitní komisní nabídka; NULL = skin webu
+    seller_payout     INTEGER NOT NULL DEFAULT 0,   -- skutečně vyplaceno prodávajícímu po prodeji
+    market_fee        INTEGER NOT NULL DEFAULT 0,   -- 5% sink z prodejní ceny
+    seller_paid_at    TEXT,                         -- idempotence výplaty prodávajícímu
+    sale_type         TEXT NOT NULL DEFAULT 'auction', -- auction | fixed
+    market_description TEXT NOT NULL DEFAULT '',    -- veřejný popis komunitního skinu
+    wear              TEXT NOT NULL DEFAULT '',     -- FN | MW | FT | WW | BS; prázdné = neuvedeno
+    float_value       REAL,                         -- přesný CS float 0..1
+    sold_at           TEXT,                         -- začátek předávacího escrow procesu
+    delivery_status   TEXT NOT NULL DEFAULT '',     -- awaiting_delivery | delivered | disputed | completed | refunded
+    delivery_sent_at  TEXT,
+    delivery_completed_at TEXT,
+    dispute_reason    TEXT,
+    dispute_by_id     INTEGER REFERENCES users(id) ON DELETE SET NULL,
     ends_at           TEXT NOT NULL,
     buy_now           INTEGER NOT NULL DEFAULT 0,   -- 0 = bez kup-teď; jinak cena instantní výhry
     sub_only          INTEGER NOT NULL DEFAULT 0,   -- 1 = přihazovat smí jen sub
@@ -226,6 +240,38 @@ CREATE TABLE IF NOT EXISTS auction_bids (
     fee        INTEGER NOT NULL DEFAULT 0,  -- vstupní poplatek zaplacený s tímto příhozem (vrací se při zrušení aukce)
     created_at TEXT NOT NULL
 );
+
+-- Divácké nabídky na komunitní Trh. Veřejná aukce vznikne až po schválení týmem.
+CREATE TABLE IF NOT EXISTS market_submissions (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    title       TEXT NOT NULL,
+    image_url   TEXT,
+    description TEXT,
+    wear        TEXT NOT NULL DEFAULT '', -- FN | MW | FT | WW | BS; prázdné = neuvedeno
+    float_value REAL,                    -- přesný CS float 0..1
+    inspect_url TEXT,
+    price       INTEGER NOT NULL,
+    sale_type   TEXT NOT NULL DEFAULT 'fixed', -- fixed | auction
+    duration_minutes INTEGER NOT NULL DEFAULT 1440,
+    status      TEXT NOT NULL DEFAULT 'pending', -- pending | approved | rejected
+    auction_id  INTEGER REFERENCES auctions(id) ON DELETE SET NULL,
+    created_at  TEXT NOT NULL,
+    decided_at  TEXT,
+    decided_by  TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_market_submissions_status ON market_submissions(status, id);
+
+-- Soukromý chat ke konkrétnímu dokončenému komunitnímu obchodu.
+CREATE TABLE IF NOT EXISTS market_messages (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    auction_id  INTEGER NOT NULL REFERENCES auctions(id) ON DELETE CASCADE,
+    from_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    body        TEXT NOT NULL,
+    seen        INTEGER NOT NULL DEFAULT 0,
+    created_at  TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_market_messages_auction ON market_messages(auction_id, id);
 
 -- Idempotence Kick webhooku: ID už zpracovaných zpráv. PERZISTENTNÍ (na rozdíl od paměťové
 -- dedup) → přežije restart/deploy, takže Kickův retry ani replay po restartu nepřičte body 2×.
@@ -276,6 +322,30 @@ CREATE TABLE IF NOT EXISTS client_signals (
 );
 
 -- Bany podle otisku zařízení (zabanovaný se nevrátí novým účtem ze stejného prohlížeče)
+-- Audit-only automation detection for garden/farm rewards. Multiple units collected
+-- by one bulk request are grouped into one batch by the report layer.
+CREATE TABLE IF NOT EXISTS automation_events (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    source      TEXT NOT NULL CHECK (source IN ('garden', 'farm')),
+    item_key    TEXT,
+    ready_at    TEXT NOT NULL,
+    acted_at    TEXT NOT NULL,
+    reaction_ms INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_automation_events_user_time
+    ON automation_events(user_id, acted_at);
+CREATE INDEX IF NOT EXISTS idx_automation_events_time
+    ON automation_events(acted_at);
+
+-- Suspicious farm accounts regain rewards for 24 h after a successful Turnstile check.
+CREATE TABLE IF NOT EXISTS automation_verifications (
+    user_id        INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    verified_until TEXT NOT NULL,
+    score          INTEGER NOT NULL,
+    created_at     TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS fingerprint_bans (
     fp_hash    TEXT PRIMARY KEY,
     reason     TEXT,
@@ -898,6 +968,24 @@ _MIGRATIONS = [
     ("auctions", "sub_only", "INTEGER NOT NULL DEFAULT 0"),      # aukce: jen sub smí přihazovat
     ("auctions", "chat_announce", "INTEGER NOT NULL DEFAULT 1"), # aukce: hlásit do Kick chatu
     ("auctions", "going_once_sent", "INTEGER NOT NULL DEFAULT 0"),  # aukce: „poslední vteřiny" hlášeno
+    ("auctions", "seller_user_id", "INTEGER REFERENCES users(id) ON DELETE SET NULL"), # komunitní komisní nabídka
+    ("auctions", "seller_payout", "INTEGER NOT NULL DEFAULT 0"),    # výplata prodávajícímu po 5% poplatku
+    ("auctions", "market_fee", "INTEGER NOT NULL DEFAULT 0"),       # spálený poplatek komunitního trhu
+    ("auctions", "seller_paid_at", "TEXT"),                         # idempotence výplaty prodávajícímu
+    ("auctions", "sale_type", "TEXT NOT NULL DEFAULT 'auction'"),  # aukce nebo přímý prodej
+    ("auctions", "market_description", "TEXT NOT NULL DEFAULT ''"), # veřejný popis komunitního skinu
+    ("auctions", "wear", "TEXT NOT NULL DEFAULT ''"),              # stav opotřebení komunitního skinu
+    ("auctions", "float_value", "REAL"),                            # přesný CS float
+    ("auctions", "sold_at", "TEXT"),                               # začátek předání
+    ("auctions", "delivery_status", "TEXT NOT NULL DEFAULT ''"),   # stav escrow předání
+    ("auctions", "delivery_sent_at", "TEXT"),
+    ("auctions", "delivery_completed_at", "TEXT"),
+    ("auctions", "dispute_reason", "TEXT"),
+    ("auctions", "dispute_by_id", "INTEGER REFERENCES users(id) ON DELETE SET NULL"),
+    ("market_submissions", "sale_type", "TEXT NOT NULL DEFAULT 'fixed'"), # volba diváka
+    ("market_submissions", "wear", "TEXT NOT NULL DEFAULT ''"),           # FN / MW / FT / WW / BS
+    ("market_submissions", "float_value", "REAL"),                        # přesný CS float
+    ("market_submissions", "duration_minutes", "INTEGER NOT NULL DEFAULT 1440"), # délka nabídky zvolená prodejcem
     ("auction_bids", "fee", "INTEGER NOT NULL DEFAULT 0"),       # aukce: vstupní poplatek zaplacený s TÍMTO příhozem (kvůli vracení při zrušení)
     ("users", "feed_stock", "INTEGER NOT NULL DEFAULT 0"),    # Statek: zásoba krmiva (padá ze sklizně zahrádky) – krmí zvířata zdarma místo sedláků
     ("users", "farm_fox_day", "TEXT"),                        # Statek: den, kdy se naposledy losovala liška (1×/den)
@@ -946,6 +1034,7 @@ _MIGRATIONS = [
     ("users", "cos_banner", "TEXT"),     # nasazený profil banner
     ("users", "gamble_block_until", "TEXT"),  # sebevyloučení ze sázek: ISO konec / "permanent" / NULL
     ("users", "timeout_until", "TEXT"),       # timeout (dočasný blok webu): ISO konec / NULL. Zrcadlí Kick timeout.
+    ("users", "timeout_reason", "TEXT"),      # důvod timeoutu zobrazený blokovanému hráči
     ("users", "egg_found_at", "TEXT"),        # easter egg „Tajný sedlák": kdy našel (1×/uživatel gate + 🥚 odznak)
     ("subgoal_gifters", "paid", "INTEGER NOT NULL DEFAULT 0"),  # SUB cíl: (legacy) gifter už dostal odměnu (1× model)
     ("subgoal_gifters", "paid_tier", "INTEGER NOT NULL DEFAULT 0"),  # SUB cíl: nejvyšší vyplacený tier (kumulativní model)
@@ -1051,6 +1140,25 @@ def init_db() -> None:
             cols = [r[1] for r in conn.execute(f"PRAGMA table_info({table})").fetchall()]
             if col not in cols:
                 conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} {ddl}")
+        # Nabídky schválené před přidáním veřejného popisu o něj nepřijdou. Propojení přes
+        # market_submissions.auction_id je jednoznačné a update je bezpečně idempotentní.
+        conn.execute(
+            "UPDATE auctions SET market_description = COALESCE(("
+            " SELECT description FROM market_submissions s WHERE s.auction_id = auctions.id"
+            " ORDER BY s.id DESC LIMIT 1), '') "
+            "WHERE seller_user_id IS NOT NULL AND market_description = ''"
+        )
+        # Staré komunitní obchody už byly vyplacené okamžitě. Označ je jako dokončené;
+        # nevyplacené ukončené obchody převeď do nového escrow toku.
+        conn.execute(
+            "UPDATE auctions SET delivery_status = CASE WHEN seller_paid_at IS NOT NULL "
+            "THEN 'completed' ELSE 'awaiting_delivery' END, "
+            "sold_at = COALESCE(sold_at, seller_paid_at, ends_at), "
+            "delivery_completed_at = CASE WHEN seller_paid_at IS NOT NULL "
+            "THEN COALESCE(delivery_completed_at, seller_paid_at) ELSE delivery_completed_at END "
+            "WHERE seller_user_id IS NOT NULL AND status = 'ended' AND winner_id IS NOT NULL "
+            "AND delivery_status = ''"
+        )
         # crew_members.user_id historicky chyběl FK ON DELETE CASCADE (jediná user-vázaná tabulka bez něj) →
         # smazání usera (import ghostů: navaja_import.undo / awp_import) nechávalo ORPHAN řádek. Ten se počítal
         # do kapacity party (_insert_member COUNT(*)), ale mizel ze seznamu členů (JOIN users) → parta hlásila

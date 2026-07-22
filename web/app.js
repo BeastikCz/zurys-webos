@@ -136,7 +136,8 @@ function cosB(o) { return (o && o.cos && o.cos.banner) || ""; }
 let _crewTagsAt = 0;
 async function loadCrewTags(force) {
   if (!force && Date.now() - _crewTagsAt < 90000) return;
-  try { state.crewTags = await api("/crews/tags"); _crewTagsAt = Date.now(); } catch (e) {}
+  _crewTagsAt = Date.now();
+  try { state.crewTags = await api("/crews/tags"); } catch (e) { _crewTagsAt = 0; }
 }
 function tagPre(name) {
   const t = state.crewTags && state.crewTags[(name == null ? "" : String(name)).trim().toLowerCase()];
@@ -184,13 +185,12 @@ function lbBadges(r) {
 
 // Oprávnění (zrcadlo serverové matice v config.py – server to stejně vynucuje)
 const ADMIN_SECTIONS = {
-  overview: [], stats: ["broadcaster"], products: ["mod", "broadcaster"], users: ["mod", "broadcaster"], subs: [], orders: ["mod", "broadcaster"],
-  raffles: ["broadcaster"], auctions: ["broadcaster"], crews: ["broadcaster"], codes: ["broadcaster"], drops: ["broadcaster"], games: ["mod", "broadcaster"], bot: ["broadcaster"],
-  predictions: ["mod", "predictor", "broadcaster"], economy: ["broadcaster"], news: ["broadcaster"], security: [],
+  overview: [], stats: ["broadcaster"], products: ["broadcaster"], users: ["mod", "broadcaster"], subs: [], orders: ["broadcaster"],
+  raffles: ["broadcaster"], auctions: ["broadcaster"], crews: ["broadcaster"], codes: ["broadcaster"], drops: ["broadcaster"], games: ["broadcaster"], bot: ["broadcaster"],
+  predictions: ["predictor", "broadcaster"], economy: ["broadcaster"], news: ["broadcaster"], security: [],
   modnabor: ["broadcaster"], gifts: ["broadcaster"], casehug: ["broadcaster"],
 };
 function isStaff(u) { return !!u && ["admin", "broadcaster", "mod", "predictor"].includes(u.role); }
-function hasEarlyAccess(u) { return !!u && (u.early_access || u.role === "admin"); }   // Crew = early access (admin grantuje); Statek zatím JEN admin
 function canDM(u) { return !!u && ["admin", "broadcaster"].includes(u.role); }   // PM jen broadcaster+admin (mod NE)
 function canSection(u, sec) { return !!u && (u.role === "admin" || (ADMIN_SECTIONS[sec] || []).includes(u.role)); }
 
@@ -201,7 +201,17 @@ function thumbStyle(p) {
 function thumbInner(p) { return p.image_url ? "" : `<span class="emoji">${emojiFor(p)}</span>`; }
 
 /* ---------------- API klient ---------------- */
-async function api(path, opts = {}) {
+const _apiGetPending = new Map();
+function api(path, opts = {}) {
+  const method = opts.method || "GET";
+  if (method !== "GET") return apiRequest(path, opts);
+  const existing = _apiGetPending.get(path);
+  if (existing) return existing;
+  const pending = apiRequest(path, opts).finally(() => _apiGetPending.delete(path));
+  _apiGetPending.set(path, pending);
+  return pending;
+}
+async function apiRequest(path, opts = {}) {
   const res = await fetch(API + path, {
     method: opts.method || "GET",
     headers: opts.body ? { "Content-Type": "application/json" } : {},
@@ -220,6 +230,26 @@ async function api(path, opts = {}) {
     if (data && data.detail) {
       if (typeof data.detail === "string") msg = data.detail;
       else if (Array.isArray(data.detail) && data.detail[0]) msg = data.detail[0].msg || msg;
+      else if (data.detail.code === "automation_checkpoint") {
+        msg = data.detail.message || msg;
+        openAutomationCheckpoint(data.detail);
+      }
+    }
+    const timedOut = res.status === 403 && msg.includes("Jsi v timeoutu");
+    if (res.status === 403 && (timedOut || msg.includes("účet byl zablokován"))) {
+      try {
+        const fresh = await fetch(API + "/auth/me", { credentials: "same-origin" });
+        const me = await fresh.json();
+        if (me.user) state.user = me.user;
+      } catch (_) {}
+      if (state.user) {
+        if (timedOut) state.user.timeout_until = state.user.timeout_until || msg;
+        else {
+          state.user.banned = true;
+          state.user.ban_reason = state.user.ban_reason || "Permanently banned";
+        }
+      }
+      renderBannedPage();
     }
     throw new Error(msg);
   }
@@ -266,13 +296,57 @@ function currentRoute() { return parseRoute().name; }
 function navigate(path) { const t = "#/" + path; if (location.hash === t) render(); else location.hash = t; }
 function openDrawer() { $("#mobilenav").classList.add("open"); }
 function closeDrawer() { $("#mobilenav").classList.remove("open"); }
+function accountBlocked() { return !!(state.user && state.user.role !== "admin" && (state.user.banned || state.user.timeout_until)); }
+
+function renderBannedPage() {
+  const timeout = state.user && !state.user.banned && state.user.timeout_until;
+  const until = timeout ? Date.parse(timeout) : NaN;
+  const timeoutReason = esc((state.user && state.user.timeout_reason) || "Neuveden");
+  const title = timeout ? "Timeout" : "Permanently banned";
+  const lead = timeout ? "Tvůj účet dostal dočasný timeout." : "Tvůj účet byl trvale zablokován.";
+  const detail = timeout
+    ? (Number.isFinite(until)
+      ? `<strong>Zbývá:</strong> <span id="banTimeoutLeft"></span> · do ${esc(new Date(until).toLocaleString("cs-CZ"))}<br><strong>Důvod:</strong> ${timeoutReason}`
+      : esc(timeout))
+    : `<strong>Důvod:</strong> ${esc((state.user && state.user.ban_reason) || "Permanently banned")}`;
+  document.body.classList.add("account-banned");
+  document.title = `${title} · ZURYS`;
+  $("#view").innerHTML = `
+    <section class="ban-screen" role="alert" aria-labelledby="banTitle">
+      <div class="ban-brand" aria-label="ZURYS"><span class="ban-brand-mark">Z</span><span>ZURYS</span></div>
+      <div class="ban-content">
+        <h1 id="banTitle">${title}</h1>
+        <p class="ban-lead">${lead}</p>
+        <p class="ban-reason">${detail}</p>
+        <p class="ban-help">Pokud si myslíš, že jde o chybu, kontaktuj <strong>ADMINA</strong>.</p>
+        <button class="ban-logout" data-action="logout">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 5H6a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h4M14 8l4 4-4 4M9 12h9"/></svg>
+          Odhlásit účet
+        </button>
+      </div>
+    </section>`;
+  clearInterval(window._banTimeoutTimer);
+  if (Number.isFinite(until)) {
+    const tick = () => {
+      const left = Math.ceil((until - Date.now()) / 1000);
+      if (left <= 0) { clearInterval(window._banTimeoutTimer); location.reload(); return; }
+      const el = $("#banTimeoutLeft");
+      if (el) el.textContent = grdDur(left);
+    };
+    tick();
+    window._banTimeoutTimer = setInterval(tick, 1000);
+  }
+}
 
 function render() {
+  if (accountBlocked()) { renderBannedPage(); return; }
+  document.body.classList.remove("account-banned");
+  document.title = "Zurys Shop";
   renderHeader();
   if (state.user) loadCrewTags();   // refresh crew [TAG] mapy (throttled 90 s)
   closeDrawer();
   refreshAuctionBanner();        // celostránkový banner aktivní aukce
-  if (!window._aucBannerPoll) window._aucBannerPoll = setInterval(refreshAuctionBanner, 15000);
+  if (!window._aucBannerPoll) window._aucBannerPoll = setInterval(() => { if (!document.hidden) refreshAuctionBanner(); }, 60000 + Math.random() * 30000);
   window._pageT0 = Date.now();   // form-timing anti-bot: timestamp loadu stránky
   if (dropTimer) { clearInterval(dropTimer); dropTimer = null; }
   if (cardTimer) { clearInterval(cardTimer); cardTimer = null; }
@@ -418,17 +492,24 @@ function renderHeader() {
       : `<a href="#" data-action="connect">🟢 Připojit přes Kick</a>`);
 
   refreshStreamDot();
-  if (!window._streamDotTimer) window._streamDotTimer = setInterval(refreshStreamDot, 60000);
+  if (!window._streamDotTimer) window._streamDotTimer = setInterval(refreshStreamDot, 120000);
   if (u) animateBalance(Number(u.points));   // gamifikace: napočítej zůstatek při změně
   if (u) checkLevelUp(Number(u.level || 0));  // gamifikace: oslava level-upu
 }
 
 /* ---------------- Živá tečka: stav streamu (online/offline) ---------------- */
+let _streamStatus = null, _streamStatusAt = 0, _streamStatusLoading = false;
 async function refreshStreamDot() {
-  const el = document.getElementById("streamDot");
-  if (!el) return;
+  if (document.hidden) return;
+  if ((!_streamStatus || Date.now() - _streamStatusAt >= 120000) && !_streamStatusLoading) {
+    _streamStatusLoading = true;
+    _streamStatusAt = Date.now();
+    try { _streamStatus = await api("/stream/status"); } catch (e) { /* poslední známý stav zůstává */ }
+    _streamStatusLoading = false;
+  }
+  const el = document.getElementById("streamDot"), s = _streamStatus;
+  if (!el || !s) return;
   try {
-    const s = await api("/stream/status");
     const txt = el.querySelector(".sd-txt");
     if (s && s.live) {
       el.className = "stream-dot stream-dot--live";
@@ -451,37 +532,45 @@ async function refreshStreamDot() {
 /* ---------- SHOP (Drop Arena) ---------- */
 function pageShop() {
   const view = $("#view");
+  const isMarket = shopState.type === "market";
   view.innerHTML = `
-    <div class="ticker"><div class="ticker-track" id="tickerTrack"></div></div>
+    ${isMarket ? "" : `<div class="ticker"><div class="ticker-track" id="tickerTrack"></div></div>
     <div id="dropBanner"></div>
-    <div id="shopAuctions"></div>
+    <div id="shopAuctions"></div>`}
     <div class="da-head shop-hero"><img src="/sedlak-cut.png" class="hero-sedlak" alt="Sedlák" />
       <div><h1>Zurys <span class="accent">Shop</span></h1>
       <p>Utrať nasbírané sedláky za prémiové skiny a odměny — instantní odměny, limitky i tomboly. 🌾</p>
       <button class="shop-how" data-action="open-welcome">🌾 Jak získat sedláky?</button></div></div>
-    <div id="onbCard"></div>
-    <div id="quickCard"></div>
+    ${isMarket ? "" : `<div id="onbCard"></div>
     <div id="weeklyCard"></div>
     <div id="happyBanner"></div>
     <div id="soldFeed"></div>
     <div id="shopHero"></div>
-    <div id="shopMilestone"></div>
+    <div id="shopMilestone"></div>`}
     <div class="da-filters" id="filters"></div>
+    <div id="marketIntro"></div>
+    <div id="marketSales"></div>
     <div class="da-grid" id="prodGrid">${skeletonCards(8)}</div>
     <div style="text-align:center;margin-top:26px" id="loadMoreWrap"></div>`;
-  renderOnbCard();      // z cache (claimsData); čerstvá data dorenderuje refreshBonusDot
-  renderQuickCard();
-  if (state.user) loadWeeklySummary();
   renderFilters();
-  loadActivity();
-  loadDropBanner();
-  loadSoldFeed();
-  loadShopAuctions();
-  loadMilestone();
-  dropTimer = setInterval(() => { if (!document.hidden) { loadDropBanner(); loadSoldFeed(); } }, 10000);
   cardTimer = setInterval(updateCardTimers, 1000);
   shopState.page = 1; shopState.items = [];
+  if (isMarket) {
+    loadMarketListings();
+    return;
+  }
+  renderOnbCard();      // z cache (claimsData); čerstvá data dorenderuje refreshBonusDot
+  loadDropBanner();
+  loadShopAuctions();
   loadProducts(true);
+  dropTimer = setTimeout(() => {
+    if (currentRoute() !== "shop" || shopState.type === "market") return;
+    if (state.user) loadWeeklySummary();
+    loadActivity();
+    loadSoldFeed();
+    loadMilestone();
+    dropTimer = setInterval(() => { if (!document.hidden) { loadDropBanner(); loadSoldFeed(); } }, 60000 + Math.random() * 30000);
+  }, 750 + Math.random() * 1250);
 }
 
 async function loadActivity() {
@@ -640,13 +729,13 @@ function skeletonCards(n) {
 }
 
 function renderFilters() {
-  const f = [["all", "Vše"], ["instant", "Instantní"], ["raffle", "Tombola"], ["ending", "Končí brzy"]];
+  const f = [["all", "Vše"], ["instant", "Instantní"], ["raffle", "Tombola"], ["ending", "Končí brzy"], ["market", "🌾 Trh"]];
   const chips = f.map(([k, l]) => `<button class="chip ${shopState.type === k ? "active" : ""}" data-action="filter-type" data-type="${k}">${l}</button>`).join("");
-  $("#filters").innerHTML = chips +
+  $("#filters").innerHTML = chips + (shopState.type === "market" ? "" :
     `<span class="spacer"></span>` +
-    `<button class="chip ${shopState.afford ? "active" : ""}" data-action="toggle-afford">🌾 Na co mám</button>` +
-    `<button class="chip ${shopState.sort ? "active" : ""}" data-action="sort-price">${shopState.sort === "price_desc" ? "⬇" : "⬆"} Cena</button>` +
-    `<button class="chip ${shopState.subs ? "active" : ""}" data-action="toggle-subs">👑 Jen subs</button>`;
+      `<button class="chip ${shopState.afford ? "active" : ""}" data-action="toggle-afford">🌾 Na co mám</button>` +
+      `<button class="chip ${shopState.sort ? "active" : ""}" data-action="sort-price">${shopState.sort === "price_desc" ? "⬇" : "⬆"} Cena</button>` +
+      `<button class="chip ${shopState.subs ? "active" : ""}" data-action="toggle-subs">👑 Jen subs</button>`);
 }
 
 async function loadProducts(reset) {
@@ -1605,6 +1694,11 @@ const SUPPORT_CATEGORIES = {
   web: { label: "Web a hry", description: "Chyby webu, výkon a herní problémy", subs: { bug: "Bug report", performance: "Výkon webu", game: "Herní problém" },
     faq: ["Zkus nejdřív tvrdý refresh (Ctrl+F5) — po aktualizacích webu vyřeší většinu potíží.",
           "U bug reportu přilož screenshot (📎 přímo v ticketu) a napiš, v jakém prohlížeči se to stalo."] },
+  market: { label: "Komunitní trh", description: "Nabídni svůj CS2 skin za sedláky", subs: { sell: "Prodat skin" },
+    faq: ["Skin posílej týmu až po schválení ticketu. Do nabídky půjde teprve po převzetí.",
+          "Po prodeji dostaneš 95 % ceny v sedlácích; 5 % je poplatek trhu.",
+          "Napiš celý název, wear, StatTrak, float, požadovanou cenu a přilož screenshot nebo inspect link.",
+          "Nikdy neposílej heslo, Steam Guard kód ani potvrzovací odkaz. Tým je po tobě nebude chtít."] },
   other: { label: "Ostatní", description: "Obecný dotaz, nápad nebo zpětná vazba", subs: { question: "Dotaz", idea: "Nápad", other: "Ostatní" },
     faq: ["Nápady na vylepšení vítáme — čím konkrétnější, tím líp."] },
 };
@@ -2763,26 +2857,227 @@ function pageBonusy() {
   loadBattlePass();
   loadWheel();
   loadPartnerLinks();
-  _partnerRefreshTimer = setInterval(() => { if (!document.hidden) loadPartnerLinks(); }, 5000);
+  _partnerRefreshTimer = setInterval(() => { if (!document.hidden) loadPartnerLinks(); }, 60000 + Math.random() * 30000);
   loadCommunityGoal();
   loadSubGoal();
-  dropTimer = setInterval(() => { if (!document.hidden) { loadCommunityGoal(); loadSubGoal(); } }, 12000);
+  dropTimer = setInterval(() => { if (!document.hidden) { loadCommunityGoal(); loadSubGoal(); } }, 60000 + Math.random() * 30000);
 }
 
 /* ---------- Aukce o skiny ---------- */
-let _auctionTimer = null, _aucReload = null;
-async function loadShopAuctions() {                         // aukce ŽIJOU v shopu (žádná vlastní záložka)
+let _auctionTimer = null, _aucReload = null, _marketListings = [];
+const marketFilters = { query: "", saleType: "all", wear: "all", min: "", max: "" };
+function marketFiltersHTML() {
+  return `<section class="panel market-filters" aria-label="Filtry komunitního trhu">
+    <div class="market-filter-search"><label for="marketFilterQuery">Hledat skin</label><input class="input" id="marketFilterQuery" data-market-filter="query" value="${esc(marketFilters.query)}" placeholder="AWP, Asiimov, prodávající…"></div>
+    <div class="field"><label for="marketFilterType">Prodej</label><select class="input" id="marketFilterType" data-market-filter="saleType"><option value="all">Vše</option><option value="fixed" ${marketFilters.saleType === "fixed" ? "selected" : ""}>Pevná cena</option><option value="auction" ${marketFilters.saleType === "auction" ? "selected" : ""}>Aukce</option></select></div>
+    <div class="field"><label for="marketFilterWear">Opotřebení</label><select class="input" id="marketFilterWear" data-market-filter="wear"><option value="all">Všechny stavy</option>${["FN","MW","FT","WW","BS"].map((w) => `<option value="${w}" ${marketFilters.wear === w ? "selected" : ""}>${w}</option>`).join("")}</select></div>
+    <div class="field"><label for="marketFilterMin">Cena od</label><input class="input" id="marketFilterMin" data-market-filter="min" type="number" min="0" value="${esc(marketFilters.min)}" placeholder="0"></div>
+    <div class="field"><label for="marketFilterMax">Cena do</label><input class="input" id="marketFilterMax" data-market-filter="max" type="number" min="0" value="${esc(marketFilters.max)}" placeholder="bez limitu"></div>
+    <button class="btn btn-ghost btn-sm" data-action="market-filter-reset">Reset</button>
+  </section>`;
+}
+function renderMarketListings() {
+  const grid = document.getElementById("prodGrid"); if (!grid) return;
+  const q = marketFilters.query.trim().toLowerCase();
+  const min = marketFilters.min === "" ? null : Number(marketFilters.min);
+  const max = marketFilters.max === "" ? null : Number(marketFilters.max);
+  const items = _marketListings.filter((a) => {
+    const price = Number(a.sale_type === "fixed" ? a.buy_now : (a.current_bid || a.start_bid) || 0);
+    return (!q || `${a.title} ${a.description || ""} ${a.seller || ""}`.toLowerCase().includes(q))
+      && (marketFilters.saleType === "all" || a.sale_type === marketFilters.saleType)
+      && (marketFilters.wear === "all" || a.wear === marketFilters.wear)
+      && (min == null || price >= min) && (max == null || price <= max);
+  });
+  grid.innerHTML = items.length ? items.map(auctionCardHTML).join("")
+    : `<div class="empty" style="grid-column:1/-1"><div class="big">🔎</div>Žádná nabídka neodpovídá filtrům.</div>`;
+  if (items.length) _startAuctionTimer();
+}
+async function loadMarketListings() {
+  const grid = document.getElementById("prodGrid");
+  const intro = document.getElementById("marketIntro");
+  const salesBox = document.getElementById("marketSales");
+  const wrap = document.getElementById("loadMoreWrap");
+  if (!grid || !intro || !salesBox) return;
+  _aucReload = loadMarketListings;
+  grid.className = "da-grid market-grid";
+  intro.innerHTML = `<div class="market-intro panel">
+    <div><span class="market-kicker">KOMUNITNÍ NABÍDKY</span><h2>Skiny od diváků</h2><p>Nabídku kontroluje tým. Cena zůstává v escrow a prodávající dostane 95 % až po potvrzení převzetí.</p>
+      <div class="market-zero-tolerance">⚠️ Nulová tolerance: pokus o scam nebo nepravdivé údaje znamenají permanentní ban a odebrání všech sedláků.</div>
+      <div class="market-trust-note">🛡️ Trust Factor vychází z úspěšně dokončených escrow obchodů. Je orientační, ne záruka — skin vždy zkontroluj.</div>
+    </div>
+    <button class="btn btn-primary" data-action="market-sell">+ Prodat vlastní skin</button>
+  </div>`;
+  if (wrap) wrap.innerHTML = "";
+  try {
+    const [d, mine] = await Promise.all([
+      api("/auctions"),
+      state.user ? api("/auctions/my-sales").catch(() => ({ sales: [], purchases: [] })) : { sales: [], purchases: [] },
+    ]);
+    salesBox.innerHTML = marketDealsHTML(mine) + marketFiltersHTML();
+    const community = (d.active || []).filter((a) => a.seller);
+    if (!community.length) {
+      grid.innerHTML = `<div class="empty" style="grid-column:1/-1"><div class="big">🌾</div>Zatím tu není žádný komunitní skin.<br><span class="faint">Můžeš být první, kdo ho nabídne.</span></div>`;
+      return;
+    }
+    _marketListings = community;
+    renderMarketListings();
+  } catch (e) {
+    grid.innerHTML = `<div class="empty" style="grid-column:1/-1">Trh se teď nepodařilo načíst.</div>`;
+  }
+}
+const MARKET_DELIVERY_LABELS = {
+  awaiting_delivery: "Čeká na odeslání",
+  delivered: "Skin označen jako odeslaný",
+  disputed: "Řeší admin",
+  completed: "Dokončeno",
+  refunded: "Refundováno",
+};
+function marketTrustHTML(completed) {
+  const count = Math.max(0, Number(completed) || 0);
+  const [level, cls] = count >= 10 ? ["Veterán", "veteran"] : count >= 3 ? ["Důvěryhodný", "trusted"] : count >= 1 ? ["Ověřený", "verified"] : ["Nový", "new"];
+  return `<span class="market-trust market-trust-${cls}" title="Počítají se pouze úspěšně dokončené escrow obchody.">🛡️ Trust: <b>${level}</b> · ${count}×</span>`;
+}
+function marketDealActions(s, sellerSide) {
+  const pending = ["awaiting_delivery", "delivered"].includes(s.delivery_status);
+  const sent = sellerSide && s.delivery_status === "awaiting_delivery"
+    ? `<button class="btn btn-primary btn-sm" data-action="market-delivery" data-step="sent" data-id="${s.id}">📦 Skin odeslán</button>` : "";
+  const confirmReceived = !sellerSide && s.delivery_status === "delivered"
+    ? `<button class="btn btn-success btn-sm" data-action="market-delivery" data-step="confirm" data-id="${s.id}">✓ Skin jsem převzal</button>` : "";
+  const dispute = pending ? `<button class="btn btn-danger btn-sm" data-action="market-dispute" data-id="${s.id}">⚠️ Nahlásit problém</button>` : "";
+  const trade = sellerSide && s.winner_trade_url
+    ? `<a class="btn btn-primary btn-sm" href="${esc(s.winner_trade_url)}" target="_blank" rel="noopener">Steam Trade URL</a>` : "";
+  return `<button class="btn btn-accent btn-sm" data-action="market-chat" data-id="${s.id}">💬 Chat</button>${trade}${sent}${confirmReceived}${dispute}`;
+}
+function marketDealsHTML(data) {
+  const sales = data.sales || [], purchases = data.purchases || [];
+  if (!sales.length && !purchases.length) return "";
+  return `<section class="panel market-my-sales">
+    <div class="section-title">🤝 Tvoje obchody</div>
+    <p class="faint">Soukromé údaje a chat vidí pouze prodávající, výherce a admin při řešení sporu.</p>
+    ${sales.length ? `<div class="market-deal-label">PRODÁVÁŠ</div>${sales.map((s) => `<div class="market-sale-row">
+      ${s.image_url ? `<img src="${esc(s.image_url)}" alt="">` : `<span class="market-sale-placeholder">🌾</span>`}
+      <div class="market-sale-info"><b>${esc(s.title)}</b><span>Výherce: <strong>${esc(s.winner || "?")}</strong>${s.winner_kick ? ` · Kick: <strong>🟢 ${esc(s.winner_kick)}</strong>` : ""}</span>${marketTrustHTML(s.winner_completed_purchases)}<span>Prodejní cena: <strong>${fmtPts(s.final_price)} sedláků</strong>${s.wear ? ` · ${esc(s.wear)}` : ""}${s.float_value != null ? ` · float ${Number(s.float_value).toFixed(6)}` : ""}</span><span class="market-status market-status-${esc(s.delivery_status)}">${esc(MARKET_DELIVERY_LABELS[s.delivery_status] || "Čeká na dokončení")}</span>${s.dispute_reason ? `<span class="market-dispute-reason">Důvod: ${esc(s.dispute_reason)}</span>` : ""}</div>
+      <div class="market-deal-actions">${marketDealActions(s, true)}${!s.winner_trade_url && s.delivery_status === "awaiting_delivery" ? `<span class="faint">Výherce nemá Trade URL.</span>` : ""}</div>
+    </div>`).join("")}` : ""}
+    ${purchases.length ? `<div class="market-deal-label">KOUPIL JSI / VYHRÁL JSI</div>${purchases.map((s) => `<div class="market-sale-row">
+      ${s.image_url ? `<img src="${esc(s.image_url)}" alt="">` : `<span class="market-sale-placeholder">🌾</span>`}
+      <div class="market-sale-info"><b>${esc(s.title)}</b><span>Prodávající: <strong>${esc(s.seller || "?")}</strong>${s.seller_kick ? ` · Kick: <strong>🟢 ${esc(s.seller_kick)}</strong>` : ""}</span>${marketTrustHTML(s.seller_completed_sales)}<span>Prodejní cena: <strong>${fmtPts(s.final_price)} sedláků</strong>${s.wear ? ` · ${esc(s.wear)}` : ""}${s.float_value != null ? ` · float ${Number(s.float_value).toFixed(6)}` : ""}</span><span class="market-status market-status-${esc(s.delivery_status)}">${esc(MARKET_DELIVERY_LABELS[s.delivery_status] || "Čeká na dokončení")}</span>${s.dispute_reason ? `<span class="market-dispute-reason">Důvod: ${esc(s.dispute_reason)}</span>` : ""}</div>
+      <div class="market-deal-actions">${marketDealActions(s, false)}</div>
+    </div>`).join("")}` : ""}
+  </section>`;
+}
+async function openMarketChat(id) {
+  try {
+    const d = await api(`/auctions/${id}/chat`);
+    const messages = d.messages.length ? `<div class="dm-thread market-chat-thread">${d.messages.map((m) => `<div class="dm-msg ${m.mine ? "mine" : "other"}"><div class="dm-who">${["admin", "broadcaster"].includes(m.from_role) ? "🛡️ Admin · " : ""}${esc(m.from_name)}</div><div class="dm-bubble">${esc(m.body)}</div><div class="dm-time">${timeAgo(m.created_at)}</div></div>`).join("")}</div>` : `<div class="empty market-chat-empty">Zatím žádné zprávy. Domluvte si bezpečné předání skinu.</div>`;
+    openModal(`<div class="modal-body market-chat-modal">
+      <div class="market-chat-head"><span>OBCHOD #${d.auction.id}</span><h2>💬 ${esc(d.auction.title)}</h2><p><b>${esc(d.seller.username)}</b> ↔ <b>${esc(d.winner.username)}</b> · ${fmtPts(d.auction.final_price)} sedláků</p><div class="market-chat-trust"><span>Prodávající ${marketTrustHTML(d.seller.completed_trades)}</span><span>Kupující ${marketTrustHTML(d.winner.completed_trades)}</span></div></div>
+      <div class="market-chat-safety">🛡️ Nikdy neposílej heslo ani Steam Guard kód. Skin posílej pouze přes Steam Trade URL z tohoto obchodu.</div>
+      ${messages}
+      ${d.can_send ? `<div class="dm-composer"><textarea class="input" id="marketChatInput" rows="2" maxlength="2000" placeholder="Napiš zprávu k předání skinu…"></textarea><button class="btn btn-primary" data-action="market-chat-send" data-id="${id}">Odeslat ➤</button></div>` : `<div class="faint market-chat-audit">Admin audit · chat je pouze ke čtení.</div>`}
+      <button class="btn btn-ghost btn-sm market-chat-refresh" data-action="market-chat" data-id="${id}">↻ Obnovit zprávy</button>
+    </div>`, "modal-lg");
+    const thread = document.querySelector(".market-chat-thread"); if (thread) thread.scrollTop = thread.scrollHeight;
+  } catch (e) { toast(e.message, "error"); }
+}
+async function sendMarketChat(id) {
+  const input = document.getElementById("marketChatInput");
+  const body = (input?.value || "").trim();
+  if (!body) { toast("Napiš zprávu.", "error"); return; }
+  try {
+    await api(`/auctions/${id}/chat`, { method: "POST", body: { body } });
+    await openMarketChat(id);
+  } catch (e) { toast(e.message, "error"); }
+}
+async function updateMarketDelivery(id, step) {
+  if (step === "confirm" && !confirm("Potvrď pouze pokud skin opravdu vidíš ve svém Steam inventáři. Uvolnit escrow prodávajícímu?")) return;
+  try {
+    await api(`/auctions/${id}/delivery/${step}`, { method: "POST" });
+    toast(step === "sent" ? "📦 Odeslání označeno. Čeká se na potvrzení kupujícího." : "✅ Převzetí potvrzeno a escrow vyplaceno.", "success");
+    loadMarketListings();
+  } catch (e) { toast(e.message, "error"); }
+}
+async function disputeMarketDelivery(id) {
+  const reason = prompt("Stručně popiš problém pro admina:");
+  if (!reason || !reason.trim()) return;
+  try {
+    await api(`/auctions/${id}/delivery/dispute`, { method: "POST", body: { body: reason.trim() } });
+    toast("⚠️ Spor byl předán adminovi. Escrow zůstává zamčené.", "info");
+    loadMarketListings();
+  } catch (e) { toast(e.message, "error"); }
+}
+function openMarketSellForm() {
+  openModal(`<div class="modal-body market-submit-modal">
+    <h2>🌾 Vystavit skin na Trh</h2>
+    <p class="faint" style="margin:4px 0 16px">Vyplň nabídku. Veřejná bude až po kontrole a schválení týmem.</p>
+    <form class="form" data-submit="market-submit">
+      <div class="field"><label>Název skinu</label><input class="input" id="market_name" maxlength="120" placeholder="např. AWP | Asiimov" required></div>
+      <div class="field-row">
+        <div class="field"><label for="market_float">Přesný float (volitelné)</label><input class="input" id="market_float" type="number" min="0" max="1" step="0.000001" placeholder="např. 0.213456"><span class="form-hint" id="market_float_hint">Stav se dopočítá automaticky.</span></div>
+        <div class="field"><label for="market_wear">Stav opotřebení</label><select class="input" id="market_wear">
+          <option value="">Bez opotřebení / neuvedeno</option>
+          <option value="FN">Factory New (FN) · 0.00–0.07</option>
+          <option value="MW">Minimal Wear (MW) · 0.07–0.15</option>
+          <option value="FT">Field-Tested (FT) · 0.15–0.38</option>
+          <option value="WW">Well-Worn (WW) · 0.38–0.45</option>
+          <option value="BS">Battle-Scarred (BS) · 0.45–1.00</option>
+        </select></div>
+      </div>
+      <div class="field"><label>Obrázek (URL, volitelné)</label>
+        <div class="market-image-row">
+          <input class="input" id="market_image" maxlength="500" placeholder="https://…" style="flex:1">
+          <button type="button" class="btn btn-sm" data-action="skin-picker" data-prefix="market">🔍 Najít skin</button>
+        </div>
+        <div id="market_skininfo" class="faint" style="font-size:11.5px;margin-top:6px"></div>
+        <div id="market_skinPicker" class="skin-picker" style="display:none">
+          <div class="market-image-row"><input class="input" id="market_skinQ" placeholder="asiimov, butterfly, dragon lore…" autocomplete="off" style="flex:1"><button type="button" class="btn btn-sm btn-primary" data-action="skin-search" data-prefix="market">Hledat</button></div>
+          <div id="market_skinResults" class="skin-results"></div>
+        </div>
+      </div>
+      <div class="field"><label>Popis (volitelné)</label><textarea class="input" id="market_description" maxlength="500" rows="3" placeholder="Float, pattern, samolepky nebo další informace"></textarea></div>
+      <div class="field"><label>Steam inspect link (volitelné)</label><input class="input" id="market_inspect" maxlength="1000" placeholder="steam://rungame/730/…"></div>
+      <div class="field-row">
+        <div class="field"><label>Způsob prodeje</label><select class="input" id="market_sale_type"><option value="fixed">Pevná cena</option><option value="auction">Aukce</option></select></div>
+        <div class="field"><label>Délka nabídky</label><select class="input" id="market_duration"><option value="360">6 hodin</option><option value="720">12 hodin</option><option value="1440" selected>24 hodin</option><option value="4320">3 dny</option><option value="10080">7 dní</option></select></div>
+        <div class="field"><label>Cena / vyvolávací cena (sedláci)</label><input class="input" id="market_price" type="number" min="1" max="1000000000" value="100" required></div>
+      </div>
+      <div class="market-safety">🛡️ Skin neposílej předem. Po prodeji ho pošli pouze výherci přes Trade URL z privátního chatu obchodu.</div>
+      <button class="btn btn-primary btn-block" type="submit">Odeslat ke schválení</button>
+    </form>
+  </div>`, "modal-lg");
+}
+async function submitMarketSkin() {
+  const title = (document.getElementById("market_name")?.value || "").trim();
+  const price = parseInt(document.getElementById("market_price")?.value || "0", 10);
+  const floatRaw = (document.getElementById("market_float")?.value || "").trim();
+  if (title.length < 2 || price < 1) { toast("Vyplň název skinu a cenu.", "error"); return; }
+  try {
+    await api("/auctions/submissions", { method: "POST", body: {
+      title, price,
+      image_url: (document.getElementById("market_image")?.value || "").trim(),
+      description: (document.getElementById("market_description")?.value || "").trim(),
+      wear: document.getElementById("market_wear")?.value || "",
+      float_value: floatRaw === "" ? null : Number(floatRaw),
+      inspect_url: (document.getElementById("market_inspect")?.value || "").trim(),
+      sale_type: document.getElementById("market_sale_type")?.value || "fixed",
+      duration_minutes: parseInt(document.getElementById("market_duration")?.value || "1440", 10),
+    }});
+    closeModal();
+    toast("✅ Nabídka odeslána. Na Trhu se ukáže až po schválení.", "success");
+  } catch (e) { toast(e.message, "error"); }
+}
+async function loadShopAuctions() {                         // oficiální aukce zůstávají v běžném shopu
   const box = document.getElementById("shopAuctions"); if (!box) return;
   _aucReload = loadShopAuctions;
   try {
     const d = await api("/auctions");
     const active = d.active || [];
-    if (!active.length) { box.innerHTML = ""; return; }     // žádná aukce → sekce zmizí
+    const official = active.filter((a) => !a.seller);
     const tb = d.top_bidders || [];
     const lb = tb.length ? `<details class="lb-fold"><summary class="section-title" style="margin:14px 0 0;font-size:14px">🏆 Top dražitelé</summary><div class="panel" style="padding:8px 14px;margin-top:8px">${tb.map((b, i) => `<div style="display:flex;justify-content:space-between;align-items:center;font-size:13px;padding:3px 0"><span>${["🥇", "🥈", "🥉"][i] || (i + 1) + "."} <b>${esc(b.username || "?")}</b></span><span class="faint">${b.wins}× výhra · ${fmtPts(b.spent)} 🌾</span></div>`).join("")}</div></details>` : "";
-    box.innerHTML = `<div class="section-title auc-live-title" style="margin:18px 0 10px"><span class="auc-live-dot"></span> LIVE aukce <span class="faint" style="font-weight:400;font-size:13px">— přihazuj sedláky, kdo dá nejvíc do konce, bere skin! 🔨</span></div>`
-      + `<div class="auc-grid">${active.map(auctionCardHTML).join("")}</div>` + lb;
-    _startAuctionTimer();
+    const live = official.length ? `<div class="section-title auc-live-title" style="margin:18px 0 10px"><span class="auc-live-dot"></span> LIVE aukce <span class="faint" style="font-weight:400;font-size:13px">— přihazuj sedláky, kdo dá nejvíc do konce, bere skin! 🔨</span></div><div class="auc-grid">${official.map(auctionCardHTML).join("")}</div>` : "";
+    box.innerHTML = live + (official.length ? lb : "");
+    if (official.length) _startAuctionTimer();
   } catch (e) { box.innerHTML = ""; }
 }
 async function refreshAuctionBanner() {                     // banner aktivní aukce – na všech stránkách KROMĚ shopu (tam je aukce nahoře)
@@ -2790,38 +3085,55 @@ async function refreshAuctionBanner() {                     // banner aktivní a
   if (location.hash.replace(/^#\/?/, "").split(/[/?]/)[0] === "shop") { el.innerHTML = ""; return; }
   try {
     const d = await api("/auctions");
-    const a = (d.active || [])[0];                          // nejdřív končící = urgence
+    const a = (d.active || []).find((x) => x.sale_type !== "fixed"); // pevný prodej není aukční banner
     if (!a) { el.innerHTML = ""; return; }
     el.innerHTML = `<a href="#/shop" class="auc-banner${a.seconds_left < 60 ? " auc-banner-urgent" : ""}">🔨 <b>${a.seconds_left < 60 ? "KONČÍ!" : "AUKCE"}</b> · ${esc(a.title)}${a.sub_only ? " 💜" : ""} · <b>${fmtPts(a.current_bid || a.start_bid)} 🌾</b> · ⏳ <span data-aucbannerleft="${a.seconds_left}">${grdDur(a.seconds_left)}</span> · přihodit ➤</a>`;
   } catch (e) { el.innerHTML = ""; }
 }
 function isSubUser(u) { return !!u && (u.is_sub || ["admin", "broadcaster", "mod"].includes(u.role)); }
+const MARKET_WEAR_LABELS = { FN: "Factory New", MW: "Minimal Wear", FT: "Field-Tested", WW: "Well-Worn", BS: "Battle-Scarred" };
+function marketWearFromFloat(value) {
+  if (value < .07) return "FN";
+  if (value < .15) return "MW";
+  if (value < .38) return "FT";
+  if (value < .45) return "WW";
+  return "BS";
+}
+function syncMarketWearFromFloat() {
+  const input = document.getElementById("market_float"), select = document.getElementById("market_wear"), hint = document.getElementById("market_float_hint");
+  if (!input || !select) return;
+  const value = Number(input.value);
+  if (input.value === "" || !Number.isFinite(value) || value < 0 || value > 1) { if (hint) hint.textContent = "Stav se dopočítá automaticky."; return; }
+  select.value = marketWearFromFloat(value);
+  if (hint) hint.textContent = `${select.value} · ${MARKET_WEAR_LABELS[select.value]}`;
+}
 function auctionCardHTML(a) {
+  const fixed = a.sale_type === "fixed";
   const me = state.user && a.leader === state.user.username;
-  const recent = a.current_bid ? "" : `<div class="faint" style="font-size:12px;margin-top:8px">Zatím bez příhozu — buď první! 🔨</div>`;   // historie příhozů se veřejně neukazuje (soukromí dražitelů)
+  const ownListing = state.user && a.seller === state.user.username;
+  const recent = fixed || a.current_bid ? "" : `<div class="faint" style="font-size:12px;margin-top:8px">Zatím bez příhozu — buď první! 🔨</div>`;
   const chips = [a.min_next, a.min_next + a.min_increment * 4];
-  const locked = a.sub_only && !isSubUser(state.user);
+  const locked = ownListing || (a.sub_only && !isSubUser(state.user));
   const buyNow = a.buy_now && a.buy_now > (a.current_bid || 0);
   const bg = a.image_url ? `background-image:url('${esc(a.image_url)}')` : "";
   const feeTip = "První příhoz do aukce: +10 % vstupní poplatek (max 5 000). Při přehození se ti vrací 100 % příhozu, další příhozy už bez poplatku.";
   const bids = a.bids_count ? `<span class="faint" style="font-size:11.5px" title="${a.bids_count} příhozů">· 🔨 ${a.bids_count}×</span>` : "";
+  const price = fixed
+    ? `<span class="faint">cena</span> <b>${fmtPts(a.buy_now)}</b> 🌾`
+    : `${a.current_bid ? `<b>${fmtPts(a.current_bid)}</b> 🌾 ${a.leader ? `<span class="faint">· vede</span> <b style="color:${me ? "var(--farm-green,#46d369)" : "var(--accent)"}">${esc(a.leader)}${me ? " (ty!)" : ""}</b>` : ""}` : `<span class="faint">vyvolávací cena</span> <b>${fmtPts(a.start_bid)}</b> 🌾`}${bids}<span class="auc-fee-tip" data-action="auction-feetip">🎟<span class="auc-fee-pop">${esc(feeTip)}</span></span>`;
+  const controls = locked
+    ? `<div class="faint" style="text-align:center;padding:10px;background:rgba(168,85,247,.08);border-radius:10px">${ownListing ? `Vlastní skin koupit${fixed ? "" : " ani dražit"} nemůžeš. 😄` : "💜 Tahle aukce je jen pro <b>suby</b>. Přihoď si sub na Kicku a draž!"}</div>`
+    : fixed
+      ? `<button class="btn btn-primary btn-block" data-action="auction-buynow" data-id="${a.id}" data-fixed="1">Koupit za ${fmtPts(a.buy_now)} sedláků</button>`
+      : `<div class="auc-bidrow"><input class="input" id="aucAmt-${a.id}" type="number" min="${a.min_next}" placeholder="min. ${a.min_next}" value="${a.min_next}"><button class="btn btn-accent" data-action="auction-bid" data-id="${a.id}">🔨 Přihodit</button></div><div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">${chips.map((v) => `<button class="btn btn-ghost btn-sm" data-action="auction-amt" data-id="${a.id}" data-amt="${v}">${fmtPts(v)}</button>`).join("")}${buyNow ? `<button class="btn btn-sm" data-action="auction-buynow" data-id="${a.id}" style="margin-left:auto;background:linear-gradient(135deg,#b07ad9,#8a4fc0);color:#fff;border:none">💎 Kup teď ${fmtPts(a.buy_now)}</button>` : ""}</div>`;
   return `<div class="panel auc-card${a.sub_only ? " auc-sub" : ""}">
-    <div class="auc-hero" style="${bg}">
-      ${a.image_url ? "" : `<span class="auc-hero-emoji">🔨</span>`}
-      ${a.sub_only ? `<div class="auc-hero-badges"><span class="da-b b-sub">💜 SUB</span></div>` : ""}
-    </div>
+    <div class="auc-hero" style="${bg}">${a.image_url ? "" : `<span class="auc-hero-emoji">🔨</span>`}${(a.sub_only || a.seller) ? `<div class="auc-hero-badges">${a.seller ? `<span class="da-b">🌾 KOMUNITNÍ</span>` : ""}${a.sub_only ? `<span class="da-b b-sub">💜 SUB</span>` : ""}</div>` : ""}</div>
     <div class="auc-body">
-      <div class="auc-top"><div class="auc-title">${esc(a.title)}</div><span class="auc-count auc-timer${a.seconds_left < 60 ? " auc-urgent" : ""}" data-aucleft="${a.seconds_left}">⏳ ${grdDur(a.seconds_left)}</span></div>
-      <div class="auc-bid-now">${a.current_bid ? `<b>${fmtPts(a.current_bid)}</b> 🌾 ${a.leader ? `<span class="faint">· vede</span> <b style="color:${me ? "var(--farm-green,#46d369)" : "var(--accent)"}">${esc(a.leader)}${me ? " (ty!)" : ""}</b>` : ""}` : `<span class="faint">vyvolávací cena</span> <b>${fmtPts(a.start_bid)}</b> 🌾`}${bids}<span class="auc-fee-tip" data-action="auction-feetip">🎟<span class="auc-fee-pop">${esc(feeTip)}</span></span></div>
-      ${locked
-        ? `<div class="faint" style="text-align:center;padding:10px;background:rgba(168,85,247,.08);border-radius:10px">💜 Tahle aukce je jen pro <b>suby</b>. Přihoď si sub na Kicku a draž!</div>`
-        : `<div class="auc-bidrow">
-            <input class="input" id="aucAmt-${a.id}" type="number" min="${a.min_next}" placeholder="min. ${a.min_next}" value="${a.min_next}">
-            <button class="btn btn-accent" data-action="auction-bid" data-id="${a.id}">🔨 Přihodit</button>
-          </div>
-          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">${chips.map((v) => `<button class="btn btn-ghost btn-sm" data-action="auction-amt" data-id="${a.id}" data-amt="${v}">${fmtPts(v)}</button>`).join("")}${buyNow ? `<button class="btn btn-sm" data-action="auction-buynow" data-id="${a.id}" style="margin-left:auto;background:linear-gradient(135deg,#b07ad9,#8a4fc0);color:#fff;border:none">💎 Kup teď ${fmtPts(a.buy_now)}</button>` : ""}</div>
-`}
-      ${recent}
+      <div class="auc-top"><div class="auc-title">${esc(a.title)}</div>${fixed ? `<span class="auc-count">PEVNÁ CENA</span>` : `<span class="auc-count auc-timer${a.seconds_left < 60 ? " auc-urgent" : ""}" data-aucleft="${a.seconds_left}">⏳ ${grdDur(a.seconds_left)}</span>`}</div>
+      ${a.seller ? `<div class="market-seller-line">Prodává <b>${esc(a.seller)}${ownListing ? " (ty)" : ""}</b>${marketTrustHTML(a.seller_completed_sales)}<span>ověřeno týmem</span></div>` : ""}
+      ${a.wear && MARKET_WEAR_LABELS[a.wear] ? `<div class="market-wear"><b>${esc(a.wear)}</b><span>${esc(MARKET_WEAR_LABELS[a.wear])}</span>${a.float_value != null ? `<span>· float ${Number(a.float_value).toFixed(6)}</span>` : ""}</div>` : ""}
+      ${a.description ? `<div class="market-card-description" title="${esc(a.description)}">${esc(a.description)}</div>` : ""}
+      <div class="auc-bid-now">${price}</div>${controls}${recent}
     </div>
   </div>`;
 }
@@ -2836,9 +3148,10 @@ function _startAuctionTimer() {
     if (reload && _aucReload) { clearInterval(_auctionTimer); _auctionTimer = null; _aucReload(); }
   }, 1000);
   if (!window._aucPoll) window._aucPoll = setInterval(() => {
+    if (document.hidden) return;
     if (document.querySelector("[data-aucleft]") && _aucReload) _aucReload();
     else { clearInterval(window._aucPoll); window._aucPoll = null; }
-  }, 5000);
+  }, 30000 + Math.random() * 15000);
 }
 function aucSetAmt(id, v) { const el = document.getElementById("aucAmt-" + id); if (el) { el.value = v; el.focus(); } }
 async function bidAuction(id) {
@@ -2858,13 +3171,15 @@ async function bidAuction(id) {
     renderHeader(); if (_aucReload) _aucReload();
   } catch (e) { toast(e.message, "error"); }
 }
-async function buyNowAuction(id) {
+async function buyNowAuction(id, fixed = false) {
   if (!state.user) { toast("Přihlas se 😉", "info"); return; }
-  if (!confirm("Koupit teď za kup-teď cenu? Aukce hned skončí a skin je tvůj.")) return;
+  if (!confirm(fixed ? "Koupit tento skin za uvedenou cenu?" : "Koupit teď za kup-teď cenu? Aukce hned skončí a skin je tvůj.")) return;
   try {
     const r = await api(`/auctions/${id}/buynow`, { method: "POST" });
     if (state.user) state.user.points = r.balance;
-    toast(`💎 VYKOUPENO! „${esc(r.title)}" za ${fmtPts(r.price)} — skin je tvůj! 🏆`, "success");
+    toast(r.market_escrow
+      ? `🛡️ „${esc(r.title)}“ koupen za ${fmtPts(r.price)}. Cena je v escrow — domluv předání v chatu.`
+      : `💎 VYKOUPENO! „${esc(r.title)}“ za ${fmtPts(r.price)} — skin je tvůj! 🏆`, "success");
     try { confettiBurst(); } catch (e) {}
     renderHeader(); if (_aucReload) _aucReload();
   } catch (e) { toast(e.message, "error"); }
@@ -2905,9 +3220,12 @@ async function adminCrews() {                              // admin přehled par
 async function adminAuctions() {
   const box = $("#adminContent");
   try {
-    const list = await api("/admin/auctions");
+    const [list, submissions] = await Promise.all([api("/admin/auctions"), api("/admin/auctions/submissions")]);
+    const pending = submissions.pending || [];
     window._adminAucList = list;
     box.innerHTML = `
+      <div class="section-title">🌾 Čeká na schválení (${pending.length})</div>
+      ${pending.length ? pending.map(adminMarketSubmissionRow).join("") : `<div class="empty" style="margin-bottom:18px">Žádné nové nabídky diváků.</div>`}
       <div class="panel" style="margin-bottom:18px">
         <div class="section-title">🔨 Vystavit aukci o skin</div>
         <div class="field"><label>Název skinu</label><input class="input" id="auc_name" placeholder="např. AK-47 Redline (FT)"></div>
@@ -2934,41 +3252,70 @@ async function adminAuctions() {
         </div>
         <div class="field-row" style="margin-top:8px">
           <div class="field"><label>💎 Kup teď cena (0 = bez)</label><input class="input" id="auc_buynow" type="number" min="0" value="0"></div>
+          <div class="field"><label>🌾 Prodávající (nick, prázdné = skin webu)</label><input class="input" id="auc_seller" maxlength="80" placeholder="např. divak123"></div>
         </div>
         <div style="display:flex;gap:18px;margin-top:10px;flex-wrap:wrap">
           <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:14px"><input type="checkbox" id="auc_subonly"> 💜 Jen pro suby</label>
           <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:14px"><input type="checkbox" id="auc_chat" checked> 💬 Hlásit příhozy do Kick chatu</label>
         </div>
         <button class="btn btn-primary" data-action="auction-create" style="margin-top:12px">🔨 Vystavit aukci</button>
-        <p class="form-hint" style="margin-top:8px">Escrow (přehození vrací 50 %), anti-snipe +30 s, kup-teď = instantní výhra, sub-only gate, chat hype. Vítěze + Kick nick uvidíš níž; skin pošli ručně.</p>
+        <p class="form-hint" style="margin-top:8px">Přehození vrací 100 % escrow. U komunitního skinu zůstane cena po prodeji zamčená; 95 % se připíše až po potvrzení převzetí, 5 % se spálí.</p>
       </div>
       <div class="section-title">Aukce (${list.length})</div>
       ${list.length ? list.map(adminAuctionRow).join("") : `<div class="empty">Zatím žádná aukce.</div>`}`;
   } catch (e) { box.innerHTML = `<div class="empty">${esc(e.message)}</div>`; }
 }
+function adminMarketSubmissionRow(s) {
+  const inspect = s.inspect_url ? `<a class="btn btn-ghost btn-sm" href="${esc(s.inspect_url)}" target="_blank" rel="noopener">Inspect</a>` : "";
+  const trade = s.steam_trade_url ? `<a class="btn btn-ghost btn-sm" href="${esc(s.steam_trade_url)}" target="_blank" rel="noopener">Trade URL</a>` : `<span class="faint" style="font-size:11px">bez Trade URL</span>`;
+  return `<div class="panel market-review-card">
+    ${s.image_url ? `<img src="${esc(s.image_url)}" alt="" class="market-review-img">` : `<div class="market-review-img market-review-empty">🌾</div>`}
+    <div class="market-review-body"><div><b>${esc(s.title)}</b> ${s.wear && MARKET_WEAR_LABELS[s.wear] ? _aucTag(`${esc(s.wear)} · ${esc(MARKET_WEAR_LABELS[s.wear])}${s.float_value != null ? ` · ${Number(s.float_value).toFixed(6)}` : ""}`, "#ffb423") : ""} ${_aucTag(`🌾 ${esc(s.username)}`, "#46d369")} ${_aucTag(`⏳ ${Math.round((s.duration_minutes || 1440) / 60)} h`, "#9fc6ff")}</div>
+      <div class="faint" style="font-size:12.5px;margin-top:3px">${s.sale_type === "auction" ? "Aukce · vyvolávací cena" : "Pevná cena"} <b>${fmtPts(s.price)} sedláků</b> · ${new Date(s.created_at).toLocaleString("cs-CZ")}</div>
+      ${s.description ? `<div style="font-size:12.5px;margin-top:6px">${esc(s.description)}</div>` : ""}
+      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:8px">${inspect}${trade}</div>
+    </div>
+    <div class="market-review-actions"><button class="btn btn-success btn-sm" data-action="market-approve" data-id="${s.id}">✓ Schválit a vystavit</button><button class="btn btn-danger btn-sm" data-action="market-reject" data-id="${s.id}">Zamítnout</button></div>
+  </div>`;
+}
+async function decideMarketSubmission(id, approve) {
+  if (!approve && !confirm("Zamítnout tuto nabídku skinu?")) return;
+  try {
+    await api(`/admin/auctions/submissions/${id}/${approve ? "approve" : "reject"}`, { method: "POST" });
+    toast(approve ? "✅ Nabídka schválena a vystavena na zvolenou dobu." : "Nabídka zamítnuta.", approve ? "success" : "info");
+    adminAuctions();
+  } catch (e) { toast(e.message, "error"); }
+}
 const _aucTag = (txt, color) => `<span style="display:inline-block;padding:2px 8px;border-radius:6px;font-size:10.5px;font-weight:800;letter-spacing:.03em;background:${color}22;color:${color};border:1px solid ${color}66;vertical-align:1px">${txt}</span>`;
 function adminAuctionRow(a) {
-  const st = { active: _aucTag("🟢 běží", "#38e08f"), ended: _aucTag("🏆 vydraženo", "#ffd34d"), cancelled: _aucTag("❌ zrušeno", "#ff5b6e") }[a.status] || esc(a.status);
+  const sold = a.status === "ended" && !!a.who;
+  const st = a.status === "ended" ? _aucTag(sold ? "🏆 vydraženo" : "⚪ nevydraženo", sold ? "#ffd34d" : "#9aa0b5")
+    : { active: _aucTag("🟢 běží", "#38e08f"), cancelled: _aucTag("❌ zrušeno", "#ff5b6e") }[a.status] || esc(a.status);
+  const escrow = a.delivery_status ? _aucTag(MARKET_DELIVERY_LABELS[a.delivery_status] || a.delivery_status,
+    a.delivery_status === "completed" ? "#38e08f" : a.delivery_status === "refunded" ? "#7fb3ff" : a.delivery_status === "disputed" ? "#ff5b6e" : "#ffb423") : "";
   const tags = [st, a.sub_only ? _aucTag("💜 sub", "#c4a6ff") : "", a.buy_now ? _aucTag(`💎 kup teď ${fmtPts(a.buy_now)}`, "#7fb3ff") : "",
+                a.seller ? _aucTag(`🌾 ${esc(a.seller)}`, "#46d369") : "",
+                escrow,
                 a.chat_announce ? "" : _aucTag("🔇 bez chatu", "#9aa0b5")].filter(Boolean).join(" ");
+  const unresolved = a.seller && sold && !["completed", "refunded"].includes(a.delivery_status);
   return `<div class="panel" style="margin-bottom:8px;padding:11px 14px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
     ${a.image_url ? `<img src="${esc(a.image_url)}" alt="" style="width:44px;height:44px;object-fit:contain;border-radius:8px;flex:0 0 auto">` : `<span style="font-size:26px;flex:0 0 auto">🔨</span>`}
     <div style="flex:1;min-width:200px">
       <div><b>${esc(a.title)}</b> ${tags}</div>
-      <div class="faint" style="font-size:12.5px;margin-top:2px">${a.current_bid ? `${fmtPts(a.current_bid)} 🌾 · ${a.bids_count} příhozů · ${a.status === "ended" ? "vítěz" : "vede"}: <b>${esc(a.who || "?")}</b>${a.who_kick ? ` (🟢 ${esc(a.who_kick)})` : ""}` : "zatím bez příhozu"}</div>
+      <div class="faint" style="font-size:12.5px;margin-top:2px">${a.current_bid ? `${fmtPts(a.current_bid)} 🌾 · ${a.bids_count} příhozů · ${a.status === "ended" ? "vítěz" : "vede"}: <b>${esc(a.who || "?")}</b>${a.who_kick ? ` (🟢 ${esc(a.who_kick)})` : ""}` : "zatím bez příhozu"}${a.seller_payout ? ` · prodávajícímu ${fmtPts(a.seller_payout)} · fee ${fmtPts(a.market_fee)}` : ""}${a.dispute_reason ? ` · <b style="color:#ff7b88">spor: ${esc(a.dispute_reason)}</b>` : ""}</div>
     </div>
     <div style="display:flex;gap:6px;flex:0 0 auto">
       ${a.status === "active"
         ? `<button class="btn btn-sm" data-action="auction-edit" data-id="${a.id}">✏️ Upravit</button>
            <button class="btn btn-danger btn-sm" data-action="auction-cancel" data-id="${a.id}">Zrušit</button>`
-        : `<button class="btn btn-danger btn-sm" data-action="auction-delete" data-id="${a.id}">🗑️ Smazat</button>`}
+        : `${a.seller && sold ? `<button class="btn btn-sm" data-action="market-chat" data-id="${a.id}">💬 Chat</button>` : ""}${unresolved ? `<button class="btn btn-success btn-sm" data-action="market-admin-resolve" data-result="release" data-id="${a.id}">✓ Vyplatit prodejce</button><button class="btn btn-danger btn-sm" data-action="market-admin-resolve" data-result="refund" data-id="${a.id}">↩ Refund kupujícího</button>` : `<button class="btn btn-danger btn-sm" data-action="auction-delete" data-id="${a.id}">🗑️ Smazat</button>`}`}
     </div>
   </div>`;
 }
 async function adminCreateAuction() {
   const title = ($("#auc_name").value || "").trim();
   if (!title) { toast("Zadej název skinu.", "error"); return; }
-  const body = { title, image_url: ($("#auc_image").value || "").trim(), start_bid: parseInt($("#auc_start").value || "100", 10), min_increment: parseInt($("#auc_inc").value || "50", 10), minutes: parseInt($("#auc_min").value || "10", 10), buy_now: parseInt($("#auc_buynow").value || "0", 10), sub_only: $("#auc_subonly").checked, chat_announce: $("#auc_chat").checked };
+  const body = { title, image_url: ($("#auc_image").value || "").trim(), start_bid: parseInt($("#auc_start").value || "100", 10), min_increment: parseInt($("#auc_inc").value || "50", 10), minutes: parseInt($("#auc_min").value || "10", 10), buy_now: parseInt($("#auc_buynow").value || "0", 10), seller_username: ($("#auc_seller").value || "").trim(), sub_only: $("#auc_subonly").checked, chat_announce: $("#auc_chat").checked };
   try { await api("/admin/auctions", { method: "POST", body }); toast("🔨 Aukce vystavena!", "success"); adminAuctions(); }
   catch (e) { toast(e.message, "error"); }
 }
@@ -3403,7 +3750,7 @@ async function loadFarm() {
       ${cta}${feedBtn}
       ${f.barn && f.barn.next_cost ? `<div style="margin:10px 0 0;text-align:center"><button class="btn btn-ghost" data-action="farm-barn" data-cost="${f.barn.next_cost}" title="Prestige stodoly: každý level = +1 slot na zvíře a +5 000 k dennímu stropu produkce (navždy)">🏠 Vylepšit stodolu na lvl ${f.barn.level + 1} (+1 slot · +5k denní strop) · ${fmtPts(f.barn.next_cost)}</button></div>`
         : f.barn && f.barn.level > 1 ? `<div class="faint" style="margin:10px 0 0;text-align:center;font-size:12px">🏆 Stodola na maximu (lvl ${f.barn.level})</div>` : ""}
-      <p class="stk-info">Sloty: <b>${f.n_slots}</b>${f.sub ? " (💜 sub +1)" : " · 💜 sub má +1 slot"}${f.barn && f.barn.level > 1 ? ` (🏠 stodola lvl ${f.barn.level})` : ""}${f.active_slots < f.n_slots ? " · sezónní patron slot skončil — prodej zvíře v něm před další koupí" : ""}. Produkční zvířata mají <b>max. level 10</b>. Pes se <b>nekrmí ani neleveluje</b> — rovnou přidává +10 % produkce a chrání před liškou. Krmení bere krmivo ze zahrádky, jinak sedláky.</p>
+      <p class="stk-info">Sloty: <b>${f.n_slots}</b>${f.sub ? " (💜 sub +1)" : " · 💜 sub má +1 slot"}${f.barn && f.barn.level > 1 ? ` (🏠 stodola lvl ${f.barn.level})` : ""}${f.active_slots < f.n_slots ? " · sezónní patron slot skončil — prodej zvíře v něm před další koupí" : ""}. Produkční zvířata mají <b>max. level 25</b>. Pes se <b>nekrmí ani neleveluje</b> — rovnou přidává +10 % produkce a chrání před liškou. Krmení bere krmivo ze zahrádky, jinak sedláky.</p>
       <div class="stk-shop-title">🐾 Zvířata k koupi</div>
       <div class="stk-shop">${shop}</div>
       <div class="stk-shop-title" style="margin-top:18px">🏆 Farmářský žebříček týdne</div>
@@ -3853,11 +4200,15 @@ async function claimQuest(key) {
 /* ---------- Partnerské/sponzorské odkazy (1× navždy / ⚡ flash okna) ---------- */
 let _partnerTimer = null;
 let _partnerRefreshTimer = null;
+let _partnerLoading = false;
 async function loadPartnerLinks() {
   const box = document.getElementById("partnersCard"); if (!box) return;
+  if (_partnerLoading) return;
+  _partnerLoading = true;
   if (_partnerTimer) { clearInterval(_partnerTimer); _partnerTimer = null; }
   try {
     const data = await api("/partner-links");
+    if (document.getElementById("partnersCard") !== box) return;
     const links = (data && data.links) || [];
     if (!links.length) { box.innerHTML = ""; return; }
     const flashActive = !!(data && data.flash_active);
@@ -3891,16 +4242,31 @@ async function loadPartnerLinks() {
       ${banner}
       <div class="quest-list">${links.map(row).join("")}</div>
     </div>`;
-    if (flashActive && endsAt) {
+    if (flashActive && endsAt > Date.now()) {
+      let timer = null;
       const tick = () => {
         const left = endsAt - Date.now();
-        if (left <= 0) { if (_partnerTimer) { clearInterval(_partnerTimer); _partnerTimer = null; } loadPartnerLinks(); refreshBonusDot(); return; }
+        if (left <= 0) {
+          clearInterval(timer);
+          if (_partnerTimer === timer) _partnerTimer = null;
+          loadPartnerLinks(); refreshBonusDot(); return;
+        }
         const el = document.getElementById("flashCountdown");
         if (el) el.textContent = "zbývá " + Math.floor(left / 60000) + ":" + String(Math.floor((left % 60000) / 1000)).padStart(2, "0");
       };
-      tick(); _partnerTimer = setInterval(tick, 1000);
+      timer = setInterval(tick, 1000); _partnerTimer = timer; tick();
     }
   } catch (e) { box.innerHTML = ""; }
+  finally { _partnerLoading = false; }
+}
+async function adminResolveMarket(id, result) {
+  const label = result === "release" ? "uvolnit escrow prodávajícímu" : "vrátit kupujícímu cenu i jeho vstupní poplatek";
+  if (!confirm(`Opravdu ${label}? Tato akce je nevratná.`)) return;
+  try {
+    await api(`/admin/auctions/${id}/market-${result}`, { method: "POST" });
+    toast(result === "release" ? "✅ Escrow vyplaceno prodávajícímu." : "↩️ Kupující byl refundován.", "success");
+    adminAuctions();
+  } catch (e) { toast(e.message, "error"); }
 }
 async function claimPartnerLink(id, url) {
   if (url) { try { window.open(url, "_blank", "noopener"); } catch (e) {} }   // otevři sponzora (user gesture)
@@ -3924,7 +4290,6 @@ async function refreshBonusDot() {
   } catch (e) { return; }
   renderHeader();
   renderOnbCard();
-  renderQuickCard();
 }
 
 /* ---------- Onboarding checklist pro nováčky (≤14 dní, homepage) ---------- */
@@ -3953,18 +4318,6 @@ function renderOnbCard() {
       ? `<span class="onb-step onb-done">✓ ${s.txt}</span>`
       : `<a class="onb-step" href="${s.href}">${s.icon} ${s.txt} →</a>`).join("")}</div>
   </div>`;
-}
-function renderQuickCard() {
-  const box = document.getElementById("quickCard"); if (!box) return;
-  const c = claimsData, farmAccess = state.user && (state.user.role === "admin" || state.user.farm_public);
-  if (!state.user || !c) { box.innerHTML = ""; return; }
-  const actions = [];
-  if (c.garden > 0) actions.push(`<button class="quick-action" data-action="grd-harvest-all">🌾 Sklidit vše <b>${c.garden}×</b></button>`);
-  if (farmAccess && c.farm_ready > 0) actions.push(`<button class="quick-action" data-action="farm-collect-all">🥚 Sebrat vše <b>${c.farm_ready}×</b></button>`);
-  if (farmAccess && c.farm_hungry > 0) actions.push(`<button class="quick-action" data-action="farm-feed-all">🐔 Nakrmit vše <b>${c.farm_hungry}×</b></button>`);
-  if (c.daily || c.wheel) actions.push(`<a class="quick-action" href="#/bonusy">🎁 Vyzvednout bonusy</a>`);
-  if (c.quests > 0) actions.push(`<a class="quick-action" href="#/ukoly">📋 Vyzvednout úkoly <b>${c.quests}×</b></a>`);
-  box.innerHTML = actions.length ? `<div class="panel quick-panel"><div class="section-title">⚡ Rychlé akce</div><div class="quick-actions">${actions.join("")}</div></div>` : "";
 }
 async function loadWeeklySummary() {
   const box = document.getElementById("weeklyCard"); if (!box || !state.user) return;
@@ -4046,8 +4399,8 @@ async function doKickConnect() {
 async function doLogout() {
   // Odregistrovat push subscription před odhlášením (sdílené zařízení nesmí dál dostávat notifikace)
   try {
-    const reg = await navigator.serviceWorker.ready;
-    const sub = await reg.pushManager.getSubscription();
+    const reg = await navigator.serviceWorker.getRegistration();
+    const sub = reg ? await reg.pushManager.getSubscription() : null;
     if (sub) {
       try { await api("/push/unsubscribe", { method: "POST", body: sub.toJSON() }); } catch (_) {}
       await sub.unsubscribe();
@@ -4055,7 +4408,7 @@ async function doLogout() {
     }
   } catch (_) {}
   try { await api("/auth/logout", { method: "POST" }); } catch (e) {}
-  state.user = null; toast("Odhlášeno.", "info"); navigate("shop");
+  state.user = null; clearInterval(window._banTimeoutTimer); document.body.classList.remove("account-banned"); toast("Odhlášeno.", "info"); navigate("shop");
 }
 
 /* ============================================================
@@ -4076,7 +4429,7 @@ async function pageAdmin() {
   if (!tabs.some(([k]) => k === adminState.tab)) adminState.tab = tabs.length ? tabs[0][0] : null;
   const ROLE_LBL = { broadcaster: "Broadcaster", predictor: "Predikce", mod: "Moderátor" };
   const lbl = state.user.role === "admin" ? "Admin panel" : "Panel — " + (ROLE_LBL[state.user.role] || "Tým");
-  const maintBanner = state.user.role === "admin" ? `<div id="maintBanner" class="maint-banner"></div><div id="farmLaunchBanner" class="maint-banner"></div>` : "";
+  const maintBanner = state.user.role === "admin" ? `<div id="maintBanner" class="maint-banner"></div>` : "";
   view.innerHTML = `
     <div class="page-head"><h1>🛠️ ${lbl}</h1><p class="muted">Vidíš jen sekce, na které máš oprávnění.</p></div>
     ${maintBanner}
@@ -4086,7 +4439,7 @@ async function pageAdmin() {
     </div>
     <div id="adminContent"></div>`;
   loadAdminStats();
-  if (state.user.role === "admin") { loadMaintBanner(); loadFarmLaunchBanner(); }
+  if (state.user.role === "admin") loadMaintBanner();
   if (adminState.tab) renderAdminTab(adminState.tab);
 }
 async function loadAdminStats() {
@@ -4297,36 +4650,6 @@ async function loadMaintBanner() {
         </div>`;
     }
   } catch (e) { box.innerHTML = ""; }
-}
-async function loadFarmLaunchBanner() {
-  const box = document.getElementById("farmLaunchBanner"); if (!box) return;
-  try {
-    const s = await api("/admin/farm-launch");
-    box.className = "maint-banner" + (s.public ? " on" : "");
-    if (s.public) {
-      box.innerHTML = `
-        <div class="mb-info"><span class="mb-ico">🚜</span>
-          <div><div class="mb-title">Statek: <b>VEŘEJNÝ</b>${s.golden_until ? ` · 🌟 Zlatá horečka do ${maintHHMM(s.golden_until)} (${new Date(s.golden_until).toLocaleDateString("cs-CZ")})` : ""}</div>
-            <div class="mb-sub">Vidí ho všichni přihlášení. Novinka publikována, bot oznámil horečku v chatu.</div></div></div>
-        <div class="mb-actions"><button class="btn btn-ghost btn-sm" data-action="farm-launch-off">🔒 Vrátit za gate</button></div>`;
-    } else {
-      box.innerHTML = `
-        <div class="mb-info"><span class="mb-ico">🚜</span>
-          <div><div class="mb-title">Statek: <b>za gate</b> (vidí jen admin)</div>
-            <div class="mb-sub">Launch tlačítko naráz: otevře statek všem + spustí 🌟 Zlatou horečku na 7 dní (bot announce) + publikuje novinku.</div></div></div>
-        <div class="mb-actions"><button class="btn btn-success btn-sm" data-action="farm-launch-on">🚀 SPUSTIT STATEK PRO VŠECHNY</button></div>`;
-    }
-  } catch (e) { box.innerHTML = ""; }
-}
-async function doFarmLaunch(on) {
-  if (on && !confirm("Spustit statek pro VŠECHNY? Naráz: otevře gate + Zlatá horečka 7 dní + bot announce + novinka.")) return;
-  if (!on && !confirm("Vrátit statek za gate (jen admin)? Horečka a novinka zůstanou.")) return;
-  try {
-    await api("/admin/farm-launch?to=" + (on ? "on" : "off"), { method: "POST" });
-    toast(on ? "🚀 STATEK SPUŠTĚN PRO VŠECHNY! Horečka běží, novinka venku." : "🔒 Statek zpět za gate.", on ? "success" : "info");
-    try { if (on) confettiBurst(); } catch (e) {}
-    loadFarmLaunchBanner();
-  } catch (e) { toast(e.message, "error"); }
 }
 async function doMaintOnTime() {
   const v = (document.getElementById("maintUntil")?.value || "").trim().replace(/\s/g, "");
@@ -5033,7 +5356,7 @@ async function searchSkins() {
   if (q.length < 2) { box.innerHTML = `<div class="faint" style="padding:8px">Napiš aspoň 2 znaky…</div>`; return; }
   box.innerHTML = `<div class="faint" style="padding:8px">⏳ Hledám…</div>`;
   try {
-    const r = await api("/admin/products/skin-search", { method: "POST", body: { query: q } });
+    const r = await api(_imgPrefix === "market" ? "/auctions/skin-search" : "/admin/products/skin-search", { method: "POST", body: { query: q } });
     const res = r.results || [];
     if (!res.length) { box.innerHTML = `<div class="faint" style="padding:8px">Nic nenalezeno. Zkus jinak (např. jen „asiimov”, „karambit”).</div>`; return; }
     box.innerHTML = res.map((s) => `
@@ -5109,15 +5432,16 @@ async function adminUsers() {
   try {
     const list = await api("/admin/users?q=" + encodeURIComponent(adminState.userQuery) + "&sort=" + adminState.userSort);
     const isAdmin = state.user && state.user.role === "admin";   // IP + změnu role vidí/dělá jen admin
+    const isMod = state.user && state.user.role === "mod";
     box.innerHTML = `
       <form class="toolbar" data-submit="user-search">
         <input class="input grow" id="userSearch" placeholder="🔍 Hledat podle jména…" value="${esc(adminState.userQuery)}">
         <button class="btn btn-ghost" type="submit">Hledat</button>
         <button type="button" class="btn btn-ghost${adminState.userSort === "points" ? " on" : ""}" data-action="user-sort" data-sort="points" title="Seřadit podle zůstatku bodů">Dle bodů</button>
         <button type="button" class="btn btn-ghost${adminState.userSort === "level" ? " on" : ""}" data-action="user-sort" data-sort="level" title="Seřadit podle úrovně (nafarmeno XP) – kdo má nejvyšší level">Dle úrovně ⭐</button>
-        <a class="btn btn-ghost" href="/api/admin/export/users.csv" title="Export všech uživatelů: zůstatek, utraceno, nasbíráno, registrace">📥 CSV</a>
+        ${isMod ? "" : `<a class="btn btn-ghost" href="/api/admin/export/users.csv" title="Export všech uživatelů: zůstatek, utraceno, nasbíráno, registrace">📥 CSV</a>`}
       </form>
-      <div class="table-wrap"><table class="tbl"><thead><tr><th>Uživatel</th><th>${isAdmin ? "Kick / IP" : "Kick"}</th><th>Role</th><th title="Úroveň z celkem nafarmeného (earned_total). Gambling se nepočítá, placené/gift suby jen z 50 %.">Úroveň</th><th>Body</th><th>Upravit body</th><th>Stav</th></tr></thead><tbody>
+      <div class="table-wrap"><table class="tbl"><thead><tr><th>Uživatel</th><th>${isAdmin ? "Kick / IP" : "Kick"}</th><th>Role</th><th title="Úroveň z celkem nafarmeného (earned_total). Gambling se nepočítá, placené/gift suby jen z 50 %.">Úroveň</th><th>Body</th>${isMod ? "" : "<th>Upravit body</th>"}<th>Stav</th></tr></thead><tbody>
       ${list.map((u) => `<tr>
         <td><div style="display:flex;align-items:center;gap:9px">${avatarHTML(u.username, u.avatar_url)}<b>${esc(u.username)}</b></div>${isAdmin ? `<div class="faint" style="font-size:11px;margin-top:2px" title="ID účtu">🆔 ID ${u.id}</div>` : ""}${userAdminTools(u, isAdmin)}</td>
         <td class="faint" style="font-size:12.5px">${u.kick_username ? "🟢 " + esc(u.kick_username) : (isAdmin ? esc(u.email || "—") : "—")}${isAdmin ? "<br>" + (u.last_ip ? `<span class="code-pill">${esc(u.last_ip)}</span>${u.ip_count > 1 ? ` <span class="faint">(${u.ip_count} IP)</span>` : ""}` : "<span class='faint'>bez IP</span>") : ""}</td>
@@ -5125,21 +5449,21 @@ async function adminUsers() {
           ${[["user", "user"], ["sub", "sub"], ["vip", "vip"], ["mod", "mod"], ["predictor", "🎯 predictor (jen predikce)"], ["broadcaster", "broadcaster"], ["admin", "admin"]].map(([r, l]) => `<option value="${r}" ${u.role === r ? "selected" : ""}>${l}</option>`).join("")}
         </select>
         <div style="display:flex;gap:6px;margin-top:7px;flex-wrap:wrap">
-          ${[["is_sub", "SUB"], ["is_vip", "VIP"], ["is_og", "OG"], ["early_access", "🎫 Early"]].map(([key, lbl]) => `<button type="button" data-action="user-flag-toggle" data-id="${u.id}" data-flag="${key}" class="flag-chip${u[key] ? " on" : ""}" title="${key === "early_access" ? "Early access – vidí Crew + Statek" : "Odznak " + lbl} – klikni pro zapnutí/vypnutí">${lbl}</button>`).join("")}
+          ${[["is_sub", "SUB"], ["is_vip", "VIP"], ["is_og", "OG"]].map(([key, lbl]) => `<button type="button" data-action="user-flag-toggle" data-id="${u.id}" data-flag="${key}" class="flag-chip${u[key] ? " on" : ""}" title="Odznak ${lbl} – klikni pro zapnutí/vypnutí">${lbl}</button>`).join("")}
         </div>` : roleBadge(u.role) + " " + subVipBadges(u)}</td>
         <td title="Nafarmeno celkem (XP). Do dalšího levelu chybí ${Number(Math.max(0, (u.level_span || 0) - (u.level_into || 0))).toLocaleString("cs-CZ")} XP."><b style="color:var(--accent);font-size:13px;white-space:nowrap">⭐ ${u.level || 1}</b><br><span class="faint" style="font-size:11px;white-space:nowrap">${Number(u.earned_total || 0).toLocaleString("cs-CZ")} XP</span></td>
         <td><b style="color:var(--kick)">${fmtPts(u.points)}</b></td>
-        <td><div style="display:flex;gap:6px;align-items:center">
+        ${isMod ? "" : `<td><div style="display:flex;gap:6px;align-items:center">
           <input class="input" style="width:84px;padding:6px 8px" type="number" id="pts_${u.id}" placeholder="±body">
           <button class="btn btn-success btn-sm" data-action="user-points" data-id="${u.id}" data-sign="1" data-name="${esc(u.username)}">＋</button>
           <button class="btn btn-danger btn-sm" data-action="user-points" data-id="${u.id}" data-sign="-1" data-name="${esc(u.username)}">－</button>
-        </div></td>
+        </div></td>`}
         <td><div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
-          ${u.timeout_until ? `<span style="background:#3a2e0a;color:#ffd25a;border:1px solid #6b5512;border-radius:999px;padding:2px 7px;font-size:11px;font-weight:800;white-space:nowrap" title="V timeoutu do ${esc(String(u.timeout_until).slice(0, 16).replace("T", " "))}">⏳ TIMEOUT</span>` : ""}
-          ${u.role === "admin" ? `<span class="faint">—</span>` : u.banned
+          ${u.timeout_until ? `<span style="background:#3a2e0a;color:#ffd25a;border:1px solid #6b5512;border-radius:999px;padding:2px 7px;font-size:11px;font-weight:800;white-space:nowrap" title="V timeoutu do ${esc(String(u.timeout_until).slice(0, 16).replace("T", " "))} · ${esc(u.timeout_reason || "bez důvodu")}">⏳ TIMEOUT</span>` : ""}
+          ${isMod ? "" : (u.role === "admin" ? `<span class="faint">—</span>` : u.banned
             ? `<button class="btn btn-ghost btn-sm" data-action="unban-user" data-id="${u.id}">Odbanovat</button>`
-            : `<button class="btn btn-danger btn-sm" data-action="ban-user" data-id="${u.id}">Ban</button>`}
-          <button class="btn btn-ghost btn-sm" data-action="user-ticket" data-name="${esc(u.kick_username || u.username)}" title="Vytvořit ticket pro ${esc(u.username)}">🎫</button>
+            : `<button class="btn btn-danger btn-sm" data-action="ban-user" data-id="${u.id}">Ban</button>`)}
+          ${isMod ? "" : `<button class="btn btn-ghost btn-sm" data-action="user-ticket" data-name="${esc(u.kick_username || u.username)}" title="Vytvořit ticket pro ${esc(u.username)}">🎫</button>
           <select class="select" style="width:120px;padding:6px 8px" data-action="user-gamble" data-id="${u.id}" data-name="${esc(u.username)}" title="Zablokovat/odemknout sázení (self-exclusion)">
             <option value="">🔒 Sázky…</option>
             <option value="1d">Blok 1 den</option>
@@ -5147,13 +5471,14 @@ async function adminUsers() {
             <option value="30d">Blok 30 dní</option>
             <option value="perm">Blok napořád</option>
             <option value="off">Odemknout</option>
-          </select>
+          </select>`}
           <select class="select" style="width:130px;padding:6px 8px" data-action="user-timeout" data-id="${u.id}" data-name="${esc(u.username)}" title="Timeout: dočasně zablokovat web i Kick chat">
             <option value="">⏳ Timeout…</option>
             <option value="5m">Timeout 5 min</option>
             <option value="15m">Timeout 15 min</option>
             <option value="1h">Timeout 1 h</option>
             <option value="6h">Timeout 6 h</option>
+            <option value="12h">Timeout 12 h</option>
             <option value="24h">Timeout 24 h</option>
             <option value="7d">Timeout 7 dní</option>
             <option value="off">Zrušit timeout</option>
@@ -5982,6 +6307,52 @@ function acUserRow(u) {
   </div>`;
 }
 
+function automationReportHTML(report) {
+  const rows = (report && report.users) || [];
+  const reaction = (ms) => ms < 1000 ? `${ms} ms` : ms < 60000 ? `${(ms / 1000).toFixed(1)} s` : `${(ms / 60000).toFixed(1)} min`;
+  const level = (item) => {
+    if (item.level === "high") return '<span class="badge badge-admin">VYSOKÉ</span>';
+    if (item.level === "watch") return '<span class="badge badge-vip">SLEDOVAT</span>';
+    return '<span class="badge">OK</span>';
+  };
+  const body = rows.length ? rows.map((item) => {
+    const u = item.user;
+    const reasons = item.reasons.length
+      ? item.reasons.map((reason) => `<span class="code-pill">+${reason.weight} · ${esc(reason.label)}</span>`).join(" ")
+      : '<span class="faint">Bez silného signálu</span>';
+    const linked = item.related_accounts.length
+      ? item.related_accounts.map((account) => `${uLink(account.username)} <span class="faint">(IP)</span>`).join(", ")
+      : '<span class="faint">žádná shoda</span>';
+    const recent = item.recent.map((event) => `
+      <div class="row-between" style="gap:12px;padding:4px 0">
+        <span>${event.source === "garden" ? "🌱 zahrádka" : "🐔 statek"} · ${event.units}× ${event.items.map(esc).join(", ")}</span>
+        <span class="faint">${reaction(event.reaction_ms)} · ${timeAgo(event.acted_at)}</span>
+      </div>`).join("");
+    return `<tr>
+      <td>${uLink(u.username)} ${roleBadge(u.role)}${u.banned ? ' <span class="badge badge-admin">BAN</span>' : ""}</td>
+      <td><b>${item.score}/100</b> ${level(item)}</td>
+      <td>${reasons}<div class="faint" style="margin-top:5px">${item.batches} batchů · ${item.fast_5s} do 5 s${item.max_gap_hours == null ? "" : ` · max pauza ${item.max_gap_hours} h`}</div></td>
+      <td>${linked}</td>
+      <td><span class="faint">${item.last_action ? timeAgo(item.last_action) : "—"}</span>
+        <details style="margin-top:5px"><summary>Poslední reakce</summary><div style="min-width:270px">${recent}</div></details>
+      </td>
+    </tr>`;
+  }).join("") : `<tr><td colspan="5"><div class="empty">Zatím nejsou žádná data. Sběr začne první úspěšnou sklizní po nasazení.</div></td></tr>`;
+  return `
+    <div class="section-title">🤖 Anti-automation
+      <span class="badge badge-vip">AUDIT ONLY</span>
+      <span class="faint" style="font-size:12px;font-weight:400">— nikoho automaticky nebanuje ani neomezuje</span>
+    </div>
+    <div class="stat-grid">
+      ${statBox(report.events || 0, "Sklizených jednotek / 7 dní")}
+      ${statBox(report.accounts || 0, "Sledovaných účtů")}
+      ${statBox(report.flagged || 0, "Účtů k prověření", report.flagged ? "warn" : "accent")}
+      ${statBox(report.since ? timeAgo(report.since) : "čeká", "Sběr dat od")}
+    </div>
+    <div class="panel gold" style="margin-bottom:12px">Skóre stojí na opakovaných reakcích po dozrání a provozu bez delší pauzy. Shoda IP je pouze informační a sama skóre nezvyšuje.</div>
+    <div class="table-wrap"><table class="tbl"><thead><tr><th>Hráč</th><th>Skóre</th><th>Důvody</th><th>Účty na stejné IP</th><th>Aktivita</th></tr></thead><tbody>${body}</tbody></table></div>`;
+}
+
 function ruleRowHTML(r) {
   const sev = { CRITICAL: "sev-crit", HIGH: "sev-high", MEDIUM: "sev-med", LOW: "sev-low" }[r.severity] || "sev-low";
   return `<div class="ac-rule ${r.enabled ? "" : "off"}">
@@ -6164,8 +6535,9 @@ async function adminSecurity() {
     const pfQS = `q=${encodeURIComponent(adminState.pfQuery)}&flow=${adminState.pfFlow}`
       + `&min_amount=${adminState.pfMin}&reason=${encodeURIComponent(adminState.pfReason)}`
       + `&limit=${adminState.pfLimit}&offset=${adminState.pfOffset}`;
-    const [ac, sessions, logins, rules, audit, ipbans, traffic, gifts, pf, funnel, giftReqs] = await Promise.all([
+    const [ac, automation, sessions, logins, rules, audit, ipbans, traffic, gifts, pf, funnel, giftReqs] = await Promise.all([
       api("/admin/security/anticheat"),
+      api("/admin/security/automation"),
       api("/admin/security/sessions"),
       api("/admin/security/logins?" + loginsQS),
       api("/admin/security/rules"),
@@ -6336,7 +6708,8 @@ async function adminSecurity() {
 
       ${pills}
       <div class="sec-pane${adminState.secTab === "anticheat" ? " active" : ""}" data-pane="anticheat">
-      <div class="section-title">🚨 Anticheat detekce <span class="faint" style="font-size:12px;font-weight:400">— VPN detekce proxycheck: <b style="color:${ac.iprep_enabled ? "#46d369" : "#999"}">${ac.iprep_enabled ? "ZAP ✓" : "VYP"}</b></span></div>
+      ${automationReportHTML(automation)}
+      <div class="section-title" style="margin-top:26px">🚨 Ostatní anticheat detekce <span class="faint" style="font-size:12px;font-weight:400">— VPN detekce proxycheck: <b style="color:${ac.iprep_enabled ? "#46d369" : "#999"}">${ac.iprep_enabled ? "ZAP ✓" : "VYP"}</b></span></div>
       ${alerts}
       ${funnelHtml}
 
@@ -6931,11 +7304,69 @@ async function endDrop(id) {
 /* ============================================================
    MODAL
 ============================================================ */
+let _turnstileLoad = null;
+let _automationCheckpointOpen = false;
+
+function loadTurnstile() {
+  if (window.turnstile) return Promise.resolve(window.turnstile);
+  if (_turnstileLoad) return _turnstileLoad;
+  _turnstileLoad = new Promise((resolve, reject) => {
+    const script = document.createElement("script");
+    script.src = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
+    script.async = true;
+    script.defer = true;
+    script.onload = () => window.turnstile ? resolve(window.turnstile) : reject(new Error("Turnstile se nenačetl."));
+    script.onerror = () => reject(new Error("Turnstile se nenačetl."));
+    document.head.appendChild(script);
+  });
+  return _turnstileLoad;
+}
+
+async function openAutomationCheckpoint(info) {
+  if (_automationCheckpointOpen || !info.site_key) return;
+  _automationCheckpointOpen = true;
+  openModal(`<div class="wg"><h2 class="wg-title">🛡️ Kontrola farmáře</h2>
+    <p class="wg-sub">Než vyzvedneš další úrodu, potvrď prosím, že Zahrádku nebo Statek ovládáš ty.</p>
+    <div id="farmTurnstile" style="display:flex;justify-content:center;min-height:70px"></div>
+    <p id="farmTurnstileError" class="muted" style="margin-top:10px"></p></div>`, "modal-wg");
+  try {
+    const turnstile = await loadTurnstile();
+    if (!$("#farmTurnstile")) return;
+    turnstile.render("#farmTurnstile", {
+      sitekey: info.site_key,
+      action: info.action || "farm_checkpoint",
+      theme: "dark",
+      callback: async (token) => {
+        try {
+          await api("/automation/checkpoint", { method: "POST", body: { token } });
+          closeModal();
+          toast("Kontrola hotová. Akci můžeš zopakovat.", "success");
+        } catch (e) {
+          const error = $("#farmTurnstileError");
+          if (error) error.textContent = e.message;
+          turnstile.reset();
+        }
+      },
+      "error-callback": () => {
+        const error = $("#farmTurnstileError");
+        if (error) error.textContent = "Kontrola se nenačetla. Obnov stránku a zkus to znovu.";
+      },
+    });
+  } catch (e) {
+    const error = $("#farmTurnstileError");
+    if (error) error.textContent = e.message;
+  }
+}
+
 function openModal(html, extraClass = "") {
   $("#modalRoot").innerHTML = `<div class="modal-backdrop" data-action="close-modal"></div><div class="modal ${extraClass}"><button class="modal-close" data-action="close-modal">✕</button>${html}</div>`;
   $("#modalRoot").classList.add("open");
 }
-function closeModal() { $("#modalRoot").classList.remove("open"); $("#modalRoot").innerHTML = ""; }
+function closeModal() {
+  $("#modalRoot").classList.remove("open");
+  $("#modalRoot").innerHTML = "";
+  _automationCheckpointOpen = false;
+}
 
 function farmGuide() {
   const steps = [
@@ -7020,8 +7451,6 @@ function handleAction(action, el) {
     case "farm-contract": farmContractClaim(); break;
     case "farm-barn": farmBarnUpgrade(parseInt(el.dataset.cost, 10)); break;
     case "farm-event": farmEvent(parseInt(el.dataset.days, 10)); break;
-    case "farm-launch-on": doFarmLaunch(true); break;
-    case "farm-launch-off": doFarmLaunch(false); break;
     case "farm-guide": farmGuide(); break;
     case "decor-buy": buyDecor(el.dataset.key); break;
     case "claim-partner": claimPartnerLink(el.dataset.id, el.dataset.url); break;
@@ -7030,6 +7459,15 @@ function handleAction(action, el) {
     case "cos-equip": equipCosmetic(el.dataset.key); break;
     case "dm-send": dmSend(el.dataset.mode, el.dataset.id); break;
     case "support-new": openSupportCreate(); break;
+    case "market-sell": state.user ? openMarketSellForm() : openConnect(); break;
+    case "market-chat": openMarketChat(id); break;
+    case "market-chat-send": sendMarketChat(id); break;
+    case "market-delivery": updateMarketDelivery(id, el.dataset.step); break;
+    case "market-dispute": disputeMarketDelivery(id); break;
+    case "market-admin-resolve": adminResolveMarket(id, el.dataset.result); break;
+    case "market-filter-reset": Object.assign(marketFilters, { query: "", saleType: "all", wear: "all", min: "", max: "" }); document.querySelectorAll("[data-market-filter]").forEach((f) => { f.value = marketFilters[f.dataset.marketFilter]; }); renderMarketListings(); break;
+    case "market-approve": decideMarketSubmission(id, true); break;
+    case "market-reject": decideMarketSubmission(id, false); break;
     case "support-category": openSupportCreateForm(el.dataset.category); break;
     case "support-create": createSupportTicket(); break;
     case "support-reply": replySupportTicket(id); break;
@@ -7198,7 +7636,7 @@ function handleAction(action, el) {
     case "pred-bet": predBet(parseInt(el.dataset.pid, 10), parseInt(el.dataset.oid, 10)); break;
     case "pred-lock": predLock(parseInt(el.dataset.pid, 10)); break;
     case "auction-bid": bidAuction(parseInt(el.dataset.id, 10)); break;
-    case "auction-buynow": buyNowAuction(parseInt(el.dataset.id, 10)); break;
+    case "auction-buynow": buyNowAuction(parseInt(el.dataset.id, 10), el.dataset.fixed === "1"); break;
     case "auction-amt": aucSetAmt(parseInt(el.dataset.id, 10), parseInt(el.dataset.amt, 10)); break;
     case "auction-create": adminCreateAuction(); break;
     case "auction-cancel": adminCancelAuction(parseInt(el.dataset.id, 10)); break;
@@ -7304,7 +7742,7 @@ document.addEventListener("click", (e) => {
 
 /* Service worker pro Web Push (notifikace do mobilu). Registruje se 1× na pozadí. */
 if ("serviceWorker" in navigator) {
-  window.addEventListener("load", () => { navigator.serviceWorker.register("/sw.js?v=2026071263").catch(() => {}); });
+  window.addEventListener("load", () => { navigator.serviceWorker.register("/sw.js?v=2026071293").catch(() => {}); });
 }
 
 document.addEventListener("change", (e) => {
@@ -7331,13 +7769,21 @@ async function adminGambleBlock(id, dur, name) {
 }
 
 async function adminTimeout(id, dur, name) {
-  const lbl = { "5m": "5 min", "15m": "15 min", "1h": "1 hodina", "6h": "6 hodin", "24h": "24 hodin", "7d": "7 dní", "off": "ZRUŠIT" }[dur];
+  const lbl = { "5m": "5 min", "15m": "15 min", "1h": "1 hodina", "6h": "6 hodin", "12h": "12 hodin", "24h": "24 hodin", "7d": "7 dní", "off": "ZRUŠIT" }[dur];
+  let reason = null;
+  if (dur !== "off") {
+    const entered = prompt(`Důvod timeoutu pro ${name}:`);
+    if (entered === null) return;
+    reason = entered.trim();
+    if (!reason) { toast("Důvod timeoutu je povinný.", "error"); return; }
+    if (reason.length > 200) { toast("Důvod může mít maximálně 200 znaků.", "error"); return; }
+  }
   const msg = dur === "off"
     ? `Zrušit timeout uživateli ${name}?`
-    : `Dát timeout (${lbl}) uživateli ${name}?\n\nPo celou dobu nebude moct používat web (žádné farmění/sázky/shop) ani psát do Kick chatu.`;
+    : `Dát timeout (${lbl}) uživateli ${name}?\n\nDůvod: ${reason}\n\nPo celou dobu nebude moct používat web (žádné farmění/sázky/shop) ani psát do Kick chatu.`;
   if (!confirm(msg)) return;
   try {
-    const r = await api(`/admin/users/${id}/timeout`, { method: "POST", body: { duration: dur } });
+    const r = await api(`/admin/users/${id}/timeout`, { method: "POST", body: { duration: dur, reason } });
     const k = r.kick || {};
     const kickNote = k.ok ? " + Kick chat" : (k.skipped ? " (bez Kicku)" : " (Kick chat selhal)");
     toast(dur === "off" ? "Timeout zrušen" : `Timeout ${lbl} ⏳${kickNote}`, "success");
@@ -7354,7 +7800,7 @@ document.addEventListener("submit", (e) => {
   const form = e.target.closest("[data-submit]");
   if (!form) return;
   e.preventDefault();
-  const map = { "kick-connect": doKickConnect, redeem: doRedeem, "claim-drop": doClaimDrop, "save-product": saveProduct, "user-search": () => { adminState.userQuery = $("#userSearch").value.trim(); adminUsers(); }, "gen-code": genCodes, "create-drop": createDrop, "bot-send": botSend, "bot-sim-chat": botSimChat, "game-create": createGame, "ip-ban": banIp, "pred-create": createPrediction, "gift": doGift, "news-create": createNote, "mod-apply": doModApply, "save-auction": saveAuction };
+  const map = { "kick-connect": doKickConnect, redeem: doRedeem, "claim-drop": doClaimDrop, "save-product": saveProduct, "market-submit": submitMarketSkin, "user-search": () => { adminState.userQuery = $("#userSearch").value.trim(); adminUsers(); }, "gen-code": genCodes, "create-drop": createDrop, "bot-send": botSend, "bot-sim-chat": botSimChat, "game-create": createGame, "ip-ban": banIp, "pred-create": createPrediction, "gift": doGift, "news-create": createNote, "mod-apply": doModApply, "save-auction": saveAuction };
   const fn = map[form.dataset.submit]; if (fn) fn();
 });
 
@@ -8563,10 +9009,11 @@ function nudgeOvertake(raw) {
 let _nxOn = false, _nxEl = null;
 function _nxInit() {
   _nxPoll();
-  if (!window._nxTimer) window._nxTimer = setInterval(_nxPoll, 45000);
+  if (!window._nxTimer) window._nxTimer = setInterval(_nxPoll, 60000);
 }
 function _nxKill() { _nxOn = false; if (_nxEl) { _nxEl.remove(); _nxEl = null; } }
 async function _nxPoll() {
+  if (document.hidden) return;
   if (state.user && state.user.egg_found) { _nxKill(); return; }       // už má → neukazuj
   let active = false;
   try { active = !!(await api("/nx/state")).active; } catch (e) { return; }
@@ -8619,6 +9066,7 @@ async function _nxClaim(word) {
 }
 async function init() {
   try { const r = await api("/auth/me"); state.user = r.user; } catch (e) { state.user = null; }
+  if (accountBlocked()) { renderBannedPage(); return; }
   if (state.user && state.user.pending_rankup) setTimeout(() => celebrateRankup(state.user.pending_rankup), 600);
   if (state.user && state.user.pending_overtake) setTimeout(() => nudgeOvertake(state.user.pending_overtake), 900);
   if (state.user) {
@@ -8629,7 +9077,7 @@ async function init() {
     adminState.tab = "bot";
     setTimeout(() => toast("✅ Bot připojen přes Kick (chat:write).", "success"), 300);
   }
-  if (state.user) await loadCrewTags(true);   // crew [TAG] mapa pro globální zobrazení u nicků
+  if (state.user) loadCrewTags(true).then(renderHeader);   // kosmetické [TAG] nesmí blokovat první render
   if (!location.hash) location.hash = "#/shop";
   render();
   refreshBonusDot();   // rozsvítí tečku na „Bonusy", pokud je co vyzvednout
@@ -8637,8 +9085,8 @@ async function init() {
     localStorage.setItem("zurys_welcome_v1", "1");   // uvítací průvodce 1× (nováčci + stávající po redesignu); znovu z patičky
     setTimeout(welcomeGuide, 700);
   }
-  if (!window._dmBadgeTimer) window._dmBadgeTimer = setInterval(pollDmBadge, 20000);   // live ✉️ badge (šetrný interval)
-  if (!window._notifBadgeTimer) window._notifBadgeTimer = setInterval(pollNotifBadge, 20000);   // live 🔔 badge
+  if (!window._dmBadgeTimer) window._dmBadgeTimer = setInterval(pollDmBadge, 90000 + Math.random() * 30000);   // live ✉️ badge
+  if (!window._notifBadgeTimer) window._notifBadgeTimer = setInterval(pollNotifBadge, 90000 + Math.random() * 30000);   // live 🔔 badge
   _nxInit();
 }
 window.addEventListener("hashchange", render);
@@ -8646,7 +9094,7 @@ window.addEventListener("hashchange", render);
 /* ---- Pasivní výdělek: heartbeat za sledování (jen přihlášený + aktivní záložka) ---- */
 let hbTimer = null;
 async function activityHeartbeat() {
-  if (!state.user || document.visibilityState !== "visible") return;
+  if (!state.user || accountBlocked() || document.visibilityState !== "visible") return;
   try {
     const r = await api("/activity/heartbeat", { method: "POST", body: {} });
     if (r && r.awarded > 0) {
@@ -8671,9 +9119,12 @@ document.addEventListener("change", (e) => {
   const id = e.target && e.target.id;
   if (id === "coinFile") uploadCoinIcon();
   else if (id === "pf_file" || id === "auc_file" || id === "aue_file") { _imgPrefix = id.slice(0, -5); uploadImageFile(); }
+  else if (e.target?.dataset?.marketFilter) { marketFilters[e.target.dataset.marketFilter] = e.target.value; renderMarketListings(); }
 });
 document.addEventListener("input", (e) => {
   if (e.target && e.target.id.endsWith("_skinQ")) { _imgPrefix = e.target.id.slice(0, -6); debouncedSkinSearch(); }
+  else if (e.target?.id === "market_float") syncMarketWearFromFloat();
+  else if (e.target?.dataset?.marketFilter) { marketFilters[e.target.dataset.marketFilter] = e.target.value; renderMarketListings(); }
 });
 document.addEventListener("keydown", (e) => {
   if (e.key !== "Enter") return;
@@ -8683,4 +9134,4 @@ document.addEventListener("keydown", (e) => {
   else if (t.id === "minesBanNick" && t.nextElementSibling) t.nextElementSibling.click();
 });
 
-init().then(startHeartbeat);
+init().then(() => { if (!accountBlocked()) startHeartbeat(); });

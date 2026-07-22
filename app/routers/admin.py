@@ -15,11 +15,11 @@ from fastapi.responses import FileResponse, Response
 from starlette.background import BackgroundTask
 
 from ..config import (ALL_ROLES, PRODUCT_TYPES, PRODUCT_PERIODS, ORDER_PENDING, ORDER_FULFILLED,
-                      UNLIMITED_STOCK, ROLE_ADMIN, ROLE_MOD, MOD_POINTS_MAX, STAFF_ROLES, DB_PATH, DATA_DIR, UPLOAD_DIR,
+                      UNLIMITED_STOCK, ROLE_ADMIN, ROLE_MOD, ROLE_BROADCASTER, STAFF_ROLES, DB_PATH, DATA_DIR, UPLOAD_DIR,
                       ANTICHEAT_RULES, DATACENTER_CIDRS)
 from ..db import now_iso, set_setting, get_setting
 from ..deps import db_dep, require_admin, require_user, require_broadcaster, admin_guard, to_public, add_points, record_audit, client_ip, notify
-from .. import kickbot, economy, ipban, ddos, iprep, live, steam, cs_skins, autodrop, maintenance, alerts, digest, partners_flash, live_events, econ_health, mines_anticheat
+from .. import kickbot, economy, ipban, ddos, iprep, live, steam, cs_skins, autodrop, maintenance, alerts, digest, partners_flash, live_events, econ_health, mines_anticheat, anticheat
 from .games import list_games_admin, cancel_game_admin, games_history, refund_game_admin, refund_duel_admin
 from ..models import (ProductIn, SkinLookupIn, SkinSearchIn, ImageUploadIn, UserRoleIn, UserFlagsIn, UserPointsIn, UserAdminMetaIn, OrderStatusIn, CodeGenIn,
                       BanIn, DropCreateIn, AutoDropIn, RuleIn, EconomyIn, IpBanIn, IpUnbanIn, BotToggleIn,
@@ -937,7 +937,7 @@ def user_points_log(user_id: int, limit: int = Query(50, ge=1, le=200),
 @router.post("/users/{user_id}/points")
 def change_user_points(user_id: int, data: UserPointsIn, request: Request,
                        conn: sqlite3.Connection = Depends(db_dep),
-                       admin: sqlite3.Row = Depends(require_user)):
+                       admin: sqlite3.Row = Depends(require_broadcaster)):
     target = conn.execute("SELECT username FROM users WHERE id = ?", (user_id,)).fetchone()
     if not target:
         raise HTTPException(status_code=404, detail="Uživatel nenalezen.")
@@ -946,8 +946,6 @@ def change_user_points(user_id: int, data: UserPointsIn, request: Request,
     reason = (data.reason or "").strip()
     if not reason:
         raise HTTPException(status_code=400, detail="Uveď důvod úpravy bodů (kvůli audit logu).")
-    if admin["role"] == ROLE_MOD and abs(int(data.change)) > MOD_POINTS_MAX:
-        raise HTTPException(status_code=403, detail=f"Moderátor smí upravit nejvýše ±{MOD_POINTS_MAX} sedláků najednou.")
     add_points(conn, user_id, data.change, reason, xp=False)   # admin grant = body ANO, level/XP NE (jinak by šel level koupit/darovat)
     record_audit(conn, admin, request, "user.points", f"#{user_id} {target['username']}",
                  f"{'+' if data.change > 0 else ''}{data.change} PTS – {reason}")
@@ -2244,6 +2242,12 @@ def security_anticheat(conn: sqlite3.Connection = Depends(db_dep)):
 
 # Otisk sdílený víc než tolika účty NEbanujeme jako „zařízení" – je slabý (model+prohlížeč+jazyk),
 # takže sdílený otisk = spíš různí lidé na stejném mobilu než alty. Brání „ban 1 → sestřel 7".
+@router.get("/security/automation")
+def security_automation(conn: sqlite3.Connection = Depends(db_dep),
+                        _admin: sqlite3.Row = Depends(require_admin)):
+    return anticheat.automation_report(conn)
+
+
 FP_DEVICE_BAN_MAX_SHARED = 2
 
 
@@ -2327,7 +2331,8 @@ def ban_cluster(data: BanClusterIn, request: Request,
                 conn: sqlite3.Connection = Depends(db_dep),
                 admin: sqlite3.Row = Depends(require_broadcaster)):
     """Zbanuje celý cluster účtů (alt farma) naráz. Admina vždy přeskočí; staff přeskočí, pokud
-    nebanuje sám admin. Sundá session. (Ban zařízení neřeší – to dělá ban po jednom.)"""
+    nebanuje sám admin. Relaci ponechá kvůli zobrazení ban stránky.
+    (Ban zařízení neřeší – to dělá ban po jednom.)"""
     banned, skipped = 0, 0
     for uid in data.user_ids[:200]:
         u = conn.execute("SELECT role FROM users WHERE id = ?", (uid,)).fetchone()
@@ -2338,7 +2343,6 @@ def ban_cluster(data: BanClusterIn, request: Request,
             continue
         conn.execute("UPDATE users SET banned = 1, ban_reason = ? WHERE id = ?",
                      ((data.reason or "alt cluster")[:200], uid))
-        conn.execute("DELETE FROM sessions WHERE user_id = ?", (uid,))
         banned += 1
     conn.commit()
     record_audit(conn, admin, request, "ban.cluster", f"{banned} účtů", (data.reason or "")[:200])
@@ -2362,13 +2366,13 @@ def ban_user(user_id: int, data: BanIn, request: Request,
                  (1 if data.banned else 0, (data.reason or "")[:200], user_id))
     fps = [r["fp_hash"] for r in conn.execute(
         "SELECT DISTINCT fp_hash FROM client_signals WHERE user_id = ? AND fp_hash IS NOT NULL", (user_id,))]
-    if data.banned:
-        conn.execute("DELETE FROM sessions WHERE user_id = ?", (user_id,))  # odhlásí
-        # Ban je JEN na tento účet, NE na zařízení (fingerprint). Slabý otisk (model+prohlížeč+jazyk)
-        # sdílí i cizí lidi / sourozenci / spolubydlící → device-ban střílel nevinné (false positive).
-        # Zrušeno na žádost (2026-06-18): fingerprint_bans se už neplní. (Enforce zůstává off; tabulka
-        # zůstává jen pro případnou budoucí PŘESNĚJŠÍ fingerprint logiku.)
-    else:
+    # Keep the session so /auth/me can render the full-screen ban state.
+    # require_user still blocks every authenticated action for this account.
+    # Ban je JEN na tento účet, NE na zařízení (fingerprint). Slabý otisk (model+prohlížeč+jazyk)
+    # sdílí i cizí lidi / sourozenci / spolubydlící → device-ban střílel nevinné (false positive).
+    # Zrušeno na žádost (2026-06-18): fingerprint_bans se už neplní. (Enforce zůstává off; tabulka
+    # zůstává jen pro případnou budoucí PŘESNĚJŠÍ fingerprint logiku.)
+    if not data.banned:
         for fp in fps:  # odban pro jistotu uvolní i případný starý device-ban
             conn.execute("DELETE FROM fingerprint_bans WHERE fp_hash = ?", (fp,))
     record_audit(conn, admin, request, "user.ban" if data.banned else "user.unban",
@@ -2384,17 +2388,19 @@ def ban_user(user_id: int, data: BanIn, request: Request,
             "devices_banned": len(fps) if data.banned else 0, "kick": kick}
 
 
-_TIMEOUT_MIN = {"5m": 5, "15m": 15, "1h": 60, "6h": 360, "24h": 1440, "7d": 10080}
+_TIMEOUT_MIN = {"5m": 5, "15m": 15, "1h": 60, "6h": 360, "12h": 720, "24h": 1440, "7d": 10080}
 
 
 @router.post("/users/{user_id}/timeout")
 def timeout_user(user_id: int, data: TimeoutIn, request: Request,
                  conn: sqlite3.Connection = Depends(db_dep),
-                 admin: sqlite3.Row = Depends(require_broadcaster)):   # timeout: broadcaster+admin, mod ne (jako ban)
+                 admin: sqlite3.Row = Depends(require_user)):
     """Dočasný timeout: zablokuje uživateli CELÝ web (require_user → 403) na danou dobu a zrcadlí
     timeout i do Kick chatu (moderate_ban s duration_min). 'off' = zrušit. Session se nemaže –
     po vypršení se vše samo odemkne. Admina umlčet nelze; staff jen admin."""
     u = conn.execute("SELECT username, role, kick_id FROM users WHERE id = ?", (user_id,)).fetchone()
+    if admin["role"] not in (ROLE_MOD, ROLE_BROADCASTER, ROLE_ADMIN):
+        raise HTTPException(status_code=403, detail="Timeout může dát jen moderátor, broadcaster nebo admin.")
     if not u:
         raise HTTPException(status_code=404, detail="Uživatel nenalezen.")
     if u["role"] == ROLE_ADMIN:
@@ -2402,23 +2408,28 @@ def timeout_user(user_id: int, data: TimeoutIn, request: Request,
     if admin["role"] != ROLE_ADMIN and u["role"] in STAFF_ROLES:
         raise HTTPException(status_code=403, detail="Členy týmu (staff) může timeoutovat jen admin.")
     if data.duration == "off":
-        newval, minutes = None, None
+        newval, minutes, reason = None, None, None
     elif data.duration in _TIMEOUT_MIN:
+        reason = (data.reason or "").strip()
+        if not reason:
+            raise HTTPException(status_code=400, detail="Důvod timeoutu je povinný.")
         minutes = _TIMEOUT_MIN[data.duration]
         newval = (datetime.now(timezone.utc) + timedelta(minutes=minutes)).isoformat()
     else:
-        raise HTTPException(status_code=400, detail="Neplatná délka (5m/15m/1h/6h/24h/7d/off).")
-    conn.execute("UPDATE users SET timeout_until = ? WHERE id = ?", (newval, user_id))
+        raise HTTPException(status_code=400, detail="Neplatná délka (5m/15m/1h/6h/12h/24h/7d/off).")
+    conn.execute("UPDATE users SET timeout_until = ?, timeout_reason = ? WHERE id = ?",
+                 (newval, reason, user_id))
     record_audit(conn, admin, request, "user.timeout" if newval else "user.timeout_off",
-                 f"#{user_id} {u['username']}", data.duration)
+                 f"#{user_id} {u['username']}", f"{data.duration}: {reason}" if reason else data.duration)
     conn.commit()
     # Kick mirror (po commitu – web timeout platí, i kdyby Kick API selhalo/timeoutlo)
     if u["kick_id"]:
-        kick = (kickbot.moderate_ban(conn, u["kick_id"], reason="Timeout ze zurys.live", duration_min=minutes)
+        kick = (kickbot.moderate_ban(conn, u["kick_id"], reason=reason, duration_min=minutes)
                 if newval else kickbot.moderate_unban(conn, u["kick_id"]))
     else:
         kick = {"ok": False, "skipped": True, "error": "Účet nemá propojený Kick (bez kick_id)."}
-    return {"ok": True, "timeout_until": newval, "duration": data.duration, "kick": kick}
+    return {"ok": True, "timeout_until": newval, "timeout_reason": reason,
+            "duration": data.duration, "kick": kick}
 
 
 # ---------------- Dropy (závod o kód) ----------------
@@ -2613,6 +2624,101 @@ def admin_auctions(conn: sqlite3.Connection = Depends(db_dep)):
     return auctions.admin_list(conn)
 
 
+@router.get("/auctions/submissions")
+def admin_market_submissions(conn: sqlite3.Connection = Depends(db_dep)):
+    rows = conn.execute(
+        "SELECT s.*,u.username,u.kick_username,u.steam_trade_url FROM market_submissions s "
+        "JOIN users u ON u.id=s.user_id WHERE s.status='pending' ORDER BY s.id ASC").fetchall()
+    return {"pending": [dict(r) for r in rows], "pending_count": len(rows)}
+
+
+@router.post("/auctions/submissions/{submission_id}/approve")
+def admin_market_approve(submission_id: int, request: Request,
+                         conn: sqlite3.Connection = Depends(db_dep),
+                         admin: sqlite3.Row = Depends(require_user)):
+    """Schválí návrh a atomicky ho vystaví na délku zvolenou prodejcem."""
+    from .. import auctions
+    s = conn.execute(
+        "SELECT s.*,u.username,u.banned FROM market_submissions s JOIN users u ON u.id=s.user_id WHERE s.id=?",
+        (submission_id,)).fetchone()
+    if not s:
+        raise HTTPException(status_code=404, detail="Nabídka neexistuje.")
+    if s["status"] != "pending":
+        raise HTTPException(status_code=400, detail="Nabídka už byla vyřízena.")
+    if s["banned"]:
+        raise HTTPException(status_code=400, detail="Prodávající má zablokovaný účet.")
+    price = int(s["price"])
+    sale_type = s["sale_type"] if s["sale_type"] in ("fixed", "auction") else "fixed"
+    duration_minutes = max(60, min(auctions.MAX_MINUTES, int(s["duration_minutes"] or 1440)))
+    r = auctions.create(
+        conn, s["title"], s["image_url"] or "", price, max(50, price // 20), duration_minutes,
+        buy_now=price if sale_type == "fixed" else 0,
+        seller_username=s["username"], sale_type=sale_type,
+        market_description=s["description"] or "", wear=s["wear"] or "",
+        float_value=s["float_value"], commit=False,
+    )
+    if not r.get("ok"):
+        conn.rollback()
+        raise HTTPException(status_code=400, detail=r.get("error", "Nabídku nejde vystavit."))
+    if conn.execute(
+        "UPDATE market_submissions SET status='approved',auction_id=?,decided_at=?,decided_by=? "
+        "WHERE id=? AND status='pending'", (r["id"], now_iso(), admin["username"], submission_id)).rowcount != 1:
+        conn.rollback()
+        raise HTTPException(status_code=409, detail="Nabídku mezitím vyřídil někdo jiný.")
+    record_audit(conn, admin, request, "market.approve", f"#{submission_id}",
+                 f"{sale_type} #{r['id']}, {price} bodů")
+    notify(conn, s["user_id"], "✅", "Skin schválen", f"„{s['title']}“ je teď vystavený na komunitním Trhu.", "#/shop")
+    conn.commit()
+    return {"ok": True, "auction_id": r["id"]}
+
+
+@router.post("/auctions/submissions/{submission_id}/reject")
+def admin_market_reject(submission_id: int, request: Request,
+                        conn: sqlite3.Connection = Depends(db_dep),
+                        admin: sqlite3.Row = Depends(require_user)):
+    s = conn.execute("SELECT * FROM market_submissions WHERE id=?", (submission_id,)).fetchone()
+    if not s:
+        raise HTTPException(status_code=404, detail="Nabídka neexistuje.")
+    if s["status"] != "pending":
+        raise HTTPException(status_code=400, detail="Nabídka už byla vyřízena.")
+    conn.execute("UPDATE market_submissions SET status='rejected',decided_at=?,decided_by=? WHERE id=?",
+                 (now_iso(), admin["username"], submission_id))
+    record_audit(conn, admin, request, "market.reject", f"#{submission_id}", s["title"])
+    notify(conn, s["user_id"], "↩️", "Nabídka skinu zamítnuta",
+           f"„{s['title']}“ tentokrát nebyla schválena. Skin neposílej.", "#/shop")
+    conn.commit()
+    return {"ok": True}
+
+
+@router.post("/auctions/{auction_id}/market-release")
+def admin_market_release(auction_id: int, request: Request,
+                         conn: sqlite3.Connection = Depends(db_dep),
+                         admin: sqlite3.Row = Depends(require_user)):
+    """Ruční rozhodnutí sporu: dokončí obchod a uvolní 95 % prodávajícímu."""
+    from .. import auctions
+    r = auctions.resolve_delivery(conn, auction_id, "release")
+    if not r.get("ok"):
+        raise HTTPException(status_code=400, detail=r.get("error", "Escrow nejde uvolnit."))
+    record_audit(conn, admin, request, "market.release", f"#{auction_id}",
+                 f"payout {r['seller_payout']}, fee {r['market_fee']}")
+    conn.commit()
+    return r
+
+
+@router.post("/auctions/{auction_id}/market-refund")
+def admin_market_refund(auction_id: int, request: Request,
+                        conn: sqlite3.Connection = Depends(db_dep),
+                        admin: sqlite3.Row = Depends(require_user)):
+    """Ruční rozhodnutí sporu: vrátí kupujícímu cenu a jeho vstupní poplatek."""
+    from .. import auctions
+    r = auctions.resolve_delivery(conn, auction_id, "refund")
+    if not r.get("ok"):
+        raise HTTPException(status_code=400, detail=r.get("error", "Escrow nejde refundovat."))
+    record_audit(conn, admin, request, "market.refund", f"#{auction_id}", f"vráceno {r['refunded']}")
+    conn.commit()
+    return r
+
+
 @router.get("/crews")
 def admin_crews(admin: sqlite3.Row = Depends(require_user), conn: sqlite3.Connection = Depends(db_dep)):
     """Všechny party + členové. Ekonomické staty (XP/level/příspěvky/série/kód) vidí JEN admin —
@@ -2636,11 +2742,12 @@ def admin_auction_create(data: AuctionCreateIn, request: Request,
     """Vystaví aukci o skin (název + obrázek + vyvolávací cena + min příhoz + délka v minutách)."""
     from .. import auctions
     r = auctions.create(conn, data.title, data.image_url, data.start_bid, data.min_increment, data.minutes,
-                        data.buy_now, data.sub_only, data.chat_announce)
+                        data.buy_now, data.sub_only, data.chat_announce, data.seller_username)
     if not r.get("ok"):
         raise HTTPException(status_code=400, detail=r.get("error", "Vystavit se to nepodařilo."))
     record_audit(conn, admin, request, "auction.create", f"#{r['id']} {data.title}",
-                 f"start {data.start_bid}, {data.minutes} min, buy_now {data.buy_now}, sub_only {data.sub_only}")
+                 f"start {data.start_bid}, {data.minutes} min, buy_now {data.buy_now}, "
+                 f"sub_only {data.sub_only}, seller {r.get('seller') or '-'}")
     conn.commit()
     return r
 

@@ -57,7 +57,7 @@ User=webos
 WorkingDirectory=/opt/webos/app
 EnvironmentFile=/opt/webos/env
 Environment=WEBOS_DATA_DIR=/data
-ExecStart=/opt/webos/venv/bin/python -m uvicorn app.main:app --host 127.0.0.1 --port 8080 --workers 1
+ExecStart=/opt/webos/venv/bin/python -m uvicorn app.main:app --host 127.0.0.1 --port 8080 --workers 1 --limit-concurrency 512
 Restart=always
 RestartSec=3
 
