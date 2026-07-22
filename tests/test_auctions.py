@@ -4,6 +4,9 @@
 """
 import secrets
 from datetime import datetime, timezone, timedelta
+from pathlib import Path
+
+from app.config import SESSION_COOKIE
 
 
 def _user(conn, points=100000):
@@ -19,6 +22,246 @@ def _row(conn, uid):
 
 def _pts(conn, uid):
     return conn.execute("SELECT points FROM users WHERE id=?", (uid,)).fetchone()["points"]
+
+
+def _session(conn, uid):
+    from app.db import now_iso
+    token = secrets.token_hex(24)
+    conn.execute("INSERT INTO sessions (token,user_id,created_at,expires_at) VALUES (?,?,?,?)",
+                 (token, uid, now_iso(), (datetime.now(timezone.utc) + timedelta(days=1)).isoformat()))
+    return {"Cookie": f"{SESSION_COOKIE}={token}"}
+
+
+def test_market_duration_selector_is_wired():
+    source = Path("web/app.js").read_text(encoding="utf-8")
+    assert 'id="market_duration"' in source
+    assert 'value="360">6 hodin' in source
+    assert 'value="10080">7 dní' in source
+    assert 'duration_minutes: parseInt(document.getElementById("market_duration")' in source
+
+
+def test_market_submission_requires_admin_approval(client):
+    from app.db import get_conn
+    conn = get_conn()
+    try:
+        seller_id = _user(conn)
+        admin_id = _user(conn)
+        conn.execute("UPDATE users SET role='admin' WHERE id=?", (admin_id,))
+        seller_name = _row(conn, seller_id)["username"]
+        seller_headers, admin_headers = _session(conn, seller_id), _session(conn, admin_id)
+        conn.commit()
+    finally:
+        conn.close()
+
+    payload = {"title": "M4A1-S | Printstream (FT)", "image_url": "https://example.com/skin.png",
+               "description": "(FT) · float 0.21", "inspect_url": "steam://rungame/730/test",
+               "wear": "FN", "float_value": 0.21, "price": 25000, "sale_type": "fixed",
+               "duration_minutes": 4320}
+    submitted = client.post("/api/auctions/submissions", json=payload, headers=seller_headers)
+    assert submitted.status_code == 200, submitted.text
+    sid = submitted.json()["id"]
+    assert all(a["title"] != payload["title"] for a in client.get("/api/auctions").json()["active"])
+
+    queue = client.get("/api/admin/auctions/submissions", headers=admin_headers)
+    assert queue.status_code == 200 and any(
+        s["id"] == sid and s["username"] == seller_name and s["sale_type"] == "fixed"
+        and s["duration_minutes"] == 4320
+        and s["description"] == payload["description"] and s["wear"] == "FT" and s["float_value"] == 0.21
+        for s in queue.json()["pending"])
+    approved = client.post(f"/api/admin/auctions/submissions/{sid}/approve", headers=admin_headers)
+    assert approved.status_code == 200, approved.text
+    conn = get_conn()
+    try:
+        from app import auctions
+        public = conn.execute("SELECT * FROM auctions WHERE id=?", (approved.json()["auction_id"],)).fetchone()
+        assert public["seller_user_id"] == seller_id and public["start_bid"] == 25000
+        assert public["buy_now"] == 25000 and public["sale_type"] == "fixed"
+        remaining = (datetime.fromisoformat(public["ends_at"]) - datetime.now(timezone.utc)).total_seconds()
+        assert 4310 * 60 <= remaining <= 4320 * 60
+        assert public["market_description"] == payload["description"] and public["wear"] == "FT"
+        assert public["float_value"] == 0.21
+        listing = next(a for a in auctions.list_public(conn)["active"] if a["id"] == public["id"])
+        assert listing["description"] == payload["description"] and listing["wear"] == "FT"
+        assert listing["float_value"] == 0.21 and listing["seller_completed_sales"] == 0
+        buyer_id = _user(conn)
+        buyer = _row(conn, buyer_id)
+        buyer_name = buyer["username"]
+        outsider_id = _user(conn)
+        buyer_headers, outsider_headers = _session(conn, buyer_id), _session(conn, outsider_id)
+        conn.execute("UPDATE users SET steam_trade_url=? WHERE id=?",
+                     ("https://steamcommunity.com/tradeoffer/new/?partner=123&token=test", buyer_id))
+        conn.commit()
+        assert not auctions.bid(conn, buyer, public["id"], 25000)["ok"]
+        assert auctions.buy_now(conn, buyer, public["id"])["ok"]
+        assert _pts(conn, seller_id) == 100000, "prodávající před potvrzením nedostal escrow"
+    finally:
+        conn.close()
+
+    invalid_wear = client.post(
+        "/api/auctions/submissions", json={**payload, "title": "Invalid wear", "wear": "BROKEN"},
+        headers=seller_headers,
+    )
+    assert invalid_wear.status_code == 422
+    invalid_duration = client.post(
+        "/api/auctions/submissions", json={**payload, "title": "Invalid duration", "duration_minutes": 10081},
+        headers=seller_headers,
+    )
+    assert invalid_duration.status_code == 422
+    mine = client.get("/api/auctions/my-sales", headers=seller_headers)
+    assert mine.status_code == 200
+    sale = mine.json()["sales"][0]
+    assert sale["id"] == public["id"] and sale["delivery_status"] == "awaiting_delivery"
+    assert sale["seller_paid_at"] is None and sale["wear"] == "FT" and sale["float_value"] == 0.21
+    assert sale["winner"] == buyer_name and sale["winner_trade_url"].startswith("https://steamcommunity.com/tradeoffer/")
+    assert sale["winner_completed_purchases"] == 0
+    buyer_deals = client.get("/api/auctions/my-sales", headers=buyer_headers).json()
+    assert buyer_deals["sales"] == []
+    assert buyer_deals["purchases"][0]["id"] == public["id"]
+    assert buyer_deals["purchases"][0]["seller"] == seller_name
+    assert buyer_deals["purchases"][0]["seller_completed_sales"] == 0
+    assert client.get("/api/auctions/my-sales", headers=admin_headers).json() == {"sales": [], "purchases": []}
+    delivery_url = f"/api/auctions/{public['id']}/delivery"
+    assert client.post(f"{delivery_url}/confirm", headers=buyer_headers).status_code == 400
+    assert client.post(f"{delivery_url}/sent", headers=outsider_headers).status_code == 400
+    assert client.post(f"{delivery_url}/sent", headers=seller_headers).status_code == 200
+    confirmed = client.post(f"{delivery_url}/confirm", headers=buyer_headers)
+    assert confirmed.status_code == 200 and confirmed.json()["seller_payout"] == 23750
+    conn = get_conn()
+    try:
+        assert _pts(conn, seller_id) == 123750
+    finally:
+        conn.close()
+    assert client.get("/api/auctions/my-sales", headers=seller_headers).json()["sales"][0]["delivery_status"] == "completed"
+
+    chat_url = f"/api/auctions/{public['id']}/chat"
+    assert client.get(chat_url).status_code == 401
+    assert client.get(chat_url, headers=outsider_headers).status_code == 403
+    seller_chat = client.get(chat_url, headers=seller_headers)
+    assert seller_chat.status_code == 200 and seller_chat.json()["can_send"] is True
+    assert seller_chat.json()["messages"] == []
+    assert seller_chat.json()["seller"]["completed_trades"] == 1
+    assert seller_chat.json()["winner"]["completed_trades"] == 1
+    admin_chat = client.get(chat_url, headers=admin_headers)
+    assert admin_chat.status_code == 200 and admin_chat.json()["can_send"] is False
+    assert client.post(chat_url, json={"body": "admin nesmí psát"}, headers=admin_headers).status_code == 403
+
+    sent = client.post(chat_url, json={"body": "Pošlu ti skin přes tvoji Trade URL."}, headers=seller_headers)
+    assert sent.status_code == 200
+    buyer_chat = client.get(chat_url, headers=buyer_headers).json()
+    assert buyer_chat["messages"][0]["from_name"] == seller_name
+    assert buyer_chat["messages"][0]["mine"] is False
+    assert client.post(chat_url, json={"body": "Díky, čekám."}, headers=buyer_headers).status_code == 200
+    seller_messages = client.get(chat_url, headers=seller_headers).json()["messages"]
+    assert [m["mine"] for m in seller_messages] == [True, False]
+    assert len(client.get(chat_url, headers=admin_headers).json()["messages"]) == 2
+    assert client.post(f"/api/admin/auctions/submissions/{sid}/approve", headers=admin_headers).status_code == 400
+    assert client.post("/api/auctions/upload-image", json={"data": "x"}, headers=seller_headers).status_code in (404, 405)
+
+    auction_payload = {**payload, "title": "AK-47 | Redline (FT)", "sale_type": "auction", "price": 12000}
+    auction_submission = client.post("/api/auctions/submissions", json=auction_payload, headers=seller_headers)
+    assert auction_submission.status_code == 200
+    auction_approved = client.post(
+        f"/api/admin/auctions/submissions/{auction_submission.json()['id']}/approve", headers=admin_headers)
+    assert auction_approved.status_code == 200
+    conn = get_conn()
+    try:
+        auction = conn.execute("SELECT * FROM auctions WHERE id=?", (auction_approved.json()["auction_id"],)).fetchone()
+        assert auction["sale_type"] == "auction" and auction["start_bid"] == 12000 and auction["buy_now"] == 0
+    finally:
+        conn.close()
+
+
+def test_market_ui_carries_and_escapes_description_and_wear():
+    source = (Path(__file__).parents[1] / "web" / "app.js").read_text(encoding="utf-8")
+    router = (Path(__file__).parents[1] / "app" / "routers" / "auctions.py").read_text(encoding="utf-8")
+    assert 'id="market_wear"' in source
+    assert 'wear: document.getElementById("market_wear")?.value || ""' in source
+    assert 'class="market-card-description"' in source
+    assert '${esc(a.description)}' in source
+    assert 'id="market_float"' in source and "marketWearFromFloat" in source
+    assert 'data-market-filter="wear"' in source and "seller_completed_sales" in source
+    assert 'data-action="market-delivery"' in source and 'data-action="market-dispute"' in source
+    assert "marketTrustHTML" in source and "Trust Factor vychází" in source
+    assert "market-soon" not in source and "Trh spustíme brzy" not in router
+
+
+def test_market_float_boundaries():
+    from app.auctions import wear_from_float
+    assert [wear_from_float(v) for v in (0, 0.069999, 0.07, 0.15, 0.38, 0.45, 1)] == [
+        "FN", "FN", "MW", "FT", "WW", "BS", "BS",
+    ]
+
+
+def test_no_bid_market_auction_has_no_escrow_actions():
+    from app import auctions
+    from app.db import get_conn
+    conn = get_conn()
+    try:
+        seller_id = _user(conn)
+        seller = _row(conn, seller_id)
+        conn.commit()
+        aid = auctions.create(conn, "No bids", "", 1000, 50, 10,
+                              seller_username=seller["username"], sale_type="auction")["id"]
+        conn.execute("UPDATE auctions SET ends_at='2000-01-01T00:00:00+00:00' WHERE id=?", (aid,))
+        conn.commit()
+        row = next(a for a in auctions.admin_list(conn) if a["id"] == aid)
+        assert row["status"] == "ended" and row["who"] is None and row["current_bid"] == 0
+        denied = auctions.resolve_delivery(conn, aid, "refund")
+        assert not denied["ok"] and "bez kupujícího" in denied["error"]
+        source = (Path(__file__).parents[1] / "web" / "app.js").read_text(encoding="utf-8")
+        assert 'const sold = a.status === "ended" && !!a.who;' in source
+        assert 'a.seller && sold' in source and "⚪ nevydraženo" in source
+    finally:
+        conn.close()
+
+
+def test_market_dispute_admin_refund(client):
+    from app import auctions
+    from app.db import get_conn
+    conn = get_conn()
+    try:
+        seller_id, buyer_id, outsider_id, admin_id = (_user(conn) for _ in range(4))
+        conn.execute("UPDATE users SET role='admin' WHERE id=?", (admin_id,))
+        seller_name = _row(conn, seller_id)["username"]
+        seller_headers = _session(conn, seller_id)
+        buyer_headers = _session(conn, buyer_id)
+        outsider_headers = _session(conn, outsider_id)
+        admin_headers = _session(conn, admin_id)
+        conn.commit()
+        aid = auctions.create(conn, "Disputed skin", "", 10000, 500, 10,
+                              seller_username=seller_name, sale_type="auction")["id"]
+        assert auctions.bid(conn, _row(conn, buyer_id), aid, 10000)["ok"]
+        conn.execute("UPDATE auctions SET ends_at='2000-01-01T00:00:00+00:00' WHERE id=?", (aid,))
+        conn.commit()
+        auctions.list_public(conn)
+        assert _pts(conn, buyer_id) == 89000 and _pts(conn, seller_id) == 100000
+    finally:
+        conn.close()
+
+    dispute_url = f"/api/auctions/{aid}/delivery/dispute"
+    chat_url = f"/api/auctions/{aid}/chat"
+    assert client.get(chat_url, headers=admin_headers).json()["can_send"] is False
+    assert client.post(chat_url, json={"body": "Předčasná zpráva"}, headers=admin_headers).status_code == 403
+    assert client.post(dispute_url, json={"body": "cizí účet"}, headers=outsider_headers).status_code == 400
+    disputed = client.post(dispute_url, json={"body": "Skin nebyl doručen."}, headers=buyer_headers)
+    assert disputed.status_code == 200 and disputed.json()["delivery_status"] == "disputed"
+    assert client.get(chat_url, headers=admin_headers).json()["can_send"] is True
+    assert client.post(chat_url, json={"body": "Admin: prověřuji předání."}, headers=admin_headers).status_code == 200
+    seller_chat = client.get(chat_url, headers=seller_headers).json()
+    buyer_chat = client.get(chat_url, headers=buyer_headers).json()
+    assert seller_chat["messages"][-1]["from_role"] == "admin"
+    assert buyer_chat["messages"][-1]["body"] == "Admin: prověřuji předání."
+    assert client.post(f"/api/auctions/{aid}/delivery/sent", headers=seller_headers).status_code == 400
+    refunded = client.post(f"/api/admin/auctions/{aid}/market-refund", headers=admin_headers)
+    assert refunded.status_code == 200 and refunded.json()["refunded"] == 11000
+    assert client.post(f"/api/admin/auctions/{aid}/market-refund", headers=admin_headers).status_code == 400
+    conn = get_conn()
+    try:
+        assert _pts(conn, buyer_id) == 100000 and _pts(conn, seller_id) == 100000
+        row = conn.execute("SELECT delivery_status,seller_paid_at FROM auctions WHERE id=?", (aid,)).fetchone()
+        assert row["delivery_status"] == "refunded" and row["seller_paid_at"] is None
+    finally:
+        conn.close()
 
 
 def test_escrow_outbid_min_and_self():
@@ -119,6 +362,54 @@ def test_buy_now_instant_win():
         a = conn.execute("SELECT status, winner_id FROM auctions WHERE id=?", (aid,)).fetchone()
         assert a["status"] == "ended" and a["winner_id"] == u2
         assert not auctions.buy_now(conn, _row(conn, _user(conn)), aid).get("ok"), "po skončení už ne"
+    finally:
+        conn.close()
+
+
+def test_community_market_payout_and_own_listing_gate():
+    """Komisní skin drží cenu v escrow a vyplatí 95 % právě jednou až po převzetí."""
+    from app.db import get_conn
+    from app import auctions
+    conn = get_conn()
+    try:
+        seller, buyer, bidder = _user(conn), _user(conn), _user(conn)
+        seller_name = _row(conn, seller)["username"]
+        conn.commit()
+
+        made = auctions.create(conn, "Community skin", "", 100, 50, 10,
+                               buy_now=10000, seller_username=seller_name)
+        assert made["ok"] and made["seller"] == seller_name
+        aid = made["id"]
+        assert not auctions.bid(conn, _row(conn, seller), aid, 100).get("ok")
+        assert not auctions.buy_now(conn, _row(conn, seller), aid).get("ok")
+        assert _pts(conn, seller) == 100000
+
+        sold = auctions.buy_now(conn, _row(conn, buyer), aid)
+        assert sold["ok"] and sold["market_escrow"] is True
+        assert _pts(conn, buyer) == 90000 and _pts(conn, seller) == 100000
+        row = conn.execute("SELECT seller_payout,market_fee,seller_paid_at,delivery_status FROM auctions WHERE id=?", (aid,)).fetchone()
+        assert row["seller_payout"] == 0 and row["seller_paid_at"] is None
+        assert row["delivery_status"] == "awaiting_delivery"
+        assert not auctions.confirm_delivery(conn, _row(conn, buyer), aid)["ok"]
+        assert auctions.mark_delivered(conn, _row(conn, seller), aid)["ok"]
+        settled = auctions.confirm_delivery(conn, _row(conn, buyer), aid)
+        assert settled["ok"] and settled["seller_payout"] == 9500 and settled["market_fee"] == 500
+        assert _pts(conn, seller) == 109500
+        auctions.list_public(conn)
+        assert _pts(conn, seller) == 109500, "opakované načtení nesmí vyplatit prodej podruhé"
+
+        aid2 = auctions.create(conn, "Timed community skin", "", 1000, 50, 10,
+                               seller_username=seller_name)["id"]
+        assert auctions.bid(conn, _row(conn, bidder), aid2, 1000)["ok"]
+        conn.execute("UPDATE auctions SET ends_at='2000-01-01T00:00:00+00:00' WHERE id=?", (aid2,))
+        conn.commit()
+        auctions.list_public(conn)
+        assert _pts(conn, seller) == 109500, "časový konec jen otevře escrow"
+        assert auctions.mark_delivered(conn, _row(conn, seller), aid2)["ok"]
+        assert auctions.confirm_delivery(conn, _row(conn, bidder), aid2)["seller_payout"] == 950
+        assert _pts(conn, seller) == 110450
+        assert not auctions.create(conn, "Bad seller", "", 100, 50, 10,
+                                   seller_username="missing-user")["ok"]
     finally:
         conn.close()
 

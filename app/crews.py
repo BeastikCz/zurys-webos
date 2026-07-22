@@ -9,6 +9,7 @@ Sociál: crew chat (vzor jako bj_chat). Vstup: založení = sink sedláků (anti
 """
 import sqlite3
 from datetime import datetime, timedelta
+from math import ceil
 
 from .db import now_iso, local_week_id, local_date
 from .deps import try_debit, notify, add_points, XP_PER_SUB, level_info
@@ -564,11 +565,18 @@ def _pay_war_loot(conn, winner_id, loser_delta):
     return loot
 
 
-def _war_cooldown_active(conn, crew_id):
-    cutoff = (datetime.fromisoformat(now_iso()) - timedelta(hours=WAR_COOLDOWN_H)).isoformat()
-    return conn.execute(
-        "SELECT 1 FROM crew_wars WHERE status='ended' AND ends_at>? "
-        "AND (crew_a_id=? OR crew_b_id=?) LIMIT 1", (cutoff, crew_id, crew_id)).fetchone() is not None
+def _war_cooldowns(conn):
+    """Zbývající cooldown v sekundách pro všechny dotčené party."""
+    now = datetime.fromisoformat(now_iso())
+    cutoff = (now - timedelta(hours=WAR_COOLDOWN_H)).isoformat()
+    out = {}
+    for w in conn.execute(
+            "SELECT crew_a_id, crew_b_id, ends_at FROM crew_wars WHERE status='ended' AND ends_at>?",
+            (cutoff,)):
+        seconds = max(0, ceil((datetime.fromisoformat(w["ends_at"]) + timedelta(hours=WAR_COOLDOWN_H) - now).total_seconds()))
+        for crew_id in (w["crew_a_id"], w["crew_b_id"]):
+            out[crew_id] = max(out.get(crew_id, 0), seconds)
+    return out
 
 
 def _finalize_wars(conn):
@@ -650,9 +658,10 @@ def declare_war(conn, leader_uid, opponent_crew_id):
         (opp["id"], opp["id"])).fetchone()[0]
     if active_count > 0:
         raise ValueError(f"{opp['name']} už s někým válčí – zkus jinou partu.")
-    if _war_cooldown_active(conn, crew["id"]):
+    cooldowns = _war_cooldowns(conn)
+    if cooldowns.get(crew["id"]):
         raise ValueError(f"Tvoje parta má po válce {WAR_COOLDOWN_H}h cooldown.")
-    if _war_cooldown_active(conn, opp["id"]):
+    if cooldowns.get(opp["id"]):
         raise ValueError(f"{opp['name']} má po válce {WAR_COOLDOWN_H}h cooldown.")
     ts = now_iso()
     ends = (datetime.fromisoformat(ts) + timedelta(hours=WAR_HOURS)).isoformat()
@@ -711,11 +720,13 @@ def leaderboard(conn, uid, limit=50, sort="week"):
     m = _member(conn, uid)
     at_war = {r["crew_a_id"] for r in conn.execute("SELECT crew_a_id FROM crew_wars WHERE status='active'")} \
         | {r["crew_b_id"] for r in conn.execute("SELECT crew_b_id FROM crew_wars WHERE status='active'")}
+    cooldowns = _war_cooldowns(conn)
     return {"week": week, "month": month, "sort": sort, "my_crew_id": m["crew_id"] if m else None,
             "crews": [{"rank": i + 1, "id": r["id"], "name": r["name"], "tag": r["tag"],
                        "emblem": r["emblem"], "members": r["members"], "week_xp": r["week_xp"],
                        "week_sub_xp": r["week_sub_xp"], "sub_total": r["sub_total"], "month_xp": r["month_xp"],
-                       "level": _level(r["xp"]), "goal": goal_for(r["members"]), "at_war": r["id"] in at_war}
+                       "level": _level(r["xp"]), "goal": goal_for(r["members"]), "at_war": r["id"] in at_war,
+                       "war_cooldown_seconds": cooldowns.get(r["id"], 0)}
                       for i, r in enumerate(rows)]}
 
 
@@ -890,4 +901,5 @@ def _public(conn, crew_id, viewer_uid):
         "is_member": you_member, "is_leader": is_leader,
         "war": _war_state(conn, c), "war_wins": c["war_wins"] or 0,
         "war_losses": c["war_losses"] or 0, "war_draws": c["war_draws"] or 0,
+        "war_cooldown_seconds": _war_cooldowns(conn).get(c["id"], 0),
     }

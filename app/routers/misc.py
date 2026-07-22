@@ -10,7 +10,8 @@ from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
 from ..anticheat import (check_or_block, is_new_account, new_account_redeem_pts,
-                          NEW_ACCOUNT_MAX_REDEEM_PTS, GIFT_MIN_AGE_HOURS)
+                          NEW_ACCOUNT_MAX_REDEEM_PTS, GIFT_MIN_AGE_HOURS,
+                          automation_checkpoint, complete_automation_checkpoint)
 from ..config import ORDER_PENDING, UNLIMITED_STOCK, ROLE_ADMIN
 from ..db import now_iso, get_setting, local_date
 from ..deps import (db_dep, require_user, require_farm_access, add_points, try_debit, record_audit, client_ip,
@@ -18,7 +19,7 @@ from ..deps import (db_dep, require_user, require_farm_access, add_points, try_d
 from ..models import (RedeemIn, TradeUrlIn, GiftIn, QuestClaimIn, CosmeticIn, FairSeedIn, SelfExcludeIn,
                       ProfileBioIn, WagerLimitIn, ModApplyIn, BattlePassClaimIn, LoginCalClaimIn, WheelSpinIn,
                       GardenPlantIn, GardenPlantAllIn, GardenHarvestIn, DecorBuyIn, LevelPassClaimIn,
-                      EggClaimIn, FarmBuyIn, FarmSlotIn, FarmFoxIn)
+                      EggClaimIn, FarmBuyIn, FarmSlotIn, FarmFoxIn, AutomationCheckpointIn)
 from ..services import product_public, role_allows
 from ..ratelimit import rate_limit
 from ..security import secure_weighted_choice
@@ -1156,10 +1157,9 @@ def gift_points(data: GiftIn, request: Request,
             status_code=403,
             detail=f"Darovat můžeš až {GIFT_MIN_AGE_HOURS} h po založení účtu "
                    f"(ochrana proti farmění bodů přes nové účty). 🛡️")
-    # anti-farma: nelze posílat účtu ze stejné IP/zařízení (admin výjimka)
-    if user["role"] != ROLE_ADMIN and rcp["role"] != ROLE_ADMIN and _shared_identity(conn, user["id"], rcp["id"]):
-        raise HTTPException(status_code=403,
-                            detail="Účtu ze stejné sítě nebo zařízení poslat nelze (ochrana proti farmení). 🛡️")
+    # ponytail: blok „stejná IP/zařízení" zrušen na přání provozovatele – dary mezi účty ze stejné
+    # sítě jsou povolené. Admin je pořád schvaluje (escrow) a v panelu vidí příznak `shared`,
+    # takže funnel přes alty zůstává viditelný, jen se tvrdě neblokuje. Revert: vrátit _shared_identity gate.
     # Dar = ŽÁDOST, kterou schvaluje admin. Odesílateli se body HNED zablokují (escrow), aby je
     # mezitím nemohl utratit dvakrát; admin pak dar POVOLÍ (přesun příjemci) nebo ZAMÍTNE (vrácení).
     # Escrow řádek v points_log má NEUTRÁLNÍ důvod – nepasuje na 'Dar pro %', takže funnel detektor
@@ -1462,6 +1462,26 @@ def my_claims(user: sqlite3.Row = Depends(require_user),
 
 import os as _os
 GARDEN_OFF = _os.environ.get("WEBOS_GARDEN_OFF", "0") == "1"   # zahrádka mimo provoz (redesign); env ve fly.toml. Lokálně/testy = zapnutá.
+FARMING_ACTIONS_PER_MIN = 30
+
+
+def _farming_rate_limit(user) -> None:
+    """One shared budget prevents scripts from bypassing limits by rotating farm endpoints."""
+    rate_limit(f"farming:{user['id']}", FARMING_ACTIONS_PER_MIN, 60)
+
+
+@router.get("/automation/checkpoint")
+def automation_checkpoint_status(user: sqlite3.Row = Depends(require_user),
+                                 conn: sqlite3.Connection = Depends(db_dep)):
+    return automation_checkpoint(conn, user)
+
+
+@router.post("/automation/checkpoint")
+def automation_checkpoint_verify(data: AutomationCheckpointIn, request: Request,
+                                 user: sqlite3.Row = Depends(require_user),
+                                 conn: sqlite3.Connection = Depends(db_dep)):
+    rate_limit(f"automation-checkpoint:{user['id']}", 5, 600)
+    return complete_automation_checkpoint(conn, user, data.token, client_ip(request))
 
 
 def _garden_guard():
@@ -1483,6 +1503,7 @@ def garden_status(user: sqlite3.Row = Depends(require_user),
 def garden_plant(data: GardenPlantIn, user: sqlite3.Row = Depends(require_user),
                  conn: sqlite3.Connection = Depends(db_dep)):
     """Zasadí plodinu na záhon (zaplatí sazbu)."""
+    _farming_rate_limit(user)
     _garden_guard()
     from .. import garden
     r = garden.plant(conn, user, data.plot, data.crop)
@@ -1495,6 +1516,7 @@ def garden_plant(data: GardenPlantIn, user: sqlite3.Row = Depends(require_user),
 def garden_harvest(data: GardenHarvestIn, user: sqlite3.Row = Depends(require_user),
                    conn: sqlite3.Connection = Depends(db_dep)):
     """Sklidí dorostlý záhon (odměna)."""
+    _farming_rate_limit(user)
     _garden_guard()
     from .. import garden
     r = garden.harvest(conn, user, data.plot)
@@ -1507,6 +1529,7 @@ def garden_harvest(data: GardenHarvestIn, user: sqlite3.Row = Depends(require_us
 def garden_harvest_all(user: sqlite3.Row = Depends(require_user),
                        conn: sqlite3.Connection = Depends(db_dep)):
     """Sklidí VŠECHNY dozrálé záhony naráz."""
+    _farming_rate_limit(user)
     _garden_guard()
     from .. import garden
     return garden.harvest_all(conn, user)
@@ -1516,6 +1539,7 @@ def garden_harvest_all(user: sqlite3.Row = Depends(require_user),
 def garden_plant_all(data: GardenPlantAllIn, user: sqlite3.Row = Depends(require_user),
                      conn: sqlite3.Connection = Depends(db_dep)):
     """Zasadí plodinu na VŠECHNY prázdné záhony."""
+    _farming_rate_limit(user)
     _garden_guard()
     from .. import garden
     r = garden.plant_all(conn, user, data.crop)
@@ -1528,6 +1552,7 @@ def garden_plant_all(data: GardenPlantAllIn, user: sqlite3.Row = Depends(require
 def garden_rescue(data: GardenHarvestIn, user: sqlite3.Row = Depends(require_user),
                   conn: sqlite3.Connection = Depends(db_dep)):
     """Zaplať záchranu před chrobáky na záhonu (plná sklizeň místo poloviční)."""
+    _farming_rate_limit(user)
     _garden_guard()
     from .. import garden
     r = garden.rescue(conn, user, data.plot)
@@ -1540,6 +1565,7 @@ def garden_rescue(data: GardenHarvestIn, user: sqlite3.Row = Depends(require_use
 def garden_fertilize(data: GardenHarvestIn, user: sqlite3.Row = Depends(require_user),
                      conn: sqlite3.Connection = Depends(db_dep)):
     """Hnojivo: zbývající čas růstu na polovinu (1× na výsadbu)."""
+    _farming_rate_limit(user)
     _garden_guard()
     from .. import garden
     r = garden.fertilize(conn, user, data.plot)
@@ -1576,6 +1602,7 @@ def garden_leaderboard(conn: sqlite3.Connection = Depends(db_dep)):
 def garden_decor_buy(data: DecorBuyIn, user: sqlite3.Row = Depends(require_user),
                      conn: sqlite3.Connection = Depends(db_dep)):
     """Koupí dekoraci (cosmetic sink, vlastní se navždy)."""
+    _farming_rate_limit(user)
     _garden_guard()
     from .. import garden
     r = garden.buy_decor(conn, user, data.key)
@@ -1634,6 +1661,7 @@ def farm_status(user: sqlite3.Row = Depends(require_farm_access),
 def farm_buy(data: FarmBuyIn, user: sqlite3.Row = Depends(require_farm_access),
              conn: sqlite3.Connection = Depends(db_dep)):
     """Koupí zvíře do volného slotu (sink). Nové zvíře je hladové."""
+    _farming_rate_limit(user)
     from .. import farm
     r = farm.buy(conn, user, data.animal)
     if not r.get("ok"):
@@ -1645,6 +1673,7 @@ def farm_buy(data: FarmBuyIn, user: sqlite3.Row = Depends(require_farm_access),
 def farm_feed(data: FarmSlotIn, user: sqlite3.Row = Depends(require_farm_access),
               conn: sqlite3.Connection = Depends(db_dep)):
     """Nakrmí hladové zvíře (sink) → spustí produkční cyklus."""
+    _farming_rate_limit(user)
     from .. import farm
     r = farm.feed(conn, user, data.slot)
     if not r.get("ok"):
@@ -1656,6 +1685,7 @@ def farm_feed(data: FarmSlotIn, user: sqlite3.Row = Depends(require_farm_access)
 def farm_turbo(data: FarmSlotIn, user: sqlite3.Row = Depends(require_farm_access),
                conn: sqlite3.Connection = Depends(db_dep)):
     """Spotřebuje turbo žeton a nakrmí vybrané zvíře pro 2× rychlejší jeden cyklus."""
+    _farming_rate_limit(user)
     from .. import farm
     r = farm.feed(conn, user, data.slot, turbo=True)
     if not r.get("ok"):
@@ -1667,6 +1697,7 @@ def farm_turbo(data: FarmSlotIn, user: sqlite3.Row = Depends(require_farm_access
 def farm_collect(data: FarmSlotIn, user: sqlite3.Row = Depends(require_farm_access),
                  conn: sqlite3.Connection = Depends(db_dep)):
     """Sebere hotový produkt → odměna (XP + sedláci), zvíře zhladoví."""
+    _farming_rate_limit(user)
     from .. import farm
     r = farm.collect(conn, user, data.slot)
     if not r.get("ok"):
@@ -1678,6 +1709,7 @@ def farm_collect(data: FarmSlotIn, user: sqlite3.Row = Depends(require_farm_acce
 def farm_collect_all(user: sqlite3.Row = Depends(require_farm_access),
                      conn: sqlite3.Connection = Depends(db_dep)):
     """Sebere všechny hotové produkty naráz."""
+    _farming_rate_limit(user)
     from .. import farm
     return farm.collect_all(conn, user)
 
@@ -1686,6 +1718,7 @@ def farm_collect_all(user: sqlite3.Row = Depends(require_farm_access),
 def farm_feed_all(user: sqlite3.Row = Depends(require_farm_access),
                   conn: sqlite3.Connection = Depends(db_dep)):
     """Nakrmí všechna hladová zvířata naráz (krmivo přednostně, pak sedláci)."""
+    _farming_rate_limit(user)
     from .. import farm
     return farm.feed_all(conn, user)
 
@@ -1694,6 +1727,7 @@ def farm_feed_all(user: sqlite3.Row = Depends(require_farm_access),
 def farm_contract_claim(user: sqlite3.Row = Depends(require_user),
                         conn: sqlite3.Connection = Depends(db_dep)):
     """Vyzvedne odměnu za splněnou denní zakázku (sedláci bez XP)."""
+    _farming_rate_limit(user)
     from .. import farm
     r = farm.claim_contract(conn, user)
     if not r.get("ok"):
@@ -1705,6 +1739,7 @@ def farm_contract_claim(user: sqlite3.Row = Depends(require_user),
 def farm_barn_upgrade(user: sqlite3.Row = Depends(require_user),
                       conn: sqlite3.Connection = Depends(db_dep)):
     """Vylepší stodolu (sink) → +1 slot na zvíře."""
+    _farming_rate_limit(user)
     from .. import farm
     r = farm.upgrade_barn(conn, user)
     if not r.get("ok"):
@@ -1716,6 +1751,7 @@ def farm_barn_upgrade(user: sqlite3.Row = Depends(require_user),
 def farm_fox(data: FarmFoxIn, user: sqlite3.Row = Depends(require_user),
              conn: sqlite3.Connection = Depends(db_dep)):
     """Vyřeší lišku 🦊: zaplať výkupné (produkt zůstává), nebo jí produkt nech (zvíře zhladoví)."""
+    _farming_rate_limit(user)
     from .. import farm
     r = farm.resolve_fox(conn, user, data.pay)
     if not r.get("ok"):
@@ -1727,6 +1763,7 @@ def farm_fox(data: FarmFoxIn, user: sqlite3.Row = Depends(require_user),
 def farm_sell(data: FarmSlotIn, user: sqlite3.Row = Depends(require_farm_access),
               conn: sqlite3.Connection = Depends(db_dep)):
     """Prodá zvíře ze slotu (část ceny zpět, uvolní slot). Sbírka zůstává."""
+    _farming_rate_limit(user)
     from .. import farm
     r = farm.sell(conn, user, data.slot)
     if not r.get("ok"):

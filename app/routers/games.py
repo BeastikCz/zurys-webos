@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 
-from ..db import now_iso, get_setting, local_date
+from ..db import now_iso, get_setting
 from ..deps import (db_dep, require_user, add_points, try_debit, client_ip, to_public,
                     require_can_gamble, check_wager_limit, restore_wager_limit)
 from ..economy import note_game_net, games_capped
@@ -522,31 +522,6 @@ def _duel_public(conn, d, me_id: int) -> dict:
     }
 
 
-def _coinflip_rig_winner(conn, d):
-    """DOČASNÝ rig coinflipu pro jednoho hráče (config v app_settings, NE natvrdo v kódu).
-    Aktivní JEN když: coinflip_rig_user je nastavený, coinflip_rig_date == dnešní lokální den,
-    coinflip_rig_pct > 0, a rigovaný hráč je v tomhle duelu. Vrátí číslo hráče (1/2) co má vyhrát:
-    s pravděpodobností pct% rigovaný, jinak soupeř. Jinak None (= normální 50/50). Default vypnuto
-    (prázdné settingy). Auto-expiruje přechodem dne (date už nesedí)."""
-    user = (get_setting(conn, "coinflip_rig_user", "") or "").strip().lower()
-    if not user or get_setting(conn, "coinflip_rig_date", "") != local_date():
-        return None
-    try:
-        pct = int(get_setting(conn, "coinflip_rig_pct", "0") or "0")
-    except (TypeError, ValueError):
-        return None
-    if pct <= 0:
-        return None
-    row = conn.execute("SELECT id FROM users WHERE lower(username)=? OR lower(kick_username)=? LIMIT 1",
-                       (user, user)).fetchone()
-    if not row:
-        return None
-    target = 1 if d["p1_id"] == row["id"] else (2 if d["p2_id"] == row["id"] else 0)
-    if not target:
-        return None
-    return target if secure_randint(1, 100) <= pct else (3 - target)
-
-
 def _resolve_duel(conn, did: int) -> None:
     """Vyhodnotí coinflip/dice duel a vyplatí vítěze (mínus rake). Volá se po obsazení slotu."""
     d = conn.execute("SELECT * FROM duels WHERE id=?", (did,)).fetchone()
@@ -555,10 +530,6 @@ def _resolve_duel(conn, did: int) -> None:
     if d["type"] == "coinflip":
         flip = secure_choice(("heads", "tails"))      # heads = p1, tails = p2
         winner = 1 if flip == "heads" else 2
-        rig = _coinflip_rig_winner(conn, d)           # dočasný rig (app_settings, jen daný hráč + den)
-        if rig:
-            winner = rig
-            flip = "heads" if winner == 1 else "tails"   # zobrazená mince sedí s výsledkem
         state = {"coin": flip}
     else:                                              # dice – oba hodí d100, vyšší bere (remíza → přehoz)
         r1, r2 = secure_randint(1, 100), secure_randint(1, 100)

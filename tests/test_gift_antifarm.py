@@ -91,19 +91,19 @@ def _share_device(username_a: str, username_b: str, fp: str = "testfp_shared_dev
         conn.close()
 
 
-def test_same_ip_cannot_gift(client):
-    """Dva zavedené účty se SDÍLENOU IP → dar zablokován (403)."""
+def test_same_ip_can_gift(client):
+    """Blok „stejná IP" zrušen na přání provozovatele → dar projde (200), řeší admin schválení."""
     sender_token, sender = _make_user("user", age_hours=500)
     _, recipient = _make_user("user", age_hours=500)
     _share_ip(sender, recipient)
     r = _gift(client, sender_token, recipient)
-    assert r.status_code == 403, f"sdílená IP měla blokovat, dostal {r.status_code}: {r.text}"
+    assert r.status_code == 200, f"sdílená IP už blokovat nemá, dostal {r.status_code}: {r.text}"
 
 
-def test_same_device_cannot_gift(client):
-    """Dva zavedené účty se STEJNÝM zařízením (otisk) → dar zablokován (403)."""
+def test_same_device_can_gift(client):
+    """Blok „stejné zařízení" zrušen na přání provozovatele → dar projde (200), řeší admin schválení."""
     sender_token, sender = _make_user("user", age_hours=500)
     _, recipient = _make_user("user", age_hours=500)
     _share_device(sender, recipient)
     r = _gift(client, sender_token, recipient)
-    assert r.status_code == 403, f"stejné zařízení mělo blokovat, dostal {r.status_code}: {r.text}"
+    assert r.status_code == 200, f"stejné zařízení už blokovat nemá, dostal {r.status_code}: {r.text}"

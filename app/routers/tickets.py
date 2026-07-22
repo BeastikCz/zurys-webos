@@ -17,6 +17,7 @@ CATEGORIES = {
     "account": {"login", "profile", "other"},
     "orders": {"order", "raffle", "refund"},
     "web": {"bug", "performance", "game"},
+    "market": {"sell"},
     "other": {"question", "idea", "other"},
 }
 STATUSES = {"open", "in_progress", "resolved", "closed"}

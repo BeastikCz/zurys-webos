@@ -764,6 +764,11 @@ def test_war_cooldown_blocks_both_participants():
             assert False, "parta v cooldownu nesmí válku vyhlásit ani přijmout"
         except ValueError as e:
             assert "cooldown" in str(e).lower()
+    lb_rows = {row["id"]: row for row in _run(crews.leaderboard, la, 500)["crews"]}
+    assert lb_rows[a["id"]]["war_cooldown_seconds"] > 47 * 3600
+    assert lb_rows[b["id"]]["war_cooldown_seconds"] > 47 * 3600
+    assert lb_rows[c["id"]]["war_cooldown_seconds"] == 0
+    assert _run(crews._public, a["id"], la)["war_cooldown_seconds"] > 47 * 3600
 
 
 def test_war_finalize_winner_loser_and_log():

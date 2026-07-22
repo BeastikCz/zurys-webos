@@ -31,6 +31,7 @@ from .mines_anticheat import start_mines_anticheat_daemon
 from .config import WEB_DIR, UPLOAD_DIR, SESSION_COOKIE, STAFF_ROLES, TRUSTED_IPS, is_production
 from .db import init_db, get_conn, now_iso, get_setting, set_setting
 from .deps import client_ip
+from .ratelimit import rate_limit
 from .seed import seed_if_empty, sync_changelog
 from .routers import auth, shop, cart, misc, admin, drops, botconsole, games, predictions, kickhook, blackjack, dm, mines, push, auctions, crews, tickets
 
@@ -44,6 +45,15 @@ GAMES_OFF = os.environ.get("WEBOS_GAMES_OFF", "0") == "1"
 WEBOS_ORIGIN_SECRET = os.environ.get("WEBOS_ORIGIN_SECRET", "")
 # VŽDY průchozí (Fly health-check chodí PŘÍMO na stroj, bez CF; + diagnostika):
 _ORIGIN_LOCK_FREE = {"/api/health", "/api/monitor/healthz", "/api/_origin_check"}
+
+# Global read-only polling must not let one browser farm fill the worker queue.
+# User actions are intentionally excluded; only background refreshes get a cheap 429.
+_PASSIVE_POLL_PATHS = {
+    "/api/auctions", "/api/community-goal", "/api/dm/unread", "/api/me/claims",
+    "/api/notifications/unread", "/api/nx/state", "/api/partner-links",
+    "/api/stream/status", "/api/sub-goal", "/api/tickets/unread",
+}
+_PASSIVE_POLL_PER_MIN = 120
 
 # Inicializace databáze a ukázkových dat při startu
 init_db()
@@ -385,14 +395,15 @@ def _csp(script_src: str) -> str:
         "frame-ancestors 'self'; "
         "img-src 'self' data: https:; "
         "style-src 'self' 'unsafe-inline'; "
-        f"script-src {script_src}; "
+        f"script-src {script_src} https://challenges.cloudflare.com; "
+        "frame-src https://challenges.cloudflare.com; "
         "connect-src 'self'; "
         "form-action 'self'; "
         "upgrade-insecure-requests"
     )
 
 
-# CSP se nastavuje per-request (viz security_headers). Hlavní SPA běží STRICT: script-src 'self',
+# CSP se nastavuje per-request (viz security_headers). Hlavní SPA pouští vlastní JS + Turnstile,
 # tj. ŽÁDNÝ inline JS (app.js nemá inline on*= ani <script> bloky) → tvrdší obrana proti XSS
 # z uživatelského obsahu. Overlaye (/overlay/*) a údržbová stránka mají vlastní inline <script>,
 # pro ně držíme RELAXED ('unsafe-inline'). style-src 'unsafe-inline' zůstává všude (inline styly v UI).
@@ -468,6 +479,14 @@ def _is_staff_request(request) -> bool:
         return False
 
 
+def _blocked_ip_response(request: Request, ip: str, rec):
+    if request.url.path.startswith("/api/"):
+        return JSONResponse(status_code=403, content={
+            "detail": "IP je dočasně zablokovaná kvůli příliš mnoha požadavkům."
+        })
+    return ipban.block_page(ip, rec)
+
+
 @app.middleware("http")
 async def ip_ban_guard(request: Request, call_next):
     """Zabanovaná IP nedostane appku vůbec – vrátí se blokační stránka (403).
@@ -483,9 +502,20 @@ async def ip_ban_guard(request: Request, call_next):
     ip = client_ip(request)
     rec = ipban.check(ip)
     if rec is not None:
-        return ipban.block_page(ip, rec)
+        return _blocked_ip_response(request, ip, rec)
     skip_ddos = request.url.path in _ORIGIN_LOCK_FREE
     if not skip_ddos and (request.headers.get("fly-client-ip") or request.headers.get("cf-connecting-ip")):
+        if request.url.path.startswith("/api/"):
+            try:
+                if request.method == "GET" and request.url.path in _PASSIVE_POLL_PATHS:
+                    rate_limit(f"api-poll:{ip}", _PASSIVE_POLL_PER_MIN, 60)
+                rate_limit(f"api-path:{ip}:{request.url.path}", 300, 60)
+            except HTTPException:
+                return JSONResponse(
+                    status_code=429,
+                    content={"detail": "Příliš mnoho automatických obnov. Zpomal skript nebo zavři další karty."},
+                    headers={"Retry-After": "1"},
+                )
         rate = ddos.observe(ip)
         if (ddos.autoban_enabled() and rate > ddos.AUTOBAN_PER_MIN
                 and ip not in TRUSTED_IPS and not _is_staff_request(request)):
@@ -500,7 +530,7 @@ async def ip_ban_guard(request: Request, call_next):
                 )
             blocked = ipban.check(ip)
             if blocked is not None:
-                return ipban.block_page(ip, blocked)
+                return _blocked_ip_response(request, ip, blocked)
     return await call_next(request)
 
 # Údržbový režim: když je zapnutý, běžní návštěvníci dostanou údržbovou stránku

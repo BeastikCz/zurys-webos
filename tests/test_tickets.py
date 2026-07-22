@@ -65,6 +65,15 @@ def test_ticket_flow_is_separate_and_private(client):
         conn.close()
 
 
+def test_market_sell_ticket_category(client):
+    _, user = _session()
+    response = client.post("/api/tickets", json={
+        "category": "market", "subcategory": "sell", "subject": "AK-47 Redline (FT)",
+        "body": "Float 0.21, požadovaná cena 10 000 sedláků, inspect link přiložím.",
+    }, headers=user)
+    assert response.status_code == 200
+
+
 def test_resolve_own_user_ctx_and_autoclose(client):
     uid, user = _session()
     _, stranger = _session()

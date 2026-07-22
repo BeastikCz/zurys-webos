@@ -397,7 +397,8 @@ def fingerprint(data: FingerprintIn, request: Request,
             conn.execute("SELECT 1 FROM fingerprint_bans WHERE fp_hash = ?", (fp,)).fetchone():
         conn.execute("UPDATE users SET banned = 1, ban_reason = ? WHERE id = ?",
                      ("Zabanované zařízení (fingerprint)", user["id"]))
-        conn.execute("DELETE FROM sessions WHERE user_id = ?", (user["id"],))
+        # Keep the session so the client can fetch /auth/me and render the ban page.
+        # Protected actions remain blocked by require_user.
         banned = True
     conn.commit()
     return {"ok": True, "banned": banned}

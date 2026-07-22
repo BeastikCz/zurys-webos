@@ -197,11 +197,13 @@ def _harvest_reward(c: dict, pest: bool):
     return base, f"Sklizeň: {c.get('name', '?')} 🌾", False
 
 
-def _award_harvest(conn, user_id, reward, reason, golden):
+def _award_harvest(conn, user_id, reward, reason, golden, ready_at, crop_key):
     """Připíše sklizeň. ZLATÁ = ×GOLDEN_MULT SEDLÁCI ale XP jen z base (neměň XP na produ):
     base s XP + zlatý bonus BEZ XP. Navíc shodí KRMIVO na statek (propojení zahrada↔statek).
     Necommituje (commituje caller)."""
     from .deps import add_points
+    from .anticheat import record_automation_event
+    record_automation_event(conn, user_id, "garden", crop_key, ready_at)
     if golden and GOLDEN_MULT > 1:
         base = reward // GOLDEN_MULT
         add_points(conn, user_id, base, reason)                               # base sedláci + XP (1×)
@@ -214,11 +216,13 @@ def _award_harvest(conn, user_id, reward, reason, golden):
 
 def harvest(conn, user, plot: int) -> dict:
     from .deps import add_points
+    from .anticheat import require_automation_checkpoint
     r = conn.execute("SELECT * FROM garden WHERE user_id = ? AND plot = ?", (user["id"], plot)).fetchone()
     if not r:
         return {"ok": False, "error": "Prázdný záhon."}
     if r["ready_at"] > now_iso():
         return {"ok": False, "error": "Ještě nedorostlo. 🌱"}
+    require_automation_checkpoint(conn, user)
     c = _BY_KEY.get(r["crop"], {})
     pstate, _left = _pest_state(r, datetime.now(timezone.utc))
     damaged = pstate in ("active", "eaten")   # chrobáci se objevili a nezachránil → půlka úrody
@@ -228,7 +232,7 @@ def harvest(conn, user, plot: int) -> dict:
     if conn.execute("DELETE FROM garden WHERE user_id = ? AND plot = ?", (user["id"], plot)).rowcount != 1:
         conn.commit()
         return {"ok": False, "error": "Tenhle záhon je už sklizený. 🌾"}
-    _award_harvest(conn, user["id"], reward, reason, golden)
+    _award_harvest(conn, user["id"], reward, reason, golden, r["ready_at"], r["crop"])
     conn.commit()
     bal = conn.execute("SELECT points FROM users WHERE id = ?", (user["id"],)).fetchone()["points"]
     return {"ok": True, "reward": reward, "balance": bal, "name": c.get("name"), "pest": damaged, "golden": golden}
@@ -237,7 +241,9 @@ def harvest(conn, user, plot: int) -> dict:
 def harvest_all(conn, user) -> dict:
     """Sklidí VŠECHNY dozrálé záhony naráz (atomicky per řádek). Vrací počet, výnos a kolik bylo zlatých."""
     from .deps import add_points
-    ready = conn.execute("SELECT plot, crop, pest, pest_at FROM garden WHERE user_id = ? AND ready_at <= ?",
+    from .anticheat import require_automation_checkpoint
+    require_automation_checkpoint(conn, user)
+    ready = conn.execute("SELECT plot, crop, pest, pest_at, ready_at FROM garden WHERE user_id = ? AND ready_at <= ?",
                          (user["id"], now_iso())).fetchall()
     total = count = golds = 0
     now_dt = datetime.now(timezone.utc)
@@ -247,7 +253,7 @@ def harvest_all(conn, user) -> dict:
         reward, reason, golden = _harvest_reward(c, pstate in ("active", "eaten"))
         if conn.execute("DELETE FROM garden WHERE user_id = ? AND plot = ?", (user["id"], r["plot"])).rowcount != 1:
             continue   # někdo to mezitím sklidil (souběh)
-        _award_harvest(conn, user["id"], reward, reason, golden)
+        _award_harvest(conn, user["id"], reward, reason, golden, r["ready_at"], r["crop"])
         total += reward; count += 1; golds += 1 if golden else 0
     conn.commit()
     bal = conn.execute("SELECT points FROM users WHERE id = ?", (user["id"],)).fetchone()["points"]

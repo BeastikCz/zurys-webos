@@ -277,6 +277,7 @@ def to_public(row: sqlite3.Row, include_email: bool = False) -> dict:
     if include_email:
         data["email"] = row["email"]
         data["ban_reason"] = row["ban_reason"]
+        data["timeout_reason"] = row["timeout_reason"] if "timeout_reason" in row.keys() else None
     return data
 
 
@@ -317,7 +318,7 @@ def require_user(user: Optional[sqlite3.Row] = Depends(get_current_user)) -> sql
         raise HTTPException(status_code=401, detail="Pro tuto akci se musíš přihlásit.")
     if user["banned"] and user["role"] != ROLE_ADMIN:
         raise HTTPException(status_code=403,
-                            detail="Tvůj účet byl zablokován (anticheat). Kontaktuj streamera.")
+                            detail="Tvůj účet byl zablokován (anticheat). Kontaktuj ADMINA.")
     to = timed_out_until(user)
     if to and user["role"] != ROLE_ADMIN:
         raise HTTPException(status_code=403,
